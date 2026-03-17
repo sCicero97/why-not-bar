@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Cuentas Bar</title>
+    <meta name="theme-color" content="#0b0b0b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Cuentas Bar" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon-192.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon-192.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-dot"></div>
+          <div>
+            <h1>Cuentas Bar</h1>
+            <p>App rápida para tablet</p>
+          </div>
+        </div>
+
+        <div class="top-actions">
+          <button id="installBtn" class="secondary-btn hidden">Instalar app</button>
+          <button id="resetBtn" class="danger-btn">Reset total</button>
+        </div>
+      </header>
+
+      <section class="summary-grid">
+        <div class="summary-card">
+          <span class="summary-label">Abiertas total</span>
+          <strong id="openTotal">$ 0</strong>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Abiertas 160</span>
+          <strong id="open160">0</strong>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Abiertas 260</span>
+          <strong id="open260">0</strong>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Abiertas 360</span>
+          <strong id="open360">0</strong>
+        </div>
+        <div class="summary-card paid">
+          <span class="summary-label">Pagas total</span>
+          <strong id="paidTotal">$ 0</strong>
+        </div>
+        <div class="summary-card paid">
+          <span class="summary-label">Pagas 160 / 260 / 360</span>
+          <strong id="paidCounts">0 / 0 / 0</strong>
+        </div>
+      </section>
+
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="cuentas">Cuentas</button>
+        <button class="tab-btn" data-tab="pagas">Cuentas pagas</button>
+      </nav>
+
+      <main>
+        <section id="tab-cuentas" class="tab-panel active">
+          <div class="panel-header">
+            <h2>Cuentas activas</h2>
+            <div class="panel-tools">
+              <input
+                id="searchInput"
+                type="text"
+                placeholder="Buscar ID…"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <div id="accountsList" class="accounts-list"></div>
+        </section>
+
+        <section id="tab-pagas" class="tab-panel">
+          <div class="panel-header">
+            <h2>Cuentas pagas</h2>
+            <button id="clearPaidBtn" class="secondary-btn">Vaciar pagas</button>
+          </div>
+
+          <div class="paid-table-wrap">
+            <table class="paid-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Total</th>
+                  <th>#160</th>
+                  <th>#260</th>
+                  <th>#360</th>
+                  <th>Hora</th>
+                </tr>
+              </thead>
+              <tbody id="paidTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
