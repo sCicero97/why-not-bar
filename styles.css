@@ -71,8 +71,8 @@ input {
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  background: var(--green);
-  box-shadow: 0 0 16px rgba(30, 215, 96, 0.6);
+  background: var(--red);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.65);
 }
 
 .top-actions {
@@ -98,6 +98,14 @@ input {
 
 .summary-card.paid {
   background: #121815;
+}
+
+.total-general-card {
+  background: #181818;
+}
+
+.drinks-card {
+  background: #131313;
 }
 
 .summary-label {
@@ -156,6 +164,12 @@ input {
   gap: 10px;
 }
 
+.search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 #searchInput {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -163,6 +177,17 @@ input {
   padding: 14px 16px;
   border-radius: 14px;
   min-width: 240px;
+}
+
+.clear-search-btn {
+  background: #2a1212;
+  border: 1px solid #4a1a1a;
+  color: #ffd3d3;
+  padding: 14px 16px;
+  border-radius: 14px;
+  cursor: pointer;
+  min-width: 54px;
+  font-weight: bold;
 }
 
 .accounts-list {
@@ -328,5 +353,10 @@ input {
 
   .account-total {
     font-size: 24px;
+  }
+
+  #searchInput {
+    min-width: 0;
+    width: 100%;
   }
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = "cuentas-bar-cache-v1";
+const CACHE_NAME = "why-not-cache-v2";
 const ASSETS = [
   "./",
   "./index.html",

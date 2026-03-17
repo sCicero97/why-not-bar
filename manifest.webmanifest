@@ -1,6 +1,6 @@
 {
-  "name": "Cuentas Bar",
-  "short_name": "Cuentas",
+  "name": "Why Not",
+  "short_name": "Why Not",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0b0b0b",

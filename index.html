@@ -6,11 +6,12 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <title>Cuentas Bar</title>
+    <title>Why Not</title>
     <meta name="theme-color" content="#0b0b0b" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Cuentas Bar" />
+    <meta name="apple-mobile-web-app-title" content="Why Not" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon-192.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon-192.svg" />
@@ -22,8 +23,8 @@
         <div class="brand">
           <div class="brand-dot"></div>
           <div>
-            <h1>Cuentas Bar</h1>
-            <p>App rápida para tablet</p>
+            <h1>Why Not</h1>
+            <p>Cuentas del Bar</p>
           </div>
         </div>
 
@@ -38,25 +39,30 @@
           <span class="summary-label">Abiertas total</span>
           <strong id="openTotal">$ 0</strong>
         </div>
-        <div class="summary-card">
-          <span class="summary-label">Abiertas 160</span>
-          <strong id="open160">0</strong>
-        </div>
-        <div class="summary-card">
-          <span class="summary-label">Abiertas 260</span>
-          <strong id="open260">0</strong>
-        </div>
-        <div class="summary-card">
-          <span class="summary-label">Abiertas 360</span>
-          <strong id="open360">0</strong>
-        </div>
+
         <div class="summary-card paid">
           <span class="summary-label">Pagas total</span>
           <strong id="paidTotal">$ 0</strong>
         </div>
-        <div class="summary-card paid">
-          <span class="summary-label">Pagas 160 / 260 / 360</span>
-          <strong id="paidCounts">0 / 0 / 0</strong>
+
+        <div class="summary-card total-general-card">
+          <span class="summary-label">Total general</span>
+          <strong id="grandTotal">$ 0</strong>
+        </div>
+
+        <div class="summary-card drinks-card">
+          <span class="summary-label">Tragos 160 total</span>
+          <strong id="all160">0</strong>
+        </div>
+
+        <div class="summary-card drinks-card">
+          <span class="summary-label">Tragos 260 total</span>
+          <strong id="all260">0</strong>
+        </div>
+
+        <div class="summary-card drinks-card">
+          <span class="summary-label">Tragos 360 total</span>
+          <strong id="all360">0</strong>
         </div>
       </section>
 
@@ -69,13 +75,19 @@
         <section id="tab-cuentas" class="tab-panel active">
           <div class="panel-header">
             <h2>Cuentas activas</h2>
+
             <div class="panel-tools">
-              <input
-                id="searchInput"
-                type="text"
-                placeholder="Buscar ID…"
-                autocomplete="off"
-              />
+              <div class="search-wrap">
+                <input
+                  id="searchInput"
+                  type="text"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="Buscar ID…"
+                  autocomplete="off"
+                />
+                <button id="clearSearchBtn" class="clear-search-btn" type="button">X</button>
+              </div>
             </div>
           </div>
 
@@ -85,7 +97,6 @@
         <section id="tab-pagas" class="tab-panel">
           <div class="panel-header">
             <h2>Cuentas pagas</h2>
-            <button id="clearPaidBtn" class="secondary-btn">Vaciar pagas</button>
           </div>
 
           <div class="paid-table-wrap">

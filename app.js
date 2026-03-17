@@ -1,4 +1,4 @@
-const STORAGE_KEY = "cuentas-bar-app-v1";
+const STORAGE_KEY = "cuentas-bar-app-v2";
 
 const state = {
   accounts: [],
@@ -7,10 +7,14 @@ const state = {
 
 let deferredPrompt = null;
 
+function padBaseId(number) {
+  return String(number).padStart(3, "0");
+}
+
 function createInitialAccounts() {
   return Array.from({ length: 100 }, (_, index) => ({
     slot: index + 1,
-    id: String(index + 1),
+    id: padBaseId(index + 1),
     total: 0,
     qty160: 0,
     qty260: 0,
@@ -25,10 +29,61 @@ function defaultState() {
   };
 }
 
+function migrateAccountId(id, fallbackSlot) {
+  const value = String(id ?? "").trim();
+
+  if (!value) {
+    return padBaseId(fallbackSlot);
+  }
+
+  const parts = value.split("-");
+  const rawBase = parts[0];
+  const suffix = parts[1];
+
+  const baseNumber = parseInt(rawBase, 10);
+
+  if (Number.isNaN(baseNumber)) {
+    return padBaseId(fallbackSlot);
+  }
+
+  const basePadded = padBaseId(baseNumber);
+
+  if (!suffix) {
+    return basePadded;
+  }
+
+  return `${basePadded}-${suffix.toUpperCase()}`;
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
+
     if (!raw) {
+      const oldRaw = localStorage.getItem("cuentas-bar-app-v1");
+
+      if (oldRaw) {
+        const oldParsed = JSON.parse(oldRaw);
+
+        state.accounts = Array.isArray(oldParsed.accounts)
+          ? oldParsed.accounts.map((account, index) => ({
+              ...account,
+              id: migrateAccountId(account.id, index + 1),
+              slot: account.slot || index + 1,
+            }))
+          : createInitialAccounts();
+
+        state.paidAccounts = Array.isArray(oldParsed.paidAccounts)
+          ? oldParsed.paidAccounts.map((item, index) => ({
+              ...item,
+              id: migrateAccountId(item.id, index + 1),
+            }))
+          : [];
+
+        saveState();
+        return;
+      }
+
       const initial = defaultState();
       state.accounts = initial.accounts;
       state.paidAccounts = initial.paidAccounts;
@@ -38,8 +93,20 @@ function loadState() {
 
     const parsed = JSON.parse(raw);
 
-    state.accounts = Array.isArray(parsed.accounts) ? parsed.accounts : createInitialAccounts();
-    state.paidAccounts = Array.isArray(parsed.paidAccounts) ? parsed.paidAccounts : [];
+    state.accounts = Array.isArray(parsed.accounts)
+      ? parsed.accounts.map((account, index) => ({
+          ...account,
+          id: migrateAccountId(account.id, index + 1),
+          slot: account.slot || index + 1,
+        }))
+      : createInitialAccounts();
+
+    state.paidAccounts = Array.isArray(parsed.paidAccounts)
+      ? parsed.paidAccounts.map((item, index) => ({
+          ...item,
+          id: migrateAccountId(item.id, index + 1),
+        }))
+      : [];
   } catch (error) {
     console.error("Error cargando estado:", error);
     const initial = defaultState();
@@ -70,20 +137,25 @@ function nowString() {
 
 function nextVersionId(currentId) {
   const value = String(currentId).trim();
+  const parts = value.split("-");
+  const rawBase = parts[0];
+  const suffix = parts[1];
 
-  if (!value.includes("-")) {
-    return `${value}-b`;
+  const baseNumber = parseInt(rawBase, 10);
+  const base = Number.isNaN(baseNumber) ? "001" : padBaseId(baseNumber);
+
+  if (!suffix) {
+    return `${base}-B`;
   }
 
-  const [base, suffix] = value.split("-");
-  if (!suffix || suffix.length !== 1) return `${base}-b`;
+  const upperSuffix = suffix.toUpperCase();
+  const code = upperSuffix.charCodeAt(0);
 
-  const code = suffix.toLowerCase().charCodeAt(0);
-  if (code >= 97 && code < 122) {
+  if (code >= 65 && code < 90) {
     return `${base}-${String.fromCharCode(code + 1)}`;
   }
 
-  return `${base}-z`;
+  return `${base}-Z`;
 }
 
 function addDrink(slot, amount) {
@@ -136,15 +208,6 @@ function resetAll() {
   renderAll();
 }
 
-function clearPaidOnly() {
-  const ok = window.confirm("¿Vaciar solo las cuentas pagas?");
-  if (!ok) return;
-
-  state.paidAccounts = [];
-  saveState();
-  renderAll();
-}
-
 function getOpenTotals() {
   return state.accounts.reduce(
     (acc, item) => {
@@ -176,21 +239,24 @@ function renderSummary() {
   const paid = getPaidTotals();
 
   document.getElementById("openTotal").textContent = formatMoney(open.total);
-  document.getElementById("open160").textContent = open.qty160;
-  document.getElementById("open260").textContent = open.qty260;
-  document.getElementById("open360").textContent = open.qty360;
-
   document.getElementById("paidTotal").textContent = formatMoney(paid.total);
-  document.getElementById("paidCounts").textContent = `${paid.qty160} / ${paid.qty260} / ${paid.qty360}`;
+  document.getElementById("grandTotal").textContent = formatMoney(open.total + paid.total);
+
+  document.getElementById("all160").textContent = open.qty160 + paid.qty160;
+  document.getElementById("all260").textContent = open.qty260 + paid.qty260;
+  document.getElementById("all360").textContent = open.qty360 + paid.qty360;
 }
 
 function renderAccounts() {
   const wrap = document.getElementById("accountsList");
-  const search = document.getElementById("searchInput").value.trim().toLowerCase();
+  const rawSearch = document.getElementById("searchInput").value.trim();
+  const searchDigits = rawSearch.replace(/\D/g, "");
 
-  const filtered = state.accounts.filter((account) =>
-    account.id.toLowerCase().includes(search)
-  );
+  const filtered = state.accounts.filter((account) => {
+    if (!searchDigits) return true;
+    const accountDigits = account.id.replace(/\D/g, "");
+    return accountDigits.includes(searchDigits);
+  });
 
   wrap.innerHTML = "";
 
@@ -292,9 +358,21 @@ function setupEvents() {
     }
   });
 
-  document.getElementById("searchInput").addEventListener("input", renderAccounts);
+  const searchInput = document.getElementById("searchInput");
+  const clearSearchBtn = document.getElementById("clearSearchBtn");
+
+  searchInput.addEventListener("input", () => {
+    searchInput.value = searchInput.value.replace(/[^\d]/g, "");
+    renderAccounts();
+  });
+
+  clearSearchBtn.addEventListener("click", () => {
+    searchInput.value = "";
+    renderAccounts();
+    searchInput.focus();
+  });
+
   document.getElementById("resetBtn").addEventListener("click", resetAll);
-  document.getElementById("clearPaidBtn").addEventListener("click", clearPaidOnly);
 
   const installBtn = document.getElementById("installBtn");
   installBtn.addEventListener("click", async () => {
