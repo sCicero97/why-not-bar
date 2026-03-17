@@ -1,9 +1,11 @@
-const STORAGE_KEY = "cuentas-bar-app-v3";
+const STORAGE_KEY = "cuentas-bar-app-v4";
 
 const BACKUP_CONFIG = {
   BACKUP_WEB_APP_URL: "https://script.google.com/macros/s/AKfycbw-QDfwnxB5Ed-MtHhI0SzkKInRWHTox6XrgUdbZ6UUKj-n-UQC5E2PQkb5Bxdyq27x/exec",
   BACKUP_TOKEN: "~odB9aur6[Z1"
 };
+
+const LONG_PRESS_MS = 2000;
 
 const state = {
   accounts: [],
@@ -11,6 +13,10 @@ const state = {
 };
 
 let deferredPrompt = null;
+let suppressNextClick = false;
+let longPressTimer = null;
+let longPressTriggered = false;
+let longPressTarget = null;
 
 function padBaseId(number) {
   return String(number).padStart(3, "0");
@@ -65,7 +71,10 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
 
     if (!raw) {
-      const oldRaw = localStorage.getItem("cuentas-bar-app-v2") || localStorage.getItem("cuentas-bar-app-v1");
+      const oldRaw =
+        localStorage.getItem("cuentas-bar-app-v3") ||
+        localStorage.getItem("cuentas-bar-app-v2") ||
+        localStorage.getItem("cuentas-bar-app-v1");
 
       if (oldRaw) {
         const oldParsed = JSON.parse(oldRaw);
@@ -178,6 +187,32 @@ function addDrink(slot, amount) {
   renderAll();
 }
 
+function subtractDrink(slot, amount) {
+  const account = state.accounts.find((a) => a.slot === slot);
+  if (!account) return;
+
+  if (amount === 160) {
+    if (account.qty160 <= 0) return;
+    account.qty160 -= 1;
+    account.total = Math.max(0, account.total - 160);
+  }
+
+  if (amount === 260) {
+    if (account.qty260 <= 0) return;
+    account.qty260 -= 1;
+    account.total = Math.max(0, account.total - 260);
+  }
+
+  if (amount === 360) {
+    if (account.qty360 <= 0) return;
+    account.qty360 -= 1;
+    account.total = Math.max(0, account.total - 360);
+  }
+
+  saveState();
+  renderAll();
+}
+
 function closeAccount(slot) {
   const account = state.accounts.find((a) => a.slot === slot);
   if (!account) return;
@@ -262,7 +297,7 @@ function buildBackupPayload() {
   };
 }
 
-async function backupToGoogleSheets() {
+function backupToGoogleSheets() {
   const { BACKUP_WEB_APP_URL } = BACKUP_CONFIG;
 
   if (!BACKUP_WEB_APP_URL || BACKUP_WEB_APP_URL.includes("PEGAR_ACA")) {
@@ -278,40 +313,52 @@ async function backupToGoogleSheets() {
     backupBtn.textContent = "Respaldando...";
 
     const payload = buildBackupPayload();
+    submitHiddenBackupForm_(BACKUP_WEB_APP_URL, payload);
 
-    const response = await fetch(BACKUP_WEB_APP_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const text = await response.text();
-    let result = null;
-
-    try {
-      result = JSON.parse(text);
-    } catch {
-      result = null;
-    }
-
-    if (!response.ok) {
-      throw new Error("Error HTTP al respaldar");
-    }
-
-    if (!result || result.ok !== true) {
-      throw new Error((result && result.error) || "No se pudo completar el respaldo");
-    }
-
-    window.alert("Respaldo enviado a Google Sheets correctamente.");
+    setTimeout(() => {
+      backupBtn.disabled = false;
+      backupBtn.textContent = previousText;
+      window.alert("Respaldo enviado. Revisá el Google Sheet para confirmar.");
+    }, 1200);
   } catch (error) {
     console.error(error);
-    window.alert("No se pudo respaldar en Google Sheets.");
-  } finally {
     backupBtn.disabled = false;
     backupBtn.textContent = previousText;
+    window.alert("No se pudo enviar el respaldo.");
   }
+}
+
+function submitHiddenBackupForm_(url, payload) {
+  let iframe = document.getElementById("backupIframe");
+  if (!iframe) {
+    iframe = document.createElement("iframe");
+    iframe.name = "backupIframe";
+    iframe.id = "backupIframe";
+    iframe.style.display = "none";
+    document.body.appendChild(iframe);
+  }
+
+  const oldForm = document.getElementById("backupForm");
+  if (oldForm) oldForm.remove();
+
+  const form = document.createElement("form");
+  form.id = "backupForm";
+  form.method = "POST";
+  form.action = url;
+  form.target = "backupIframe";
+  form.style.display = "none";
+
+  const payloadInput = document.createElement("textarea");
+  payloadInput.name = "payload";
+  payloadInput.value = JSON.stringify(payload);
+
+  form.appendChild(payloadInput);
+  document.body.appendChild(form);
+  form.submit();
+
+  setTimeout(() => {
+    form.remove();
+  }, 1000);
 }
 
 function renderSummary() {
@@ -421,10 +468,59 @@ function setupTabs() {
   });
 }
 
+function clearLongPressState() {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+  longPressTarget = null;
+}
+
+function setupLongPressHandlers() {
+  const accountsList = document.getElementById("accountsList");
+
+  accountsList.addEventListener("pointerdown", (event) => {
+    const amountBtn = event.target.closest("[data-amount]");
+    if (!amountBtn) return;
+
+    longPressTriggered = false;
+    longPressTarget = amountBtn;
+
+    const slot = Number(amountBtn.dataset.slot);
+    const amount = Number(amountBtn.dataset.amount);
+
+    clearLongPressState();
+
+    longPressTarget = amountBtn;
+    longPressTimer = setTimeout(() => {
+      subtractDrink(slot, amount);
+      longPressTriggered = true;
+      suppressNextClick = true;
+
+      if (navigator.vibrate) {
+        navigator.vibrate(30);
+      }
+    }, LONG_PRESS_MS);
+  });
+
+  ["pointerup", "pointerleave", "pointercancel"].forEach((eventName) => {
+    accountsList.addEventListener(eventName, () => {
+      clearLongPressState();
+    });
+  });
+}
+
 function setupEvents() {
-  document.getElementById("accountsList").addEventListener("click", (event) => {
+  const accountsList = document.getElementById("accountsList");
+
+  accountsList.addEventListener("click", (event) => {
     const amountBtn = event.target.closest("[data-amount]");
     const closeBtn = event.target.closest("[data-close]");
+
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      return;
+    }
 
     if (amountBtn) {
       const slot = Number(amountBtn.dataset.slot);
@@ -438,6 +534,8 @@ function setupEvents() {
       closeAccount(slot);
     }
   });
+
+  setupLongPressHandlers();
 
   const searchInput = document.getElementById("searchInput");
   const clearSearchBtn = document.getElementById("clearSearchBtn");
