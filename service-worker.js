@@ -1,4 +1,4 @@
-const CACHE_NAME = "why-not-cache-v2";
+const CACHE_NAME = "why-not-cache-v4";
 const ASSETS = [
   "./",
   "./index.html",

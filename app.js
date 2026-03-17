@@ -1,4 +1,9 @@
-const STORAGE_KEY = "cuentas-bar-app-v2";
+const STORAGE_KEY = "cuentas-bar-app-v3";
+
+const BACKUP_CONFIG = {
+  BACKUP_WEB_APP_URL: "https://script.google.com/macros/s/AKfycbw-QDfwnxB5Ed-MtHhI0SzkKInRWHTox6XrgUdbZ6UUKj-n-UQC5E2PQkb5Bxdyq27x/exec",
+  BACKUP_TOKEN: "~odB9aur6[Z1"
+};
 
 const state = {
   accounts: [],
@@ -60,7 +65,7 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
 
     if (!raw) {
-      const oldRaw = localStorage.getItem("cuentas-bar-app-v1");
+      const oldRaw = localStorage.getItem("cuentas-bar-app-v2") || localStorage.getItem("cuentas-bar-app-v1");
 
       if (oldRaw) {
         const oldParsed = JSON.parse(oldRaw);
@@ -132,6 +137,7 @@ function nowString() {
     second: "2-digit",
     day: "2-digit",
     month: "2-digit",
+    year: "numeric",
   });
 }
 
@@ -234,17 +240,92 @@ function getPaidTotals() {
   );
 }
 
+function buildBackupPayload() {
+  const open = getOpenTotals();
+  const paid = getPaidTotals();
+
+  return {
+    token: BACKUP_CONFIG.BACKUP_TOKEN,
+    backupCreatedAt: new Date().toISOString(),
+    summary: {
+      openTotal: open.total,
+      paidTotal: paid.total,
+      grandTotal: open.total + paid.total,
+      qty160: open.qty160 + paid.qty160,
+      qty260: open.qty260 + paid.qty260,
+      qty360: open.qty360 + paid.qty360,
+      openAccountsCount: state.accounts.length,
+      paidAccountsCount: state.paidAccounts.length,
+    },
+    openAccounts: state.accounts,
+    paidAccounts: state.paidAccounts,
+  };
+}
+
+async function backupToGoogleSheets() {
+  const { BACKUP_WEB_APP_URL } = BACKUP_CONFIG;
+
+  if (!BACKUP_WEB_APP_URL || BACKUP_WEB_APP_URL.includes("PEGAR_ACA")) {
+    window.alert("Falta configurar la URL del backup en app.js");
+    return;
+  }
+
+  const backupBtn = document.getElementById("backupBtn");
+  const previousText = backupBtn.textContent;
+
+  try {
+    backupBtn.disabled = true;
+    backupBtn.textContent = "Respaldando...";
+
+    const payload = buildBackupPayload();
+
+    const response = await fetch(BACKUP_WEB_APP_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const text = await response.text();
+    let result = null;
+
+    try {
+      result = JSON.parse(text);
+    } catch {
+      result = null;
+    }
+
+    if (!response.ok) {
+      throw new Error("Error HTTP al respaldar");
+    }
+
+    if (!result || result.ok !== true) {
+      throw new Error((result && result.error) || "No se pudo completar el respaldo");
+    }
+
+    window.alert("Respaldo enviado a Google Sheets correctamente.");
+  } catch (error) {
+    console.error(error);
+    window.alert("No se pudo respaldar en Google Sheets.");
+  } finally {
+    backupBtn.disabled = false;
+    backupBtn.textContent = previousText;
+  }
+}
+
 function renderSummary() {
   const open = getOpenTotals();
   const paid = getPaidTotals();
 
   document.getElementById("openTotal").textContent = formatMoney(open.total);
   document.getElementById("paidTotal").textContent = formatMoney(paid.total);
-  document.getElementById("grandTotal").textContent = formatMoney(open.total + paid.total);
 
   document.getElementById("all160").textContent = open.qty160 + paid.qty160;
   document.getElementById("all260").textContent = open.qty260 + paid.qty260;
   document.getElementById("all360").textContent = open.qty360 + paid.qty360;
+
+  document.getElementById("grandTotal").textContent = formatMoney(open.total + paid.total);
 }
 
 function renderAccounts() {
@@ -373,6 +454,7 @@ function setupEvents() {
   });
 
   document.getElementById("resetBtn").addEventListener("click", resetAll);
+  document.getElementById("backupBtn").addEventListener("click", backupToGoogleSheets);
 
   const installBtn = document.getElementById("installBtn");
   installBtn.addEventListener("click", async () => {

@@ -9,6 +9,7 @@
   --blue: #3b82f6;
   --orange: #f59e0b;
   --red: #ef4444;
+  --backup: #2563eb;
   --shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
   --radius: 18px;
 }
@@ -271,13 +272,20 @@ input {
 }
 
 .secondary-btn,
-.danger-btn {
+.danger-btn,
+.backup-btn {
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--text);
   border-radius: 14px;
   padding: 14px 16px;
   cursor: pointer;
+}
+
+.backup-btn {
+  background: var(--backup);
+  border-color: #1d4ed8;
+  color: #ffffff;
 }
 
 .danger-btn {
