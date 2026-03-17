@@ -1,0 +1,8 @@
+{
+  "name": "why-not-bar",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "googleapis": "latest"
+  }
+}

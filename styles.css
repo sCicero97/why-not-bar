@@ -37,6 +37,32 @@ input {
   font: inherit;
 }
 
+button,
+.account-card,
+.account-id,
+.account-total,
+.pill,
+.brand,
+.tab-btn,
+.clear-search-btn,
+.secondary-btn,
+.danger-btn,
+.backup-btn,
+.action-btn {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.tab-btn,
+.secondary-btn,
+.danger-btn,
+.backup-btn,
+.clear-search-btn,
+.action-btn {
+  touch-action: manipulation;
+}
+
 .app-shell {
   max-width: 1500px;
   margin: 0 auto;
@@ -178,6 +204,7 @@ input {
   padding: 14px 16px;
   border-radius: 14px;
   min-width: 240px;
+  font-size: 16px;
 }
 
 .clear-search-btn {
