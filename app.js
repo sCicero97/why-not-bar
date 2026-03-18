@@ -2,7 +2,7 @@ const STORAGE_KEY = "cuentas-bar-app-v6";
 const LONG_PRESS_MS = 2000;
 
 const BACKUP_CONFIG = {
-  BACKUP_WEB_APP_URL: "https://script.google.com/macros/s/AKfycbzJTz4UeI4Xai8LNUqF-c7HCYBUzd5IVVUlNDsODj_njsS4kh2yTeW4TPjtp8a915Iq/exec",
+  BACKUP_WEB_APP_URL: "https://script.google.com/macros/library/d/1BI8VC3ovRhupAGuP56NVbCm2e-02bFyN6qnDnGbj4KSpLqsq_yiKtVNm/3",
   BACKUP_TOKEN: "~odB9aur6[Z1"
 };
 
