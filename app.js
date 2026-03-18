@@ -1,5 +1,10 @@
-const STORAGE_KEY = "cuentas-bar-app-v5";
+const STORAGE_KEY = "cuentas-bar-app-v6";
 const LONG_PRESS_MS = 2000;
+
+const BACKUP_CONFIG = {
+  BACKUP_WEB_APP_URL: "https://script.google.com/macros/s/AKfycbzJTz4UeI4Xai8LNUqF-c7HCYBUzd5IVVUlNDsODj_njsS4kh2yTeW4TPjtp8a915Iq/exec",
+  BACKUP_TOKEN: "~odB9aur6[Z1"
+};
 
 const state = {
   accounts: [],
@@ -62,6 +67,7 @@ function loadState() {
   try {
     const raw =
       localStorage.getItem(STORAGE_KEY) ||
+      localStorage.getItem("cuentas-bar-app-v5") ||
       localStorage.getItem("cuentas-bar-app-v4") ||
       localStorage.getItem("cuentas-bar-app-v3") ||
       localStorage.getItem("cuentas-bar-app-v2") ||
@@ -252,6 +258,7 @@ function buildBackupPayload() {
   const paid = getPaidTotals();
 
   return {
+    token: BACKUP_CONFIG.BACKUP_TOKEN,
     backupCreatedAt: new Date().toISOString(),
     summary: {
       openTotal: open.total,
@@ -273,55 +280,40 @@ async function backupToGoogleSheets() {
   const previousText = backupBtn.textContent;
 
   try {
+    if (
+      !BACKUP_CONFIG.BACKUP_WEB_APP_URL ||
+      BACKUP_CONFIG.BACKUP_WEB_APP_URL.includes("PEGAR_ACA")
+    ) {
+      throw new Error("Falta configurar la URL del Web App de Apps Script en app.js");
+    }
+
     backupBtn.disabled = true;
     backupBtn.textContent = "Respaldando...";
 
-    const payload = buildBackupPayload();
-    console.log("BACKUP PAYLOAD", payload);
-
-    const response = await fetch("/api/backup", {
+    const response = await fetch(BACKUP_CONFIG.BACKUP_WEB_APP_URL, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "text/plain;charset=utf-8"
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(buildBackupPayload())
     });
 
     const rawText = await response.text();
-    console.log("BACKUP RAW RESPONSE", rawText);
 
     let result;
     try {
       result = JSON.parse(rawText);
     } catch {
-      throw new Error(`Respuesta no JSON: ${rawText}`);
+      throw new Error(`Respuesta inválida del script: ${rawText}`);
     }
 
     if (!response.ok || !result.ok) {
-      throw new Error(
-        [
-          result.step ? `Paso: ${result.step}` : null,
-          result.error ? `Error: ${result.error}` : null,
-          result.details ? `Detalles: ${JSON.stringify(result.details)}` : null
-        ]
-          .filter(Boolean)
-          .join("\n") || "No se pudo respaldar."
-      );
+      throw new Error(result.error || "No se pudo respaldar");
     }
 
     window.alert(`Respaldo OK. Backup ID: ${result.backupId}`);
   } catch (error) {
-    console.error("BACKUP CLIENT ERROR:", error);
-    window.alert(`No se pudo respaldar.\n\n${error.message}`);
-  } finally {
-    backupBtn.disabled = false;
-    backupBtn.textContent = previousText;
-  }
-}
-
-    window.alert(`Respaldo OK. Backup ID: ${result.backupId}`);
-  } catch (error) {
-    console.error(error);
+    console.error("BACKUP ERROR:", error);
     window.alert(`No se pudo respaldar.\n\n${error.message}`);
   } finally {
     backupBtn.disabled = false;
@@ -470,12 +462,12 @@ function setupLongPressHandlers() {
   );
 
   ["pointerup", "pointerleave", "pointercancel"].forEach((eventName) => {
-    accountsList.addEventListener(eventName, () => {
+    document.getElementById("accountsList").addEventListener(eventName, () => {
       clearLongPressState();
     });
   });
 
-  accountsList.addEventListener(
+  document.getElementById("accountsList").addEventListener(
     "contextmenu",
     (event) => {
       if (event.target.closest(".action-btn")) {
@@ -485,7 +477,7 @@ function setupLongPressHandlers() {
     { passive: false }
   );
 
-  accountsList.addEventListener(
+  document.getElementById("accountsList").addEventListener(
     "dblclick",
     (event) => {
       if (event.target.closest(".action-btn")) {
