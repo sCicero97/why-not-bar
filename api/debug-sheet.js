@@ -22,8 +22,7 @@ module.exports = async (req, res) => {
       email: GOOGLE_CLIENT_EMAIL,
       key: GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
       scopes: [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive.readonly"
+        "https://www.googleapis.com/auth/spreadsheets"
       ]
     });
 

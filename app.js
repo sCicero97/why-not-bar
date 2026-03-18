@@ -1,10 +1,6 @@
 const STORAGE_KEY = "cuentas-bar-app-v6";
 const LONG_PRESS_MS = 2000;
 
-const BACKUP_CONFIG = {
-  BACKUP_WEB_APP_URL: "https://script.google.com/macros/s/AKfycbzJTz4UeI4Xai8LNUqF-c7HCYBUzd5IVVUlNDsODj_njsS4kh2yTeW4TPjtp8a915Iq/exec",
-  BACKUP_TOKEN: "~odB9aur6[Z1"
-};
 
 const state = {
   accounts: [],
@@ -275,68 +271,36 @@ function buildBackupPayload() {
   };
 }
 
-function backupToGoogleSheets() {
+async function backupToGoogleSheets() {
   const backupBtn = document.getElementById("backupBtn");
   const previousText = backupBtn.textContent;
 
+  backupBtn.disabled = true;
+  backupBtn.textContent = "Respaldando...";
+
   try {
-    if (
-      !BACKUP_CONFIG.BACKUP_WEB_APP_URL ||
-      BACKUP_CONFIG.BACKUP_WEB_APP_URL.includes("PEGAR_ACA")
-    ) {
-      throw new Error("Falta configurar la URL del Web App de Apps Script en app.js");
+    const payload = buildBackupPayload();
+
+    const response = await fetch("/api/backup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+
+    if (!result.ok) {
+      throw new Error(result.error || `Error del servidor (paso: ${result.step || "?"})`);
     }
 
-    backupBtn.disabled = true;
-    backupBtn.textContent = "Respaldando...";
-
-    const payload = buildBackupPayload();
-    submitBackupForm_(BACKUP_CONFIG.BACKUP_WEB_APP_URL, payload);
-
-    setTimeout(() => {
-      backupBtn.disabled = false;
-      backupBtn.textContent = previousText;
-      window.alert("Backup enviado. Revisá la planilla para confirmar.");
-    }, 1200);
+    window.alert("Backup guardado correctamente en Google Sheets.");
   } catch (error) {
     console.error("BACKUP ERROR:", error);
+    window.alert(`No se pudo respaldar.\n\n${error.message}`);
+  } finally {
     backupBtn.disabled = false;
     backupBtn.textContent = previousText;
-    window.alert(`No se pudo respaldar.\n\n${error.message}`);
   }
-}
-
-function submitBackupForm_(url, payload) {
-  let iframe = document.getElementById("backupIframe");
-  if (!iframe) {
-    iframe = document.createElement("iframe");
-    iframe.name = "backupIframe";
-    iframe.id = "backupIframe";
-    iframe.style.display = "none";
-    document.body.appendChild(iframe);
-  }
-
-  const oldForm = document.getElementById("backupForm");
-  if (oldForm) oldForm.remove();
-
-  const form = document.createElement("form");
-  form.id = "backupForm";
-  form.method = "POST";
-  form.action = url;
-  form.target = "backupIframe";
-  form.style.display = "none";
-
-  const input = document.createElement("textarea");
-  input.name = "payload";
-  input.value = JSON.stringify(payload);
-
-  form.appendChild(input);
-  document.body.appendChild(form);
-  form.submit();
-
-  setTimeout(() => {
-    form.remove();
-  }, 1500);
 }
 
 function renderSummary() {
