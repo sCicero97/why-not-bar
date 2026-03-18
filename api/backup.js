@@ -8,20 +8,39 @@ function makeId() {
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
-    return res.status(405).json({ ok: false, error: "Method not allowed" });
+    return res.status(405).json({
+      ok: false,
+      step: "method",
+      error: "Method not allowed"
+    });
   }
 
   try {
-    const {
-      GOOGLE_CLIENT_EMAIL,
-      GOOGLE_PRIVATE_KEY,
-      GOOGLE_SHEET_ID
-    } = process.env;
+    const GOOGLE_CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL;
+    const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY;
+    const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
 
-    if (!GOOGLE_CLIENT_EMAIL || !GOOGLE_PRIVATE_KEY || !GOOGLE_SHEET_ID) {
+    if (!GOOGLE_CLIENT_EMAIL) {
       return res.status(500).json({
         ok: false,
-        error: "Faltan variables de entorno de Google"
+        step: "env",
+        error: "Falta GOOGLE_CLIENT_EMAIL"
+      });
+    }
+
+    if (!GOOGLE_PRIVATE_KEY) {
+      return res.status(500).json({
+        ok: false,
+        step: "env",
+        error: "Falta GOOGLE_PRIVATE_KEY"
+      });
+    }
+
+    if (!GOOGLE_SHEET_ID) {
+      return res.status(500).json({
+        ok: false,
+        step: "env",
+        error: "Falta GOOGLE_SHEET_ID"
       });
     }
 
@@ -30,6 +49,8 @@ module.exports = async (req, res) => {
       key: GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"]
     });
+
+    await auth.authorize();
 
     const sheets = google.sheets({
       version: "v4",
@@ -88,7 +109,7 @@ module.exports = async (req, res) => {
       }
     });
 
-    if (openRows.length) {
+    if (openRows.length > 0) {
       await sheets.spreadsheets.values.append({
         spreadsheetId: GOOGLE_SHEET_ID,
         range: "Abiertas!A:H",
@@ -100,7 +121,7 @@ module.exports = async (req, res) => {
       });
     }
 
-    if (paidRows.length) {
+    if (paidRows.length > 0) {
       await sheets.spreadsheets.values.append({
         spreadsheetId: GOOGLE_SHEET_ID,
         range: "Pagas!A:H",
@@ -117,10 +138,13 @@ module.exports = async (req, res) => {
       backupId
     });
   } catch (error) {
-    console.error("backup error", error);
+    console.error("BACKUP_ERROR_FULL:", error);
+
     return res.status(500).json({
       ok: false,
-      error: error.message || "Backup error"
+      step: "runtime",
+      error: error.message || "Error desconocido",
+      details: error.response?.data || null
     });
   }
 };

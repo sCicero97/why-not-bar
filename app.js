@@ -1,10 +1,4 @@
-const STORAGE_KEY = "cuentas-bar-app-v4";
-
-const BACKUP_CONFIG = {
-  BACKUP_WEB_APP_URL: "https://script.google.com/macros/s/AKfycbw-QDfwnxB5Ed-MtHhI0SzkKInRWHTox6XrgUdbZ6UUKj-n-UQC5E2PQkb5Bxdyq27x/exec",
-  BACKUP_TOKEN: "~odB9aur6[Z1"
-};
-
+const STORAGE_KEY = "cuentas-bar-app-v5";
 const LONG_PRESS_MS = 2000;
 
 const state = {
@@ -15,8 +9,6 @@ const state = {
 let deferredPrompt = null;
 let suppressNextClick = false;
 let longPressTimer = null;
-let longPressTriggered = false;
-let longPressTarget = null;
 
 function padBaseId(number) {
   return String(number).padStart(3, "0");
@@ -68,36 +60,14 @@ function migrateAccountId(id, fallbackSlot) {
 
 function loadState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw =
+      localStorage.getItem(STORAGE_KEY) ||
+      localStorage.getItem("cuentas-bar-app-v4") ||
+      localStorage.getItem("cuentas-bar-app-v3") ||
+      localStorage.getItem("cuentas-bar-app-v2") ||
+      localStorage.getItem("cuentas-bar-app-v1");
 
     if (!raw) {
-      const oldRaw =
-        localStorage.getItem("cuentas-bar-app-v3") ||
-        localStorage.getItem("cuentas-bar-app-v2") ||
-        localStorage.getItem("cuentas-bar-app-v1");
-
-      if (oldRaw) {
-        const oldParsed = JSON.parse(oldRaw);
-
-        state.accounts = Array.isArray(oldParsed.accounts)
-          ? oldParsed.accounts.map((account, index) => ({
-              ...account,
-              id: migrateAccountId(account.id, index + 1),
-              slot: account.slot || index + 1,
-            }))
-          : createInitialAccounts();
-
-        state.paidAccounts = Array.isArray(oldParsed.paidAccounts)
-          ? oldParsed.paidAccounts.map((item, index) => ({
-              ...item,
-              id: migrateAccountId(item.id, index + 1),
-            }))
-          : [];
-
-        saveState();
-        return;
-      }
-
       const initial = defaultState();
       state.accounts = initial.accounts;
       state.paidAccounts = initial.paidAccounts;
@@ -121,6 +91,8 @@ function loadState() {
           id: migrateAccountId(item.id, index + 1),
         }))
       : [];
+
+    saveState();
   } catch (error) {
     console.error("Error cargando estado:", error);
     const initial = defaultState();
@@ -280,7 +252,6 @@ function buildBackupPayload() {
   const paid = getPaidTotals();
 
   return {
-    token: BACKUP_CONFIG.BACKUP_TOKEN,
     backupCreatedAt: new Date().toISOString(),
     summary: {
       openTotal: open.total,
@@ -297,14 +268,7 @@ function buildBackupPayload() {
   };
 }
 
-function backupToGoogleSheets() {
-  const { BACKUP_WEB_APP_URL } = BACKUP_CONFIG;
-
-  if (!BACKUP_WEB_APP_URL || BACKUP_WEB_APP_URL.includes("PEGAR_ACA")) {
-    window.alert("Falta configurar la URL del backup en app.js");
-    return;
-  }
-
+async function backupToGoogleSheets() {
   const backupBtn = document.getElementById("backupBtn");
   const previousText = backupBtn.textContent;
 
@@ -313,52 +277,56 @@ function backupToGoogleSheets() {
     backupBtn.textContent = "Respaldando...";
 
     const payload = buildBackupPayload();
-    submitHiddenBackupForm_(BACKUP_WEB_APP_URL, payload);
+    console.log("BACKUP PAYLOAD", payload);
 
-    setTimeout(() => {
-      backupBtn.disabled = false;
-      backupBtn.textContent = previousText;
-      window.alert("Respaldo enviado. Revisá el Google Sheet para confirmar.");
-    }, 1200);
+    const response = await fetch("/api/backup", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const rawText = await response.text();
+    console.log("BACKUP RAW RESPONSE", rawText);
+
+    let result;
+    try {
+      result = JSON.parse(rawText);
+    } catch {
+      throw new Error(`Respuesta no JSON: ${rawText}`);
+    }
+
+    if (!response.ok || !result.ok) {
+      throw new Error(
+        [
+          result.step ? `Paso: ${result.step}` : null,
+          result.error ? `Error: ${result.error}` : null,
+          result.details ? `Detalles: ${JSON.stringify(result.details)}` : null
+        ]
+          .filter(Boolean)
+          .join("\n") || "No se pudo respaldar."
+      );
+    }
+
+    window.alert(`Respaldo OK. Backup ID: ${result.backupId}`);
   } catch (error) {
-    console.error(error);
+    console.error("BACKUP CLIENT ERROR:", error);
+    window.alert(`No se pudo respaldar.\n\n${error.message}`);
+  } finally {
     backupBtn.disabled = false;
     backupBtn.textContent = previousText;
-    window.alert("No se pudo enviar el respaldo.");
   }
 }
 
-function submitHiddenBackupForm_(url, payload) {
-  let iframe = document.getElementById("backupIframe");
-  if (!iframe) {
-    iframe = document.createElement("iframe");
-    iframe.name = "backupIframe";
-    iframe.id = "backupIframe";
-    iframe.style.display = "none";
-    document.body.appendChild(iframe);
+    window.alert(`Respaldo OK. Backup ID: ${result.backupId}`);
+  } catch (error) {
+    console.error(error);
+    window.alert(`No se pudo respaldar.\n\n${error.message}`);
+  } finally {
+    backupBtn.disabled = false;
+    backupBtn.textContent = previousText;
   }
-
-  const oldForm = document.getElementById("backupForm");
-  if (oldForm) oldForm.remove();
-
-  const form = document.createElement("form");
-  form.id = "backupForm";
-  form.method = "POST";
-  form.action = url;
-  form.target = "backupIframe";
-  form.style.display = "none";
-
-  const payloadInput = document.createElement("textarea");
-  payloadInput.name = "payload";
-  payloadInput.value = JSON.stringify(payload);
-
-  form.appendChild(payloadInput);
-  document.body.appendChild(form);
-  form.submit();
-
-  setTimeout(() => {
-    form.remove();
-  }, 1000);
 }
 
 function renderSummary() {
@@ -367,11 +335,9 @@ function renderSummary() {
 
   document.getElementById("openTotal").textContent = formatMoney(open.total);
   document.getElementById("paidTotal").textContent = formatMoney(paid.total);
-
   document.getElementById("all160").textContent = open.qty160 + paid.qty160;
   document.getElementById("all260").textContent = open.qty260 + paid.qty260;
   document.getElementById("all360").textContent = open.qty360 + paid.qty360;
-
   document.getElementById("grandTotal").textContent = formatMoney(open.total + paid.total);
 }
 
@@ -473,41 +439,61 @@ function clearLongPressState() {
     clearTimeout(longPressTimer);
     longPressTimer = null;
   }
-  longPressTarget = null;
 }
 
 function setupLongPressHandlers() {
   const accountsList = document.getElementById("accountsList");
 
-  accountsList.addEventListener("pointerdown", (event) => {
-    const amountBtn = event.target.closest("[data-amount]");
-    if (!amountBtn) return;
+  accountsList.addEventListener(
+    "pointerdown",
+    (event) => {
+      const amountBtn = event.target.closest("[data-amount]");
+      if (!amountBtn) return;
 
-    longPressTriggered = false;
-    longPressTarget = amountBtn;
+      event.preventDefault();
 
-    const slot = Number(amountBtn.dataset.slot);
-    const amount = Number(amountBtn.dataset.amount);
+      const slot = Number(amountBtn.dataset.slot);
+      const amount = Number(amountBtn.dataset.amount);
 
-    clearLongPressState();
+      clearLongPressState();
 
-    longPressTarget = amountBtn;
-    longPressTimer = setTimeout(() => {
-      subtractDrink(slot, amount);
-      longPressTriggered = true;
-      suppressNextClick = true;
+      longPressTimer = setTimeout(() => {
+        subtractDrink(slot, amount);
+        suppressNextClick = true;
 
-      if (navigator.vibrate) {
-        navigator.vibrate(30);
-      }
-    }, LONG_PRESS_MS);
-  });
+        if (navigator.vibrate) {
+          navigator.vibrate(30);
+        }
+      }, LONG_PRESS_MS);
+    },
+    { passive: false }
+  );
 
   ["pointerup", "pointerleave", "pointercancel"].forEach((eventName) => {
     accountsList.addEventListener(eventName, () => {
       clearLongPressState();
     });
   });
+
+  accountsList.addEventListener(
+    "contextmenu",
+    (event) => {
+      if (event.target.closest(".action-btn")) {
+        event.preventDefault();
+      }
+    },
+    { passive: false }
+  );
+
+  accountsList.addEventListener(
+    "dblclick",
+    (event) => {
+      if (event.target.closest(".action-btn")) {
+        event.preventDefault();
+      }
+    },
+    { passive: false }
+  );
 }
 
 function setupEvents() {
