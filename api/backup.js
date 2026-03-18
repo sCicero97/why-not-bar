@@ -47,7 +47,10 @@ module.exports = async (req, res) => {
     const auth = new google.auth.JWT({
       email: GOOGLE_CLIENT_EMAIL,
       key: GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+      scopes: [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive.readonly"
+      ]
     });
 
     await auth.authorize();
@@ -138,13 +141,19 @@ module.exports = async (req, res) => {
       backupId
     });
   } catch (error) {
-    console.error("BACKUP_ERROR_FULL:", error);
+    const details =
+      error?.response?.data ||
+      error?.errors ||
+      error?.message ||
+      "Error desconocido";
+
+    console.error("BACKUP_ERROR:", JSON.stringify(details, null, 2));
 
     return res.status(500).json({
       ok: false,
       step: "runtime",
       error: error.message || "Error desconocido",
-      details: error.response?.data || null
+      details
     });
   }
 };
