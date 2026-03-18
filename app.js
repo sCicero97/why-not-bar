@@ -2,7 +2,7 @@ const STORAGE_KEY = "cuentas-bar-app-v6";
 const LONG_PRESS_MS = 2000;
 
 const BACKUP_CONFIG = {
-  BACKUP_WEB_APP_URL: "https://script.google.com/macros/library/d/1BI8VC3ovRhupAGuP56NVbCm2e-02bFyN6qnDnGbj4KSpLqsq_yiKtVNm/3",
+  BACKUP_WEB_APP_URL: "https://script.google.com/macros/s/AKfycbzJTz4UeI4Xai8LNUqF-c7HCYBUzd5IVVUlNDsODj_njsS4kh2yTeW4TPjtp8a915Iq/exec",
   BACKUP_TOKEN: "~odB9aur6[Z1"
 };
 
@@ -275,7 +275,7 @@ function buildBackupPayload() {
   };
 }
 
-async function backupToGoogleSheets() {
+function backupToGoogleSheets() {
   const backupBtn = document.getElementById("backupBtn");
   const previousText = backupBtn.textContent;
 
@@ -290,35 +290,53 @@ async function backupToGoogleSheets() {
     backupBtn.disabled = true;
     backupBtn.textContent = "Respaldando...";
 
-    const response = await fetch(BACKUP_CONFIG.BACKUP_WEB_APP_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify(buildBackupPayload())
-    });
+    const payload = buildBackupPayload();
+    submitBackupForm_(BACKUP_CONFIG.BACKUP_WEB_APP_URL, payload);
 
-    const rawText = await response.text();
-
-    let result;
-    try {
-      result = JSON.parse(rawText);
-    } catch {
-      throw new Error(`Respuesta inválida del script: ${rawText}`);
-    }
-
-    if (!response.ok || !result.ok) {
-      throw new Error(result.error || "No se pudo respaldar");
-    }
-
-    window.alert(`Respaldo OK. Backup ID: ${result.backupId}`);
+    setTimeout(() => {
+      backupBtn.disabled = false;
+      backupBtn.textContent = previousText;
+      window.alert("Backup enviado. Revisá la planilla para confirmar.");
+    }, 1200);
   } catch (error) {
     console.error("BACKUP ERROR:", error);
-    window.alert(`No se pudo respaldar.\n\n${error.message}`);
-  } finally {
     backupBtn.disabled = false;
     backupBtn.textContent = previousText;
+    window.alert(`No se pudo respaldar.\n\n${error.message}`);
   }
+}
+
+function submitBackupForm_(url, payload) {
+  let iframe = document.getElementById("backupIframe");
+  if (!iframe) {
+    iframe = document.createElement("iframe");
+    iframe.name = "backupIframe";
+    iframe.id = "backupIframe";
+    iframe.style.display = "none";
+    document.body.appendChild(iframe);
+  }
+
+  const oldForm = document.getElementById("backupForm");
+  if (oldForm) oldForm.remove();
+
+  const form = document.createElement("form");
+  form.id = "backupForm";
+  form.method = "POST";
+  form.action = url;
+  form.target = "backupIframe";
+  form.style.display = "none";
+
+  const input = document.createElement("textarea");
+  input.name = "payload";
+  input.value = JSON.stringify(payload);
+
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit();
+
+  setTimeout(() => {
+    form.remove();
+  }, 1500);
 }
 
 function renderSummary() {
