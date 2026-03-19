@@ -1,3 +1,4 @@
+console.log("APP VERSION: 2026-03-19-NEW");
 const STORAGE_KEY = "cuentas-bar-app-v6";
 const LONG_PRESS_MS = 2000;
 
