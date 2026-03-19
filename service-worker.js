@@ -1,9 +1,9 @@
-const CACHE_NAME = "why-not-cache-v8";
+const CACHE_NAME = "why-not-cache-v9";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
-  "./app.js",
+  "./app.js?v=2",
   "./manifest.webmanifest",
   "./icon-192.svg",
   "./icon-512.svg"
