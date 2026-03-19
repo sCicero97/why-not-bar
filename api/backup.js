@@ -1,5 +1,5 @@
 const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbzJTz4UeI4Xai8LNUqF-c7HCYBUzd5IVVUlNDsODj_njsS4kh2yTeW4TPjtp8a915Iq/exec";
+  "https://script.google.com/macros/s/AKfycbwB-L4gLMjjri4rd0ycCPjyr8AQPIJ3_gaPl90OTPRMCwgq86bMpBO5w5ol5_Zv1D6q/exec";
 
 const BACKUP_TOKEN = "~odB9aur6[Z1";
 
