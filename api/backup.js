@@ -3,6 +3,29 @@ const APPS_SCRIPT_URL =
 
 const BACKUP_TOKEN = "~odB9aur6[Z1";
 
+async function postToAppsScript(payload) {
+  // Server-to-server: no CORS restrictions, send JSON directly
+  const response = await fetch(APPS_SCRIPT_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    body: JSON.stringify(payload),
+    redirect: "follow"
+  });
+
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    // If response isn't JSON (e.g. HTML error page), return a clear error
+    console.error("Apps Script raw response:", text.slice(0, 300));
+    throw new Error("Apps Script devolvió una respuesta inesperada (no JSON)");
+  }
+}
+
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
@@ -16,21 +39,7 @@ module.exports = async (req, res) => {
       token: BACKUP_TOKEN
     };
 
-    const response = await fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "payload=" + encodeURIComponent(JSON.stringify(payload)),
-      redirect: "follow"
-    });
-
-    const text = await response.text();
-
-    let result;
-    try {
-      result = JSON.parse(text);
-    } catch {
-      result = { ok: false, error: "Respuesta inesperada del Apps Script", raw: text };
-    }
+    const result = await postToAppsScript(payload);
 
     return res.status(200).json(result);
   } catch (error) {
