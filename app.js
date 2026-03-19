@@ -255,7 +255,6 @@ function buildBackupPayload() {
   const paid = getPaidTotals();
 
   return {
-    token: BACKUP_CONFIG.BACKUP_TOKEN,
     backupCreatedAt: new Date().toISOString(),
     summary: {
       openTotal: open.total,
