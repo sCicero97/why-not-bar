@@ -287,7 +287,13 @@ async function backupToGoogleSheets() {
       body: JSON.stringify(payload)
     });
 
-    const result = await response.json();
+    const text = await response.text();
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      throw new Error(`Respuesta inválida del servidor: ${text.slice(0, 200)}`);
+    }
 
     if (!result.ok) {
       throw new Error(result.error || `Error del servidor (paso: ${result.step || "?"})`);
