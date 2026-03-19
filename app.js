@@ -1,4 +1,6 @@
 console.log("APP VERSION: 2026-03-19-NEW");
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwB-L4gLMjjri4rd0ycCPjyr8AQPIJ3_gaPl90OTPRMCwgq86bMpBO5w5ol5_Zv1D6q/exec";
+const BACKUP_TOKEN = "~odB9aur6[Z1";
 const STORAGE_KEY = "cuentas-bar-app-v6";
 const LONG_PRESS_MS = 2000;
 
@@ -255,6 +257,7 @@ function buildBackupPayload() {
   const paid = getPaidTotals();
 
   return {
+    token: BACKUP_TOKEN,
     backupCreatedAt: new Date().toISOString(),
     summary: {
       openTotal: open.total,
@@ -281,9 +284,9 @@ async function backupToGoogleSheets() {
   try {
     const payload = buildBackupPayload();
 
-    const response = await fetch("/api/backup", {
+    const response = await fetch(APPS_SCRIPT_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain" },
       body: JSON.stringify(payload)
     });
 
@@ -292,11 +295,11 @@ async function backupToGoogleSheets() {
     try {
       result = JSON.parse(text);
     } catch {
-      throw new Error(`Respuesta inválida del servidor: ${text.slice(0, 200)}`);
+      throw new Error(`Respuesta inesperada: ${text.slice(0, 200)}`);
     }
 
     if (!result.ok) {
-      throw new Error(result.error || `Error del servidor (paso: ${result.step || "?"})`);
+      throw new Error(result.error || "Error desconocido en el servidor");
     }
 
     window.alert("Backup guardado correctamente en Google Sheets.");
