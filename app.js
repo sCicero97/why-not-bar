@@ -269,7 +269,7 @@ function buildBackupPayload() {
       openAccountsCount: state.accounts.length,
       paidAccountsCount: state.paidAccounts.length,
     },
-    openAccounts: state.accounts,
+    openAccounts: state.accounts.filter((a) => a.total > 0),
     paidAccounts: state.paidAccounts,
   };
 }
