@@ -1,13 +1,15 @@
-const CACHE_NAME = "why-not-cache-v9";
+const CACHE_NAME = "why-not-cache-v10";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
-  "./app.js?v=2",
   "./manifest.webmanifest",
   "./icon-192.svg",
   "./icon-512.svg"
 ];
+
+// JS files never cached - always fetched fresh from network
+const NEVER_CACHE = ["/app.js"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -31,6 +33,14 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+
+  const url = new URL(event.request.url);
+
+  // Always fetch JS files fresh from network, never from cache
+  if (NEVER_CACHE.some((path) => url.pathname.startsWith(path))) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
