@@ -10,6 +10,12 @@ const state = {
   paidAccounts: [],
 };
 
+let lastActivityTime = Date.now();
+let lastBackupTime = 0;
+const IDLE_MS = 2 * 60 * 1000;
+const BACKUP_INTERVAL_MS = 20 * 60 * 1000;
+const AUTO_CHECK_MS = 30 * 1000;
+
 let deferredPrompt = null;
 let suppressNextClick = false;
 let longPressTimer = null;
@@ -274,7 +280,7 @@ function buildBackupPayload() {
   };
 }
 
-async function backupToGoogleSheets() {
+async function backupToGoogleSheets(silent = false) {
   const backupBtn = document.getElementById("backupBtn");
   const previousText = backupBtn.textContent;
 
@@ -302,14 +308,36 @@ async function backupToGoogleSheets() {
       throw new Error(result.error || "Error desconocido en el servidor");
     }
 
-    window.alert("Backup guardado correctamente en Google Sheets.");
+    lastBackupTime = Date.now();
+    backupBtn.disabled = false;
+    backupBtn.textContent = "✓ Guardado";
+    setTimeout(() => {
+      backupBtn.textContent = previousText;
+    }, 3000);
   } catch (error) {
     console.error("BACKUP ERROR:", error);
-    window.alert(`No se pudo respaldar.\n\n${error.message}`);
-  } finally {
     backupBtn.disabled = false;
     backupBtn.textContent = previousText;
+    if (!silent) {
+      window.alert(`No se pudo respaldar.\n\n${error.message}`);
+    }
   }
+}
+
+function setupAutoBackup() {
+  const activityEvents = ["click", "touchstart", "keydown", "scroll"];
+  activityEvents.forEach((evt) => {
+    document.addEventListener(evt, () => { lastActivityTime = Date.now(); }, { passive: true });
+  });
+
+  setInterval(() => {
+    const now = Date.now();
+    const idle = now - lastActivityTime;
+    const sinceBackup = now - lastBackupTime;
+    if (idle >= IDLE_MS && sinceBackup >= BACKUP_INTERVAL_MS) {
+      backupToGoogleSheets(true);
+    }
+  }, AUTO_CHECK_MS);
 }
 
 function renderSummary() {
@@ -553,6 +581,7 @@ function init() {
   setupEvents();
   renderAll();
   registerServiceWorker();
+  setupAutoBackup();
 }
 
 document.addEventListener("DOMContentLoaded", init);
