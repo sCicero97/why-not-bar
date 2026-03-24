@@ -1,397 +1,126 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Why Not — Shared styles (Barra + login screen + common components)
+   ═══════════════════════════════════════════════════════════════════════════ */
 :root {
-  --bg: #0b0b0b;
-  --panel: #151515;
+  --bg:      #0b0b0b;
+  --panel:   #151515;
   --panel-2: #1c1c1c;
-  --line: #2a2a2a;
-  --text: #f3f3f3;
-  --muted: #a0a0a0;
-  --green: #1ed760;
-  --blue: #3b82f6;
-  --orange: #f59e0b;
-  --red: #ef4444;
-  --backup: #2563eb;
-  --shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
-  --radius: 18px;
+  --line:    #2a2a2a;
+  --text:    #f3f3f3;
+  --muted:   #a0a0a0;
+  --green:   #1ed760;
+  --blue:    #3b82f6;
+  --orange:  #f59e0b;
+  --purple:  #8b5cf6;
+  --red:     #ef4444;
+  --shadow:  0 12px 30px rgba(0,0,0,.35);
+  --radius:  18px;
 }
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif}
+button,input,select,textarea{font:inherit}
+button{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
 
-* {
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
+/* ─── Login screen ──────────────────────────────────────────────────────────── */
+.login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.login-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:36px 32px;width:100%;max-width:380px;box-shadow:var(--shadow)}
+.login-logo{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+.login-logo h1{margin:0;font-size:28px}
+.login-role{color:var(--muted);font-size:14px;margin:0 0 28px;text-transform:uppercase;letter-spacing:.08em}
+.login-card input{width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:14px 16px;border-radius:14px;margin-bottom:12px;font-size:16px;display:block}
+.login-card button[type=submit]{width:100%;background:var(--blue);border:none;color:#fff;padding:15px;border-radius:14px;font-size:16px;font-weight:bold;cursor:pointer;margin-top:4px}
+.login-card button[type=submit]:disabled{opacity:.6}
+.login-error{color:var(--red);font-size:14px;margin:10px 0 0;min-height:20px}
 
-html,
-body {
-  margin: 0;
-  padding: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: Arial, Helvetica, sans-serif;
-}
+/* ─── Top bar ───────────────────────────────────────────────────────────────── */
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+.brand{display:flex;gap:12px;align-items:center}
+.brand h1{margin:0;font-size:26px}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.brand-dot{width:18px;height:18px;border-radius:999px;background:var(--red);box-shadow:0 0 16px rgba(239,68,68,.65);flex-shrink:0}
+.top-actions{display:flex;gap:10px;flex-wrap:wrap}
+.user-chip{background:var(--panel-2);border:1px solid var(--line);padding:8px 14px;border-radius:999px;font-size:13px;color:var(--muted)}
 
-body {
-  min-height: 100vh;
-}
+/* ─── Buttons ───────────────────────────────────────────────────────────────── */
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:14px;padding:12px 16px;cursor:pointer;font-size:14px}
+.btn-primary{background:var(--blue);border-color:#1d4ed8;color:#fff}
+.btn-success{background:var(--green);border-color:#15a34a;color:#06130a}
+.btn-danger{background:#2b1010;border-color:#4a1a1a;color:#ffd3d3}
+.btn-warning{background:#2b1f00;border-color:#7c4f00;color:#fde68a}
+.btn-sm{padding:9px 14px;font-size:13px}
 
-button,
-input {
-  font: inherit;
-}
+/* ─── Tabs ──────────────────────────────────────────────────────────────────── */
+.tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.tab-btn{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:12px 18px;cursor:pointer;font-size:14px}
+.tab-btn.active{background:var(--text);color:#000}
+.tab-panel{display:none}.tab-panel.active{display:block}
 
-button,
-.account-card,
-.account-id,
-.account-total,
-.pill,
-.brand,
-.tab-btn,
-.clear-search-btn,
-.secondary-btn,
-.danger-btn,
-.backup-btn,
-.action-btn {
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
+/* ─── Summary grid ──────────────────────────────────────────────────────────── */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px}
+.summary-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
+.summary-label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em}
+.summary-card strong{font-size:26px}
 
-.tab-btn,
-.secondary-btn,
-.danger-btn,
-.backup-btn,
-.clear-search-btn,
-.action-btn {
-  touch-action: manipulation;
-}
+/* ─── Account cards (Bar) ───────────────────────────────────────────────────── */
+.panel-header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.panel-header h2{margin:0}
+.search-wrap{display:flex;align-items:center;gap:8px}
+#searchInput{background:var(--panel);border:1px solid var(--line);color:var(--text);padding:12px 16px;border-radius:14px;min-width:200px;font-size:16px}
+.clear-search-btn{background:#2a1212;border:1px solid #4a1a1a;color:#ffd3d3;padding:12px 14px;border-radius:14px;cursor:pointer;font-weight:bold}
 
-.app-shell {
-  max-width: 1500px;
-  margin: 0 auto;
-  padding: 18px;
-}
+.hold-hint{margin:0 0 14px;font-size:13px;color:var(--muted);text-align:center;padding:10px;background:var(--panel);border-radius:12px}
 
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 18px;
-}
+.accounts-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
 
-.brand {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-}
+.account-card{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:16px;box-shadow:var(--shadow);transition:opacity .2s}
+.account-card.is-closed{opacity:.45;pointer-events:none}
+.account-card.has-balance{border-color:#2a3a2a}
 
-.brand h1 {
-  margin: 0;
-  font-size: 28px;
-}
+.account-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.account-id{font-size:22px;font-weight:bold;line-height:1.1}
+.account-name{font-size:12px;color:var(--muted);margin-top:2px}
+.account-total{font-size:26px;font-weight:bold;text-align:right}
+.closed-badge{display:inline-block;background:#3a2020;color:#f87171;font-size:11px;padding:3px 8px;border-radius:999px;margin-top:4px;text-transform:uppercase;letter-spacing:.06em}
 
-.brand p {
-  margin: 2px 0 0 0;
-  color: var(--muted);
-  font-size: 14px;
-}
+.account-stats{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.pill{background:var(--panel-2);border:1px solid var(--line);padding:8px 12px;border-radius:999px;color:var(--muted);font-size:13px}
 
-.brand-dot {
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: var(--red);
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.65);
-}
+.account-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.action-btn{position:relative;overflow:hidden;border:none;border-radius:14px;padding:16px 10px;color:#fff;font-weight:bold;font-size:20px;cursor:pointer;min-height:64px;transition:filter .1s,outline .1s}
+.btn-160{background:var(--blue)}.btn-260{background:var(--orange)}.btn-360{background:var(--purple)}
+.btn-close{background:var(--green);color:#06130a}
 
-.top-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
+/* Hold progress bar */
+.hold-bar{position:absolute;bottom:0;left:0;height:5px;width:0%;background:rgba(255,255,255,.75);border-radius:0 0 4px 4px;pointer-events:none}
+.action-btn.hold-ready-add{filter:brightness(1.35);outline:2px solid rgba(255,255,255,.6);outline-offset:-2px}
+.action-btn.hold-ready-subtract{filter:brightness(.65);outline:2px solid rgba(239,68,68,.9);outline-offset:-2px}
+.action-btn.hold-ready-close{filter:brightness(1.4);outline:2px solid rgba(30,215,96,.9);outline-offset:-2px}
 
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 12px;
-  margin-bottom: 18px;
-}
+/* ─── Paid table ─────────────────────────────────────────────────────────────  */
+.paid-table-wrap{background:var(--panel);border:1px solid var(--line);border-radius:22px;overflow:hidden}
+.paid-table{width:100%;border-collapse:collapse}
+.paid-table th,.paid-table td{padding:13px 12px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}
+.paid-table th{color:var(--muted);font-weight:normal;background:#111;position:sticky;top:0;z-index:1}
+.paid-table tr:last-child td{border-bottom:none}
 
-.summary-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 16px;
-  box-shadow: var(--shadow);
-}
+/* ─── Status pill ────────────────────────────────────────────────────────────  */
+.status-pill{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:.05em}
 
-.summary-card.paid {
-  background: #121815;
-}
+/* ─── Empty state ────────────────────────────────────────────────────────────  */
+.empty-state{color:var(--muted);padding:24px;text-align:center}
 
-.total-general-card {
-  background: #181818;
-}
+/* ─── Hidden ─────────────────────────────────────────────────────────────────  */
+.hidden{display:none!important}
 
-.drinks-card {
-  background: #131313;
-}
+/* ─── Animations ─────────────────────────────────────────────────────────────  */
+@keyframes fadeInUp{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
 
-.summary-label {
-  display: block;
-  color: var(--muted);
-  font-size: 13px;
-  margin-bottom: 8px;
-}
-
-.summary-card strong {
-  font-size: 28px;
-}
-
-.tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 18px;
-}
-
-.tab-btn {
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--text);
-  border-radius: 999px;
-  padding: 12px 18px;
-  cursor: pointer;
-}
-
-.tab-btn.active {
-  background: var(--text);
-  color: #000;
-}
-
-.tab-panel {
-  display: none;
-}
-
-.tab-panel.active {
-  display: block;
-}
-
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.panel-header h2 {
-  margin: 0;
-}
-
-.panel-tools {
-  display: flex;
-  gap: 10px;
-}
-
-.search-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-#searchInput {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  color: var(--text);
-  padding: 14px 16px;
-  border-radius: 14px;
-  min-width: 240px;
-  font-size: 16px;
-}
-
-.clear-search-btn {
-  background: #2a1212;
-  border: 1px solid #4a1a1a;
-  color: #ffd3d3;
-  padding: 14px 16px;
-  border-radius: 14px;
-  cursor: pointer;
-  min-width: 54px;
-  font-weight: bold;
-}
-
-.accounts-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.account-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  padding: 16px;
-  box-shadow: var(--shadow);
-}
-
-.account-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 14px;
-}
-
-.account-id {
-  font-size: 24px;
-  font-weight: bold;
-}
-
-.account-total {
-  font-size: 28px;
-  font-weight: bold;
-}
-
-.account-stats {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-
-.pill {
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  padding: 10px 12px;
-  border-radius: 999px;
-  color: var(--muted);
-}
-
-.account-actions {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-}
-
-.action-btn {
-  border: none;
-  border-radius: 16px;
-  padding: 18px 12px;
-  color: white;
-  font-weight: bold;
-  font-size: 22px;
-  cursor: pointer;
-  min-height: 72px;
-}
-
-.btn-160 {
-  background: var(--blue);
-}
-
-.btn-260 {
-  background: var(--orange);
-}
-
-.btn-360 {
-  background: #8b5cf6;
-}
-
-.btn-close {
-  background: var(--green);
-  color: #06130a;
-}
-
-.secondary-btn,
-.danger-btn,
-.backup-btn {
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--text);
-  border-radius: 14px;
-  padding: 14px 16px;
-  cursor: pointer;
-}
-
-.backup-btn {
-  background: var(--backup);
-  border-color: #1d4ed8;
-  color: #ffffff;
-}
-
-.danger-btn {
-  background: #2b1010;
-  border-color: #4a1a1a;
-  color: #ffd3d3;
-}
-
-.hidden {
-  display: none !important;
-}
-
-.paid-table-wrap {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  overflow: hidden;
-}
-
-.paid-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.paid-table th,
-.paid-table td {
-  padding: 14px 12px;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-}
-
-.paid-table th {
-  color: var(--muted);
-  font-weight: normal;
-  background: #111;
-  position: sticky;
-  top: 0;
-}
-
-.empty-state {
-  color: var(--muted);
-  padding: 20px 0;
-}
-
-@media (max-width: 1100px) {
-  .summary-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .accounts-list {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 700px) {
-  .topbar,
-  .panel-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .account-actions {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .summary-card strong {
-    font-size: 22px;
-  }
-
-  .account-id {
-    font-size: 20px;
-  }
-
-  .account-total {
-    font-size: 24px;
-  }
-
-  #searchInput {
-    min-width: 0;
-    width: 100%;
-  }
+/* ─── Responsive ─────────────────────────────────────────────────────────────  */
+@media(max-width:700px){
+  .topbar{flex-direction:column;align-items:stretch}
+  .account-actions{grid-template-columns:repeat(2,1fr)}
+  .summary-card strong{font-size:22px}
+  #searchInput{min-width:0;width:100%}
 }

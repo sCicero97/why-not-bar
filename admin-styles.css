@@ -1,0 +1,189 @@
+/* ─── Admin app styles ───────────────────────────────────────────────────────  */
+body { padding: 0; }
+#app { max-width: 1600px; margin: 0 auto; padding: 16px; }
+
+.admin-section-header {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Toolbar */
+.admin-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.admin-search {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  min-width: 220px;
+  flex: 1;
+}
+.admin-select {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* Table */
+.admin-table-wrap {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+.admin-table th,
+.admin-table td {
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-size: 13px;
+  vertical-align: middle;
+}
+.admin-table th {
+  background: #111;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-table tr:hover td { background: rgba(255,255,255,.02); }
+.admin-table .row-active td { background: rgba(30,215,96,.04); }
+.admin-table .row-closed td { opacity: .5; }
+.att-name-cell { font-weight: 600; cursor: pointer; }
+
+/* Inline editing */
+.editable-cell {
+  cursor: text;
+  min-width: 80px;
+}
+.editable-cell:hover { background: rgba(255,255,255,.04); border-radius: 6px; }
+.empty-val { color: var(--muted); }
+.inline-input {
+  background: var(--panel-2) !important;
+  border: 1px solid var(--blue) !important;
+  color: var(--text) !important;
+  padding: 4px 8px !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  width: 100%;
+  outline: none;
+}
+.inline-select {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.bar-slot-badge {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: bold;
+}
+.table-link { color: var(--blue); text-decoration: none; font-size: 12px; }
+.table-link:hover { text-decoration: underline; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.75);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.admin-modal-box {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 28px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+}
+.modal-close-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+/* Form inside modal */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.form-group { display: flex; flex-direction: column; }
+.form-group label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.form-group input,
+.form-group select {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 10px 13px;
+  border-radius: 11px;
+  font-size: 14px;
+}
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+
+@media (max-width: 700px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .admin-toolbar { flex-direction: column; align-items: stretch; }
+  .admin-modal-box { padding: 18px; }
+}

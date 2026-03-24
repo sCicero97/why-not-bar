@@ -1,587 +1,388 @@
-console.log("APP VERSION: 2026-03-19-NEW");
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwB-L4gLMjjri4rd0ycCPjyr8AQPIJ3_gaPl90OTPRMCwgq86bMpBO5w5ol5_Zv1D6q/exec";
-const BACKUP_TOKEN = "~odB9aur6[Z1";
-const STORAGE_KEY = "cuentas-bar-app-v6";
-const LONG_PRESS_MS = 2000;
+// ═══════════════════════════════════════════════════════════════════════════
+// app.js — App de Barra (Supabase + tiempo real)
+// ═══════════════════════════════════════════════════════════════════════════
+console.log('BAR v3 2026-03-23');
 
+const DEFAULT_ACCOUNT_COUNT = 120;
+const ADD_READY_MS      = 500;
+const SUBTRACT_READY_MS = 2000;
+const CLOSE_READY_MS    = 1000;
 
-const state = {
-  accounts: [],
-  paidAccounts: [],
-};
+let activeEvent   = null;
+let accounts      = [];    // bar_accounts del evento activo
+let closures      = [];    // bar_closures del evento activo
+let showClosed    = false;
+let holdActive    = false;
+let pendingRender = false;
 
-let lastActivityTime = Date.now();
-let lastBackupTime = 0;
-const IDLE_MS = 2 * 60 * 1000;
-const BACKUP_INTERVAL_MS = 20 * 60 * 1000;
-const AUTO_CHECK_MS = 30 * 1000;
-
-let deferredPrompt = null;
-let suppressNextClick = false;
-let longPressTimer = null;
-
-function padBaseId(number) {
-  return String(number).padStart(3, "0");
-}
-
-function createInitialAccounts() {
-  return Array.from({ length: 100 }, (_, index) => ({
-    slot: index + 1,
-    id: padBaseId(index + 1),
-    total: 0,
-    qty160: 0,
-    qty260: 0,
-    qty360: 0,
-  }));
-}
-
-function defaultState() {
-  return {
-    accounts: createInitialAccounts(),
-    paidAccounts: [],
-  };
-}
-
-function migrateAccountId(id, fallbackSlot) {
-  const value = String(id ?? "").trim();
-
-  if (!value) {
-    return padBaseId(fallbackSlot);
-  }
-
-  const parts = value.split("-");
-  const rawBase = parts[0];
-  const suffix = parts[1];
-
-  const baseNumber = parseInt(rawBase, 10);
-
-  if (Number.isNaN(baseNumber)) {
-    return padBaseId(fallbackSlot);
-  }
-
-  const basePadded = padBaseId(baseNumber);
-
-  if (!suffix) {
-    return basePadded;
-  }
-
-  return `${basePadded}-${suffix.toUpperCase()}`;
-}
-
-function loadState() {
+// ─── Init ─────────────────────────────────────────────────────────────────────
+async function init() {
   try {
-    const raw =
-      localStorage.getItem(STORAGE_KEY) ||
-      localStorage.getItem("cuentas-bar-app-v5") ||
-      localStorage.getItem("cuentas-bar-app-v4") ||
-      localStorage.getItem("cuentas-bar-app-v3") ||
-      localStorage.getItem("cuentas-bar-app-v2") ||
-      localStorage.getItem("cuentas-bar-app-v1");
+    const user = await requireAuth(['bar', 'admin']);
+    if (!user) return;
 
-    if (!raw) {
-      const initial = defaultState();
-      state.accounts = initial.accounts;
-      state.paidAccounts = initial.paidAccounts;
-      saveState();
+    document.getElementById('userChip').textContent = `🍹 ${user.displayName || user.email}`;
+
+    activeEvent = await getActiveEvent();
+    if (!activeEvent) {
+      document.getElementById('app').style.display = 'block';
+      document.getElementById('accountsList').innerHTML =
+        '<div class="empty-state" style="padding:40px">No hay evento activo.<br><span style="font-size:13px;color:#6b7280">Creá un evento desde el panel Admin.</span></div>';
+      renderSummary();
       return;
     }
 
-    const parsed = JSON.parse(raw);
+    document.getElementById('eventName').textContent = `${activeEvent.name} — ${activeEvent.date}`;
+    document.getElementById('app').style.display = 'block';
 
-    state.accounts = Array.isArray(parsed.accounts)
-      ? parsed.accounts.map((account, index) => ({
-          ...account,
-          id: migrateAccountId(account.id, index + 1),
-          slot: account.slot || index + 1,
-        }))
-      : createInitialAccounts();
+    await loadData();
+    setupRealtime();
+    setupUI();
 
-    state.paidAccounts = Array.isArray(parsed.paidAccounts)
-      ? parsed.paidAccounts.map((item, index) => ({
-          ...item,
-          id: migrateAccountId(item.id, index + 1),
-        }))
-      : [];
-
-    saveState();
-  } catch (error) {
-    console.error("Error cargando estado:", error);
-    const initial = defaultState();
-    state.accounts = initial.accounts;
-    state.paidAccounts = initial.paidAccounts;
-    saveState();
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+  } catch (e) {
+    if (e.message !== 'SETUP_REQUIRED') console.error('Init error:', e);
   }
 }
 
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function formatMoney(value) {
-  return `$ ${Number(value || 0).toLocaleString("es-UY")}`;
-}
-
-function nowString() {
-  const d = new Date();
-  return d.toLocaleString("es-UY", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-function nextVersionId(currentId) {
-  const value = String(currentId).trim();
-  const parts = value.split("-");
-  const rawBase = parts[0];
-  const suffix = parts[1];
-
-  const baseNumber = parseInt(rawBase, 10);
-  const base = Number.isNaN(baseNumber) ? "001" : padBaseId(baseNumber);
-
-  if (!suffix) {
-    return `${base}-B`;
-  }
-
-  const upperSuffix = suffix.toUpperCase();
-  const code = upperSuffix.charCodeAt(0);
-
-  if (code >= 65 && code < 90) {
-    return `${base}-${String.fromCharCode(code + 1)}`;
-  }
-
-  return `${base}-Z`;
-}
-
-function addDrink(slot, amount) {
-  const account = state.accounts.find((a) => a.slot === slot);
-  if (!account) return;
-
-  account.total += amount;
-
-  if (amount === 160) account.qty160 += 1;
-  if (amount === 260) account.qty260 += 1;
-  if (amount === 360) account.qty360 += 1;
-
-  saveState();
+async function loadData() {
+  const db = getDb();
+  const [accsRes, closRes] = await Promise.all([
+    db.from('bar_accounts').select('*, attendees(name,status)').eq('event_id', activeEvent.id).order('slot'),
+    db.from('bar_closures').select('*, attendees(name)').eq('event_id', activeEvent.id).order('closed_at', { ascending: false }),
+  ]);
+  if (accsRes.data) accounts = accsRes.data;
+  if (closRes.data) closures = closRes.data;
   renderAll();
 }
 
-function subtractDrink(slot, amount) {
-  const account = state.accounts.find((a) => a.slot === slot);
-  if (!account) return;
+// ─── Real-time ────────────────────────────────────────────────────────────────
+function setupRealtime() {
+  const db = getDb();
+  db.channel('bar-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bar_accounts', filter: `event_id=eq.${activeEvent.id}` },
+      (payload) => {
+        if (payload.eventType === 'UPDATE') {
+          const idx = accounts.findIndex(a => a.id === payload.new.id);
+          if (idx >= 0) {
+            accounts[idx] = { ...accounts[idx], ...payload.new };
+          }
+        }
+        renderIfNotHolding();
+      })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bar_closures', filter: `event_id=eq.${activeEvent.id}` },
+      (payload) => {
+        closures.unshift(payload.new);
+        renderIfNotHolding();
+      })
+    .subscribe();
+}
 
-  if (amount === 160) {
-    if (account.qty160 <= 0) return;
-    account.qty160 -= 1;
-    account.total = Math.max(0, account.total - 160);
-  }
-
-  if (amount === 260) {
-    if (account.qty260 <= 0) return;
-    account.qty260 -= 1;
-    account.total = Math.max(0, account.total - 260);
-  }
-
-  if (amount === 360) {
-    if (account.qty360 <= 0) return;
-    account.qty360 -= 1;
-    account.total = Math.max(0, account.total - 360);
-  }
-
-  saveState();
+function renderIfNotHolding() {
+  if (holdActive) { pendingRender = true; return; }
   renderAll();
 }
 
-function closeAccount(slot) {
-  const account = state.accounts.find((a) => a.slot === slot);
-  if (!account) return;
-  if (account.total === 0) return;
-
-  state.paidAccounts.push({
-    id: account.id,
-    total: account.total,
-    qty160: account.qty160,
-    qty260: account.qty260,
-    qty360: account.qty360,
-    closedAt: nowString(),
-  });
-
-  account.id = nextVersionId(account.id);
-  account.total = 0;
-  account.qty160 = 0;
-  account.qty260 = 0;
-  account.qty360 = 0;
-
-  saveState();
-  renderAll();
-}
-
-function resetAll() {
-  const ok = window.confirm("¿Seguro que querés borrar todas las cuentas abiertas y pagas?");
-  if (!ok) return;
-
-  const initial = defaultState();
-  state.accounts = initial.accounts;
-  state.paidAccounts = initial.paidAccounts;
-
-  saveState();
-  renderAll();
-}
-
-function getOpenTotals() {
-  return state.accounts.reduce(
-    (acc, item) => {
-      acc.total += item.total || 0;
-      acc.qty160 += item.qty160 || 0;
-      acc.qty260 += item.qty260 || 0;
-      acc.qty360 += item.qty360 || 0;
-      return acc;
-    },
-    { total: 0, qty160: 0, qty260: 0, qty360: 0 }
-  );
-}
-
-function getPaidTotals() {
-  return state.paidAccounts.reduce(
-    (acc, item) => {
-      acc.total += item.total || 0;
-      acc.qty160 += item.qty160 || 0;
-      acc.qty260 += item.qty260 || 0;
-      acc.qty360 += item.qty360 || 0;
-      return acc;
-    },
-    { total: 0, qty160: 0, qty260: 0, qty360: 0 }
-  );
-}
-
-function buildBackupPayload() {
-  const open = getOpenTotals();
-  const paid = getPaidTotals();
-
-  return {
-    token: BACKUP_TOKEN,
-    backupCreatedAt: new Date().toISOString(),
-    summary: {
-      openTotal: open.total,
-      paidTotal: paid.total,
-      grandTotal: open.total + paid.total,
-      qty160: open.qty160 + paid.qty160,
-      qty260: open.qty260 + paid.qty260,
-      qty360: open.qty360 + paid.qty360,
-      openAccountsCount: state.accounts.length,
-      paidAccountsCount: state.paidAccounts.length,
-    },
-    openAccounts: state.accounts.filter((a) => a.total > 0),
-    paidAccounts: state.paidAccounts,
-  };
-}
-
-async function backupToGoogleSheets(silent = false) {
-  const backupBtn = document.getElementById("backupBtn");
-  const previousText = backupBtn.textContent;
-
-  backupBtn.disabled = true;
-  backupBtn.textContent = "Respaldando...";
-
-  try {
-    const payload = buildBackupPayload();
-
-    const response = await fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(payload)
-    });
-
-    const text = await response.text();
-    let result;
-    try {
-      result = JSON.parse(text);
-    } catch {
-      throw new Error(`Respuesta inesperada: ${text.slice(0, 200)}`);
-    }
-
-    if (!result.ok) {
-      throw new Error(result.error || "Error desconocido en el servidor");
-    }
-
-    lastBackupTime = Date.now();
-    backupBtn.disabled = false;
-    backupBtn.textContent = "✓ Guardado";
-    setTimeout(() => {
-      backupBtn.textContent = previousText;
-    }, 3000);
-  } catch (error) {
-    console.error("BACKUP ERROR:", error);
-    backupBtn.disabled = false;
-    backupBtn.textContent = previousText;
-    if (!silent) {
-      window.alert(`No se pudo respaldar.\n\n${error.message}`);
-    }
-  }
-}
-
-function setupAutoBackup() {
-  const activityEvents = ["click", "touchstart", "keydown", "scroll"];
-  activityEvents.forEach((evt) => {
-    document.addEventListener(evt, () => { lastActivityTime = Date.now(); }, { passive: true });
-  });
-
-  setInterval(() => {
-    const now = Date.now();
-    const idle = now - lastActivityTime;
-    const sinceBackup = now - lastBackupTime;
-    if (idle >= IDLE_MS && sinceBackup >= BACKUP_INTERVAL_MS) {
-      backupToGoogleSheets(true);
-    }
-  }, AUTO_CHECK_MS);
-}
-
-function renderSummary() {
-  const open = getOpenTotals();
-  const paid = getPaidTotals();
-
-  document.getElementById("openTotal").textContent = formatMoney(open.total);
-  document.getElementById("paidTotal").textContent = formatMoney(paid.total);
-  document.getElementById("all160").textContent = open.qty160 + paid.qty160;
-  document.getElementById("all260").textContent = open.qty260 + paid.qty260;
-  document.getElementById("all360").textContent = open.qty360 + paid.qty360;
-  document.getElementById("grandTotal").textContent = formatMoney(open.total + paid.total);
-}
-
-function renderAccounts() {
-  const wrap = document.getElementById("accountsList");
-  const rawSearch = document.getElementById("searchInput").value.trim();
-  const searchDigits = rawSearch.replace(/\D/g, "");
-
-  const filtered = state.accounts.filter((account) => {
-    if (!searchDigits) return true;
-    const accountDigits = account.id.replace(/\D/g, "");
-    return accountDigits.includes(searchDigits);
-  });
-
-  wrap.innerHTML = "";
-
-  if (!filtered.length) {
-    wrap.innerHTML = `<div class="empty-state">No hay resultados.</div>`;
-    return;
-  }
-
-  for (const account of filtered) {
-    const card = document.createElement("article");
-    card.className = "account-card";
-
-    card.innerHTML = `
-      <div class="account-top">
-        <div class="account-id">ID ${account.id}</div>
-        <div class="account-total">${formatMoney(account.total)}</div>
-      </div>
-
-      <div class="account-stats">
-        <div class="pill">160: <strong>${account.qty160}</strong></div>
-        <div class="pill">260: <strong>${account.qty260}</strong></div>
-        <div class="pill">360: <strong>${account.qty360}</strong></div>
-      </div>
-
-      <div class="account-actions">
-        <button class="action-btn btn-160" data-slot="${account.slot}" data-amount="160">+160</button>
-        <button class="action-btn btn-260" data-slot="${account.slot}" data-amount="260">+260</button>
-        <button class="action-btn btn-360" data-slot="${account.slot}" data-amount="360">+360</button>
-        <button class="action-btn btn-close" data-slot="${account.slot}" data-close="1">Cerrar</button>
-      </div>
-    `;
-
-    wrap.appendChild(card);
-  }
-}
-
-function renderPaidTable() {
-  const tbody = document.getElementById("paidTableBody");
-  tbody.innerHTML = "";
-
-  if (!state.paidAccounts.length) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="6" class="empty-state">Todavía no hay cuentas pagas.</td>
-      </tr>
-    `;
-    return;
-  }
-
-  const reversed = [...state.paidAccounts].reverse();
-
-  for (const item of reversed) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${item.id}</td>
-      <td>${formatMoney(item.total)}</td>
-      <td>${item.qty160}</td>
-      <td>${item.qty260}</td>
-      <td>${item.qty360}</td>
-      <td>${item.closedAt}</td>
-    `;
-    tbody.appendChild(tr);
-  }
-}
-
+// ─── Render ───────────────────────────────────────────────────────────────────
 function renderAll() {
   renderSummary();
   renderAccounts();
   renderPaidTable();
 }
 
-function setupTabs() {
-  document.querySelectorAll(".tab-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-      document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
-
-      btn.classList.add("active");
-      document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
-    });
-  });
+function renderSummary() {
+  const openAcc  = accounts.filter(a => !a.is_closed);
+  const openTot  = openAcc.reduce((s, a) => s + Number(a.total || 0), 0);
+  const paidTot  = closures.reduce((s, c) => s + Number(c.total || 0), 0);
+  const q160     = accounts.reduce((s,a)=>s+a.qty160,0) + closures.reduce((s,c)=>s+c.qty160,0);
+  const q260     = accounts.reduce((s,a)=>s+a.qty260,0) + closures.reduce((s,c)=>s+c.qty260,0);
+  const q360     = accounts.reduce((s,a)=>s+a.qty360,0) + closures.reduce((s,c)=>s+c.qty360,0);
+  document.getElementById('openTotal').textContent  = formatMoney(openTot);
+  document.getElementById('paidTotal').textContent  = formatMoney(paidTot);
+  document.getElementById('all160').textContent     = q160;
+  document.getElementById('all260').textContent     = q260;
+  document.getElementById('all360').textContent     = q360;
+  document.getElementById('grandTotal').textContent = formatMoney(openTot + paidTot);
 }
 
-function clearLongPressState() {
-  if (longPressTimer) {
-    clearTimeout(longPressTimer);
-    longPressTimer = null;
+function renderAccounts() {
+  const wrap        = document.getElementById('accountsList');
+  const searchDig   = document.getElementById('searchInput').value.replace(/\D/g, '');
+  const list        = showClosed ? accounts : accounts.filter(a => !a.is_closed);
+  const filtered    = searchDig ? list.filter(a => String(a.slot).padStart(3,'0').includes(searchDig)) : list;
+
+  wrap.innerHTML = '';
+  if (!filtered.length) {
+    wrap.innerHTML = '<div class="empty-state">No hay cuentas para mostrar.</div>';
+    return;
+  }
+
+  for (const acc of filtered) {
+    const id   = padId(acc.slot);
+    const name = acc.attendees?.name || '';
+    const card = document.createElement('article');
+    card.className = `account-card ${acc.is_closed ? 'is-closed' : ''} ${!acc.is_closed && acc.total > 0 ? 'has-balance' : ''}`;
+    card.innerHTML = `
+      <div class="account-top">
+        <div>
+          <div class="account-id">ID ${id}</div>
+          ${name ? `<div class="account-name">${name}</div>` : ''}
+          ${acc.is_closed ? '<span class="closed-badge">cerrada</span>' : ''}
+        </div>
+        <div class="account-total">${formatMoney(acc.total)}</div>
+      </div>
+      <div class="account-stats">
+        <div class="pill">160: <strong>${acc.qty160}</strong></div>
+        <div class="pill">260: <strong>${acc.qty260}</strong></div>
+        <div class="pill">360: <strong>${acc.qty360}</strong></div>
+      </div>
+      ${acc.is_closed ? '' : `
+      <div class="account-actions">
+        <button class="action-btn btn-160" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="160">+160<span class="hold-bar"></span></button>
+        <button class="action-btn btn-260" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="260">+260<span class="hold-bar"></span></button>
+        <button class="action-btn btn-360" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="360">+360<span class="hold-bar"></span></button>
+        <button class="action-btn btn-close ${acc.total === 0 ? 'hidden' : ''}" data-id="${acc.id}" data-slot="${acc.slot}" data-close="1">Cerrar<span class="hold-bar"></span></button>
+      </div>`}
+    `;
+    wrap.appendChild(card);
   }
 }
 
-function setupLongPressHandlers() {
-  const accountsList = document.getElementById("accountsList");
-
-  accountsList.addEventListener(
-    "pointerdown",
-    (event) => {
-      const amountBtn = event.target.closest("[data-amount]");
-      if (!amountBtn) return;
-
-      event.preventDefault();
-
-      const slot = Number(amountBtn.dataset.slot);
-      const amount = Number(amountBtn.dataset.amount);
-
-      clearLongPressState();
-
-      longPressTimer = setTimeout(() => {
-        subtractDrink(slot, amount);
-        suppressNextClick = true;
-
-        if (navigator.vibrate) {
-          navigator.vibrate(30);
-        }
-      }, LONG_PRESS_MS);
-    },
-    { passive: false }
-  );
-
-  ["pointerup", "pointerleave", "pointercancel"].forEach((eventName) => {
-    document.getElementById("accountsList").addEventListener(eventName, () => {
-      clearLongPressState();
-    });
-  });
-
-  document.getElementById("accountsList").addEventListener(
-    "contextmenu",
-    (event) => {
-      if (event.target.closest(".action-btn")) {
-        event.preventDefault();
-      }
-    },
-    { passive: false }
-  );
-
-  document.getElementById("accountsList").addEventListener(
-    "dblclick",
-    (event) => {
-      if (event.target.closest(".action-btn")) {
-        event.preventDefault();
-      }
-    },
-    { passive: false }
-  );
-}
-
-function setupEvents() {
-  const accountsList = document.getElementById("accountsList");
-
-  accountsList.addEventListener("click", (event) => {
-    const amountBtn = event.target.closest("[data-amount]");
-    const closeBtn = event.target.closest("[data-close]");
-
-    if (suppressNextClick) {
-      suppressNextClick = false;
-      return;
-    }
-
-    if (amountBtn) {
-      const slot = Number(amountBtn.dataset.slot);
-      const amount = Number(amountBtn.dataset.amount);
-      addDrink(slot, amount);
-      return;
-    }
-
-    if (closeBtn) {
-      const slot = Number(closeBtn.dataset.slot);
-      closeAccount(slot);
-    }
-  });
-
-  setupLongPressHandlers();
-
-  const searchInput = document.getElementById("searchInput");
-  const clearSearchBtn = document.getElementById("clearSearchBtn");
-
-  searchInput.addEventListener("input", () => {
-    searchInput.value = searchInput.value.replace(/[^\d]/g, "");
-    renderAccounts();
-  });
-
-  clearSearchBtn.addEventListener("click", () => {
-    searchInput.value = "";
-    renderAccounts();
-    searchInput.focus();
-  });
-
-  document.getElementById("resetBtn").addEventListener("click", resetAll);
-  document.getElementById("backupBtn").addEventListener("click", backupToGoogleSheets);
-
-  const installBtn = document.getElementById("installBtn");
-  installBtn.addEventListener("click", async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    installBtn.classList.add("hidden");
-  });
-
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    deferredPrompt = event;
-    installBtn.classList.remove("hidden");
-  });
-}
-
-function registerServiceWorker() {
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("./service-worker.js").catch((err) => {
-      console.error("Error registrando service worker:", err);
-    });
+function renderPaidTable() {
+  const tbody = document.getElementById('paidTableBody');
+  tbody.innerHTML = '';
+  if (!closures.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Sin cuentas cobradas todavía.</td></tr>';
+    return;
+  }
+  for (const c of closures) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${padId(c.slot)}</strong></td>
+      <td>${c.attendees?.name || '—'}</td>
+      <td><strong>${formatMoney(c.total)}</strong></td>
+      <td>${c.qty160}</td><td>${c.qty260}</td><td>${c.qty360}</td>
+      <td>${c.closed_by || '—'}</td>
+      <td style="font-size:12px;color:var(--muted)">${c.closed_at ? new Date(c.closed_at).toLocaleString('es-UY') : '—'}</td>
+      <td>${c.payment_photo_url ? `<a href="${c.payment_photo_url}" target="_blank" style="color:var(--blue)">Ver foto</a>` : '—'}</td>
+    `;
+    tbody.appendChild(tr);
   }
 }
 
-function init() {
-  loadState();
-  setupTabs();
-  setupEvents();
+// ─── Hold interaction ─────────────────────────────────────────────────────────
+const activeHolds = new Map();
+
+function animateHoldBar(btn, ms) {
+  const bar = btn.querySelector('.hold-bar');
+  if (!bar) return;
+  bar.style.transition = 'none'; bar.style.width = '0%';
+  void bar.offsetWidth;
+  bar.style.transition = `width ${ms}ms linear`;
+  bar.style.width = '100%';
+}
+
+function clearHold(pointerId) {
+  const d = activeHolds.get(pointerId);
+  if (!d) return;
+  d.timers.forEach(clearTimeout);
+  activeHolds.delete(pointerId);
+  const btn = d.btn;
+  btn.classList.remove('hold-ready-add','hold-ready-subtract','hold-ready-close');
+  const bar = btn.querySelector('.hold-bar');
+  if (bar) { bar.style.transition='none'; bar.style.width='0%'; }
+  if (activeHolds.size === 0) {
+    holdActive = false;
+    if (pendingRender) { pendingRender=false; renderAll(); }
+  }
+}
+
+function setupHoldInteractions() {
+  const list = document.getElementById('accountsList');
+
+  list.addEventListener('pointerdown', (e) => {
+    const btn = e.target.closest('.action-btn');
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+    btn.setPointerCapture(e.pointerId);
+    holdActive = true;
+    const isClose = !!btn.dataset.close;
+    const d = { btn, addReady:false, subtractReady:false, closeReady:false, timers:[] };
+    activeHolds.set(e.pointerId, d);
+
+    if (isClose) {
+      animateHoldBar(btn, CLOSE_READY_MS);
+      d.timers.push(setTimeout(() => {
+        d.closeReady = true;
+        btn.classList.add('hold-ready-close');
+        if (navigator.vibrate) navigator.vibrate(30);
+      }, CLOSE_READY_MS));
+    } else {
+      animateHoldBar(btn, ADD_READY_MS);
+      d.timers.push(setTimeout(() => {
+        d.addReady = true;
+        btn.classList.add('hold-ready-add');
+        if (navigator.vibrate) navigator.vibrate(20);
+        animateHoldBar(btn, SUBTRACT_READY_MS - ADD_READY_MS);
+      }, ADD_READY_MS));
+      d.timers.push(setTimeout(() => {
+        d.subtractReady = true;
+        btn.classList.remove('hold-ready-add');
+        btn.classList.add('hold-ready-subtract');
+        if (navigator.vibrate) navigator.vibrate([30,20,30]);
+      }, SUBTRACT_READY_MS));
+    }
+  }, { passive: false });
+
+  list.addEventListener('pointerup', async (e) => {
+    const d = activeHolds.get(e.pointerId);
+    if (!d) return;
+    const btn = d.btn;
+    const { addReady, subtractReady, closeReady } = d;
+    const id     = btn.dataset.id;
+    const slot   = parseInt(btn.dataset.slot, 10);
+    const amount = parseInt(btn.dataset.amount, 10);
+    clearHold(e.pointerId);
+
+    if (btn.dataset.close) {
+      if (closeReady) await doCloseAccount(id, slot);
+    } else {
+      if (subtractReady) await doSubtractDrink(id, amount);
+      else if (addReady) await doAddDrink(id, amount);
+    }
+  });
+
+  list.addEventListener('pointercancel', (e) => clearHold(e.pointerId));
+  list.addEventListener('contextmenu', (e) => { if (e.target.closest('.action-btn')) e.preventDefault(); }, { passive: false });
+}
+
+// ─── DB actions ───────────────────────────────────────────────────────────────
+async function doAddDrink(accountId, amount) {
+  const db   = getDb();
+  const { data, error } = await db.rpc('add_drink', { p_account_id: accountId, p_amount: amount });
+  if (error || !data?.ok) toast(data?.error || error?.message || 'Error al agregar', 'error');
+}
+
+async function doSubtractDrink(accountId, amount) {
+  const db   = getDb();
+  const { data, error } = await db.rpc('subtract_drink', { p_account_id: accountId, p_amount: amount });
+  if (error || !data?.ok) toast(data?.error || error?.message || 'Error al restar', 'error');
+}
+
+async function doCloseAccount(accountId, slot) {
+  // 1. Abrir cámara
+  const photoBlob = await openCamera();
+  let photoUrl = null;
+  if (photoBlob) {
+    photoUrl = await uploadPaymentPhoto(photoBlob, activeEvent.id, slot);
+  }
+
+  // 2. Cerrar en DB
+  const db = getDb();
+  const { data, error } = await db.rpc('close_bar_account', {
+    p_account_id: accountId,
+    p_closed_by:  'bar',
+    p_photo_url:  photoUrl,
+  });
+
+  if (error || !data?.ok) {
+    toast(data?.error || error?.message || 'Error al cerrar', 'error');
+    return;
+  }
+
+  // Actualizar local inmediatamente
+  const idx = accounts.findIndex(a => a.id === accountId);
+  if (idx >= 0) accounts[idx].is_closed = true;
+  toast(`Cuenta ${padId(slot)} cerrada — ${formatMoney(data.total)}`, 'success');
   renderAll();
-  registerServiceWorker();
-  setupAutoBackup();
+
+  // Recargar cierres
+  const { data: newClosure } = await db.from('bar_closures')
+    .select('*, attendees(name)')
+    .eq('event_id', activeEvent.id)
+    .eq('slot', slot)
+    .order('closed_at', { ascending: false })
+    .limit(1)
+    .single();
+  if (newClosure) closures.unshift(newClosure);
+  renderPaidTable();
 }
 
-document.addEventListener("DOMContentLoaded", init);
+// ─── Export Excel ─────────────────────────────────────────────────────────────
+function exportToExcel() {
+  if (typeof XLSX === 'undefined') { toast('Librería Excel no disponible', 'error'); return; }
+
+  const openTot = accounts.filter(a=>!a.is_closed).reduce((s,a)=>s+Number(a.total),0);
+  const paidTot = closures.reduce((s,c)=>s+Number(c.total),0);
+  const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['Why Not Bar — Resumen'], ['Evento', activeEvent?.name], ['Fecha', activeEvent?.date],
+    [], ['Abiertas total', openTot], ['Cobradas total', paidTot], ['Total general', openTot+paidTot],
+  ]), 'Resumen');
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['ID','Nombre','Total','#160','#260','#360','Cerrada por','Hora'],
+    ...closures.map(c=>[padId(c.slot),c.attendees?.name||'',c.total,c.qty160,c.qty260,c.qty360,c.closed_by,c.closed_at]),
+  ]), 'Cuentas cobradas');
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['ID','Nombre','Total','#160','#260','#360'],
+    ...accounts.filter(a=>!a.is_closed&&a.total>0).map(a=>[padId(a.slot),a.attendees?.name||'',a.total,a.qty160,a.qty260,a.qty360]),
+  ]), 'Cuentas abiertas');
+
+  XLSX.writeFile(wb, `whynot-${activeEvent?.date || 'barra'}.xlsx`);
+}
+
+// ─── Reset ────────────────────────────────────────────────────────────────────
+async function doReset() {
+  const numStr = window.prompt('¿Cuántas cuentas querés crear?\n(Entre 1 y 500)', String(DEFAULT_ACCOUNT_COUNT));
+  if (numStr === null) return;
+  const num = parseInt(numStr.trim(), 10);
+  if (isNaN(num) || num < 1 || num > 500) { window.alert('Número inválido.'); return; }
+  if (!window.confirm(`⚠️  Esto borra TODAS las cuentas del evento y crea ${num} nuevas.\n¿Confirmar?`)) return;
+
+  const db = getDb();
+  const { data, error } = await db.rpc('init_bar_accounts', { p_event_id: activeEvent.id, p_count: num });
+  if (error || !data?.ok) { toast('Error al resetear: ' + (error?.message || data?.error), 'error'); return; }
+  toast(`${num} cuentas creadas`, 'success');
+  await loadData();
+}
+
+// ─── UI setup ─────────────────────────────────────────────────────────────────
+function setupUI() {
+  setupTabs();
+  setupHoldInteractions();
+
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    e.target.value = e.target.value.replace(/[^\d]/g, '');
+    renderAccounts();
+  });
+  document.getElementById('clearSearchBtn').addEventListener('click', () => {
+    document.getElementById('searchInput').value = '';
+    renderAccounts();
+  });
+
+  document.getElementById('toggleClosedBtn').addEventListener('click', () => {
+    showClosed = !showClosed;
+    document.getElementById('toggleClosedBtn').textContent = showClosed ? 'Ocultar cerradas' : 'Mostrar cerradas';
+    renderAccounts();
+  });
+
+  document.getElementById('exportBtn').addEventListener('click', exportToExcel);
+  document.getElementById('resetBtn').addEventListener('click', doReset);
+  document.getElementById('logoutBtn').addEventListener('click', signOut);
+}
+
+function setupTabs() {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', init);

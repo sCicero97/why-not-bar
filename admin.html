@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Why Not — Admin</title>
+  <meta name="theme-color" content="#0b0b0b"/>
+  <link rel="icon" href="./Logo.png" type="image/png"/>
+  <link rel="stylesheet" href="./styles.css"/>
+  <link rel="stylesheet" href="./admin-styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<div id="app" style="display:none">
+
+  <header class="topbar" style="padding:14px 20px">
+    <div class="brand">
+      <div class="brand-dot" style="background:#f59e0b;box-shadow:0 0 16px rgba(245,158,11,.6)"></div>
+      <div>
+        <h1>Why Not</h1>
+        <p id="eventName">Admin</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="userChip" class="user-chip"></span>
+      <button id="exportBtn" class="btn btn-sm" style="background:#0d9488;border-color:#0f766e;color:#fff">Excel</button>
+      <button id="logoutBtn" class="btn btn-sm">Salir</button>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="asistentes">Asistentes</button>
+    <button class="tab-btn" data-tab="barra">Barra</button>
+    <button class="tab-btn" data-tab="gastos">Gastos</button>
+    <button class="tab-btn" data-tab="evento">Evento</button>
+  </nav>
+
+  <!-- ── Dashboard ────────────────────────────────────────── -->
+  <section id="tab-dashboard" class="tab-panel active">
+    <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+      <div class="summary-card">
+        <span class="summary-label">Total barra</span>
+        <strong id="d-barTotal">$ 0</strong>
+      </div>
+      <div class="summary-card" style="background:#0d1f0d;border-color:#1a3a1a">
+        <span class="summary-label">Total entradas</span>
+        <strong id="d-entryTotal">$ 0</strong>
+      </div>
+      <div class="summary-card" style="background:#1f1900;border-color:#3a2e00">
+        <span class="summary-label">Gastos</span>
+        <strong id="d-expenses">$ 0</strong>
+      </div>
+      <div class="summary-card" style="background:#181818;border-color:#333">
+        <span class="summary-label">TOTAL NETO</span>
+        <strong id="d-netTotal" style="font-size:32px">$ 0</strong>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Asistentes</span>
+        <strong id="d-attendees">0</strong>
+      </div>
+      <div class="summary-card" style="background:#0d1f0d;border-color:#1a3a1a">
+        <span class="summary-label">Ingresaron</span>
+        <strong id="d-entered">0</strong>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Cuentas barra abiertas</span>
+        <strong id="d-openAccs">0</strong>
+      </div>
+      <div class="summary-card" style="background:#121815;border-color:#1a3a1a">
+        <span class="summary-label">Cuentas barra cobradas</span>
+        <strong id="d-closedAccs">0</strong>
+      </div>
+    </div>
+
+    <!-- Bar breakdown -->
+    <div class="admin-section-header">Detalle de la barra</div>
+    <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:24px">
+      <div class="summary-card" style="background:#131313"><span class="summary-label">Tragos 160</span><strong id="d-q160">0</strong></div>
+      <div class="summary-card" style="background:#131313"><span class="summary-label">Tragos 260</span><strong id="d-q260">0</strong></div>
+      <div class="summary-card" style="background:#131313"><span class="summary-label">Tragos 360</span><strong id="d-q360">0</strong></div>
+    </div>
+
+    <!-- Recent closures -->
+    <div class="admin-section-header">Últimos cobros</div>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>Cuenta</th><th>Nombre</th><th>Total</th><th>Por</th><th>Hora</th><th>Foto</th></tr></thead>
+        <tbody id="d-recentClosures"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Asistentes ────────────────────────────────────────── -->
+  <section id="tab-asistentes" class="tab-panel">
+    <div class="admin-toolbar">
+      <input id="attSearch" type="text" placeholder="Buscar nombre, cédula…" class="admin-search"/>
+      <select id="attStatusFilter" class="admin-select">
+        <option value="">Todos los estados</option>
+        <option value="invited">Invitado</option>
+        <option value="crew">Crew</option>
+        <option value="in_process">En proceso</option>
+        <option value="paid">Pago</option>
+        <option value="no_show">No vino</option>
+      </select>
+      <button id="addAttendeeBtn" class="btn btn-primary btn-sm">+ Agregar</button>
+      <button id="importCsvBtn" class="btn btn-sm">Importar CSV</button>
+      <input id="csvFileInput" type="file" accept=".csv" class="hidden"/>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table" id="attendeesTable">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Estado</th>
+            <th>Barra #</th>
+            <th>Cédula</th>
+            <th>Email</th>
+            <th>Teléfono</th>
+            <th>Entrada $</th>
+            <th>Total pago</th>
+            <th>Consumo</th>
+            <th>Ingresó</th>
+            <th>Salió</th>
+            <th>Foto pago</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="attendeesBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Barra ─────────────────────────────────────────────── -->
+  <section id="tab-barra" class="tab-panel">
+    <div class="admin-toolbar">
+      <select id="barFilter" class="admin-select">
+        <option value="all">Todas</option>
+        <option value="open">Abiertas con saldo</option>
+        <option value="empty">Abiertas vacías</option>
+        <option value="closed">Cerradas</option>
+      </select>
+      <button id="initBarBtn" class="btn btn-warning btn-sm">Inicializar cuentas</button>
+    </div>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>#</th><th>Nombre vinculada</th><th>Total</th><th>160</th><th>260</th><th>360</th><th>Estado</th><th>Acción</th></tr></thead>
+        <tbody id="barAccountsBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Gastos ─────────────────────────────────────────────── -->
+  <section id="tab-gastos" class="tab-panel">
+    <div class="admin-toolbar">
+      <button id="addExpenseBtn" class="btn btn-primary btn-sm">+ Agregar gasto</button>
+    </div>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>Descripción</th><th>Monto</th><th>Fecha</th><th></th></tr></thead>
+        <tbody id="expensesBody"></tbody>
+        <tfoot id="expensesTotalRow"></tfoot>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Evento ─────────────────────────────────────────────── -->
+  <section id="tab-evento" class="tab-panel">
+    <div class="admin-section-header">Eventos</div>
+    <div style="margin-bottom:16px">
+      <button id="newEventBtn" class="btn btn-primary">+ Nuevo evento</button>
+    </div>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>Nombre</th><th>Fecha</th><th>Estado</th><th>Acciones</th></tr></thead>
+        <tbody id="eventsBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+
+<!-- Modals -->
+<div id="modalOverlay" class="modal-overlay hidden">
+  <div id="modalBox" class="admin-modal-box">
+    <button id="closeModalBtn" class="modal-close-btn">✕</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script src="./shared.js"></script>
+<script src="./admin.js"></script>
+</body>
+</html>

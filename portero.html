@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <title>Why Not — Portero</title>
+  <meta name="theme-color" content="#0b0b0b"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Portero"/>
+  <link rel="icon" href="./Logo.png" type="image/png"/>
+  <link rel="apple-touch-icon" href="./Logo.png"/>
+  <link rel="stylesheet" href="./styles.css"/>
+  <link rel="stylesheet" href="./portero-styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+</head>
+<body>
+<div id="app" style="display:none">
+
+  <header class="topbar" style="padding:14px 18px">
+    <div class="brand">
+      <div class="brand-dot" style="background:var(--purple);box-shadow:0 0 16px rgba(139,92,246,.65)"></div>
+      <div>
+        <h1>Why Not</h1>
+        <p id="eventName">Cargando…</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="userChip" class="user-chip"></span>
+      <button id="logoutBtn" class="btn btn-sm">Salir</button>
+    </div>
+  </header>
+
+  <!-- Counters -->
+  <div class="door-stats">
+    <div class="door-stat">
+      <span class="door-stat-label">Total invitados</span>
+      <strong id="statTotal">0</strong>
+    </div>
+    <div class="door-stat door-stat-green">
+      <span class="door-stat-label">Ingresaron</span>
+      <strong id="statEntered">0</strong>
+    </div>
+    <div class="door-stat door-stat-yellow">
+      <span class="door-stat-label">Pendientes</span>
+      <strong id="statPending">0</strong>
+    </div>
+    <div class="door-stat door-stat-blue">
+      <span class="door-stat-label">Pagaron barra</span>
+      <strong id="statPaidBar">0</strong>
+    </div>
+  </div>
+
+  <!-- Search + filters -->
+  <div class="door-toolbar">
+    <div class="search-wrap" style="flex:1">
+      <input id="searchInput" type="text" placeholder="Buscar por nombre…" autocomplete="off" style="min-width:0;width:100%"/>
+      <button id="clearSearchBtn" class="clear-search-btn">✕</button>
+    </div>
+    <div class="filter-btns">
+      <button class="filter-btn active" data-filter="all">Todos</button>
+      <button class="filter-btn" data-filter="inside">Adentro</button>
+      <button class="filter-btn" data-filter="pending">Pendientes</button>
+      <button class="filter-btn" data-filter="exited">Salieron</button>
+    </div>
+  </div>
+
+  <!-- Attendee list -->
+  <div id="attendeeList" class="attendee-list"></div>
+
+</div>
+
+<!-- Modal: person detail -->
+<div id="personModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <button id="closeModalBtn" class="modal-close-btn">✕</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<script src="./shared.js"></script>
+<script src="./portero.js"></script>
+</body>
+</html>

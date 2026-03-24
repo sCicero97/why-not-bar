@@ -1,124 +1,102 @@
 <!doctype html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
-    <title>Why Not</title>
-    <meta name="theme-color" content="#0b0b0b" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Why Not" />
-    <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./Logo.png" type="image/png" />
-    <link rel="apple-touch-icon" href="./Logo.png" />
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div class="brand">
-          <div class="brand-dot"></div>
-          <div>
-            <h1>Why Not</h1>
-            <p>Cuentas del Bar</p>
-          </div>
-        </div>
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <title>Why Not — Barra</title>
+  <meta name="theme-color" content="#0b0b0b"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Why Not"/>
+  <link rel="manifest" href="./manifest.webmanifest"/>
+  <link rel="icon" href="./Logo.png" type="image/png"/>
+  <link rel="apple-touch-icon" href="./Logo.png"/>
+  <link rel="stylesheet" href="./styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<div id="app" class="app-shell" style="display:none">
 
-        <div class="top-actions">
-          <button id="installBtn" class="secondary-btn hidden">Instalar app</button>
-          <button id="backupBtn" class="backup-btn">Respaldar</button>
-          <button id="resetBtn" class="danger-btn">Reset total</button>
-        </div>
-      </header>
-
-      <section class="summary-grid">
-        <div class="summary-card">
-          <span class="summary-label">Abiertas total</span>
-          <strong id="openTotal">$ 0</strong>
-        </div>
-
-        <div class="summary-card paid">
-          <span class="summary-label">Pagas total</span>
-          <strong id="paidTotal">$ 0</strong>
-        </div>
-
-        <div class="summary-card drinks-card">
-          <span class="summary-label">Tragos 160</span>
-          <strong id="all160">0</strong>
-        </div>
-
-        <div class="summary-card drinks-card">
-          <span class="summary-label">Tragos 260</span>
-          <strong id="all260">0</strong>
-        </div>
-
-        <div class="summary-card drinks-card">
-          <span class="summary-label">Tragos 360</span>
-          <strong id="all360">0</strong>
-        </div>
-
-        <div class="summary-card total-general-card">
-          <span class="summary-label">Total general</span>
-          <strong id="grandTotal">$ 0</strong>
-        </div>
-      </section>
-
-      <nav class="tabs">
-        <button class="tab-btn active" data-tab="cuentas">Cuentas</button>
-        <button class="tab-btn" data-tab="pagas">Cuentas pagas</button>
-      </nav>
-
-      <main>
-        <section id="tab-cuentas" class="tab-panel active">
-          <div class="panel-header">
-            <h2>Cuentas activas</h2>
-
-            <div class="panel-tools">
-              <div class="search-wrap">
-                <input
-                  id="searchInput"
-                  type="text"
-                  inputmode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="Buscar ID…"
-                  autocomplete="off"
-                />
-                <button id="clearSearchBtn" class="clear-search-btn" type="button">X</button>
-              </div>
-            </div>
-          </div>
-
-          <div id="accountsList" class="accounts-list"></div>
-        </section>
-
-        <section id="tab-pagas" class="tab-panel">
-          <div class="panel-header">
-            <h2>Cuentas pagas</h2>
-          </div>
-
-          <div class="paid-table-wrap">
-            <table class="paid-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Total</th>
-                  <th>#160</th>
-                  <th>#260</th>
-                  <th>#360</th>
-                  <th>Hora</th>
-                </tr>
-              </thead>
-              <tbody id="paidTableBody"></tbody>
-            </table>
-          </div>
-        </section>
-      </main>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-dot"></div>
+      <div>
+        <h1>Why Not</h1>
+        <p id="eventName">Cargando evento…</p>
+      </div>
     </div>
+    <div class="top-actions">
+      <span id="userChip" class="user-chip"></span>
+      <button id="exportBtn" class="btn btn-sm" style="background:#0d9488;border-color:#0f766e;color:#fff">Exportar Excel</button>
+      <button id="toggleClosedBtn" class="btn btn-sm">Mostrar cerradas</button>
+      <button id="resetBtn" class="btn btn-sm btn-danger">Reset evento</button>
+      <button id="logoutBtn" class="btn btn-sm">Salir</button>
+    </div>
+  </header>
 
-    <script src="./app.js"></script>
-  </body>
+  <section class="summary-grid">
+    <div class="summary-card">
+      <span class="summary-label">Abiertas</span>
+      <strong id="openTotal">$ 0</strong>
+    </div>
+    <div class="summary-card" style="background:#121815">
+      <span class="summary-label">Cobradas</span>
+      <strong id="paidTotal">$ 0</strong>
+    </div>
+    <div class="summary-card" style="background:#131313">
+      <span class="summary-label">Tragos 160</span>
+      <strong id="all160">0</strong>
+    </div>
+    <div class="summary-card" style="background:#131313">
+      <span class="summary-label">Tragos 260</span>
+      <strong id="all260">0</strong>
+    </div>
+    <div class="summary-card" style="background:#131313">
+      <span class="summary-label">Tragos 360</span>
+      <strong id="all360">0</strong>
+    </div>
+    <div class="summary-card" style="background:#181818">
+      <span class="summary-label">Total general</span>
+      <strong id="grandTotal">$ 0</strong>
+    </div>
+  </section>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="cuentas">Cuentas abiertas</button>
+    <button class="tab-btn" data-tab="pagas">Historial cobradas</button>
+  </nav>
+
+  <main>
+    <section id="tab-cuentas" class="tab-panel active">
+      <div class="panel-header">
+        <h2>Cuentas</h2>
+        <div class="panel-tools" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div class="search-wrap">
+            <input id="searchInput" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Buscar ID…" autocomplete="off"/>
+            <button id="clearSearchBtn" class="clear-search-btn">✕</button>
+          </div>
+        </div>
+      </div>
+      <p class="hold-hint">Mantené <strong>0,5 s</strong> → agregar trago &nbsp;·&nbsp; <strong>2 s</strong> → quitar trago &nbsp;·&nbsp; <strong>1 s</strong> en Cerrar → cobrar</p>
+      <div id="accountsList" class="accounts-list"></div>
+    </section>
+
+    <section id="tab-pagas" class="tab-panel">
+      <div class="panel-header"><h2>Historial de cuentas cobradas</h2></div>
+      <div class="paid-table-wrap">
+        <table class="paid-table">
+          <thead>
+            <tr><th>ID</th><th>Nombre</th><th>Total</th><th>#160</th><th>#260</th><th>#360</th><th>Cobrada por</th><th>Hora</th><th>Foto</th></tr>
+          </thead>
+          <tbody id="paidTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="./shared.js"></script>
+<script src="./app.js"></script>
+</body>
 </html>
