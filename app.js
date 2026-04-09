@@ -261,12 +261,14 @@ async function doAddDrink(accountId, amount) {
   const db   = getDb();
   const { data, error } = await db.rpc('add_drink', { p_account_id: accountId, p_amount: amount });
   if (error || !data?.ok) toast(data?.error || error?.message || 'Error al agregar', 'error');
+  else { await loadData(); }
 }
 
 async function doSubtractDrink(accountId, amount) {
   const db   = getDb();
   const { data, error } = await db.rpc('subtract_drink', { p_account_id: accountId, p_amount: amount });
   if (error || !data?.ok) toast(data?.error || error?.message || 'Error al restar', 'error');
+  else { await loadData(); }
 }
 
 async function doCloseAccount(accountId, slot) {
@@ -363,14 +365,7 @@ function setupUI() {
     renderAccounts();
   });
 
-  document.getElementById('toggleClosedBtn').addEventListener('click', () => {
-    showClosed = !showClosed;
-    document.getElementById('toggleClosedBtn').textContent = showClosed ? 'Ocultar cerradas' : 'Mostrar cerradas';
-    renderAccounts();
-  });
-
   document.getElementById('exportBtn').addEventListener('click', exportToExcel);
-  document.getElementById('resetBtn').addEventListener('click', doReset);
   document.getElementById('logoutBtn').addEventListener('click', signOut);
 }
 

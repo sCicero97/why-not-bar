@@ -124,7 +124,7 @@ function renderDashboard() {
       <td><strong>${formatMoney(c.total)}</strong></td>
       <td>${c.closed_by || '—'}</td>
       <td style="font-size:12px;color:var(--muted)">${c.closed_at ? new Date(c.closed_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
-      <td>${c.payment_photo_url ? `<a href="${c.payment_photo_url}" target="_blank" class="table-link">Ver foto</a>` : '—'}</td>
+      <td>${c.payment_photo_url ? `<button class="btn btn-sm" onclick="viewPhoto('${c.payment_photo_url}')" style="font-size:14px">📸 Ver</button>` : '—'}</td>
     </tr>`).join('') || '<tr><td colspan="6" class="empty-state">Sin cobros todavía.</td></tr>';
 }
 
@@ -149,7 +149,7 @@ function renderAttendeesTable() {
     return `<tr data-id="${att.id}">
       <td><div class="att-name-cell" title="Doble click para editar">${att.name}</div></td>
       <td>
-        <select class="status-select inline-select" data-id="${att.id}" data-field="status" onchange="updateAttendeeField('${att.id}','status',this.value)">
+        <select class="status-select inline-select status-${att.status}" data-id="${att.id}" data-field="status" onchange="updateAttendeeField('${att.id}','status',this.value)">
           ${['invited','crew','in_process','paid','no_show'].map(s =>
             `<option value="${s}" ${att.status===s?'selected':''} style="background:#1c1c1c">${statusLabel(s)}</option>`
           ).join('')}
@@ -164,7 +164,7 @@ function renderAttendeesTable() {
       <td>${consumption > 0 ? formatMoney(consumption) : '<span style="color:var(--muted)">—</span>'}</td>
       <td style="font-size:12px;color:var(--muted)">${att.entry_time ? new Date(att.entry_time).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td style="font-size:12px;color:var(--muted)">${att.exit_time ? new Date(att.exit_time).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
-      <td>${att.payment_photo_url ? `<a href="${att.payment_photo_url}" target="_blank" class="table-link">📸 Ver</a>` : '—'}</td>
+      <td>${att.payment_photo_url ? `<button class="btn btn-sm" onclick="viewPhoto('${att.payment_photo_url}')" style="font-size:14px">📸 Ver</button>` : '—'}</td>
       <td>
         <div style="display:flex;gap:6px">
           <button class="btn btn-sm" onclick="openEditAttendee('${att.id}')" title="Editar">✏️</button>
@@ -188,7 +188,10 @@ function renderBarTable() {
 
   const tbody = document.getElementById('barAccountsBody');
   if (!tbody) return;
-  tbody.innerHTML = list.map(acc => `
+  tbody.innerHTML = list.map(acc => {
+    const closure  = acc.is_closed ? barClosures.find(c => c.slot === acc.slot) : null;
+    const photoUrl = closure?.payment_photo_url || null;
+    return `
     <tr class="${acc.is_closed ? 'row-closed' : acc.total > 0 ? 'row-active' : ''}">
       <td><strong>${padId(acc.slot)}</strong></td>
       <td>${acc.attendees?.name || '<span style="color:var(--muted)">—</span>'}</td>
@@ -202,9 +205,16 @@ function renderBarTable() {
       }</td>
       <td>${!acc.is_closed && acc.total > 0
         ? `<button class="btn btn-sm btn-primary" onclick="adminCloseBarAccount('${acc.id}',${acc.slot})">💳 Cobrar</button>`
+        : acc.is_closed
+          ? `<button class="btn btn-sm" onclick="reopenBarAccount('${acc.id}')" style="background:var(--muted);color:#000">Reabrir</button>`
+          : '—'
+      }</td>
+      <td>${photoUrl
+        ? `<button class="btn btn-sm" onclick="viewPhoto('${photoUrl}')" style="font-size:14px">📸 Ver</button>`
         : '—'
       }</td>
-    </tr>`).join('') || '<tr><td colspan="8" class="empty-state">Sin cuentas. Inicializá el evento.</td></tr>';
+    </tr>`;
+  }).join('') || '<tr><td colspan="9" class="empty-state">Sin cuentas. Inicializá el evento.</td></tr>';
 }
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
@@ -239,8 +249,8 @@ function renderEvents() {
       }</td>
       <td>
         <div style="display:flex;gap:6px">
-          ${!ev.is_active ? `<button class="btn btn-sm btn-success" onclick="activateEvent('${ev.id}')">Activar</button>` : ''}
           <button class="btn btn-sm btn-danger" onclick="deleteEvent('${ev.id}')">🗑</button>
+          ${!ev.is_active ? `<button class="btn btn-sm btn-success" onclick="activateEvent('${ev.id}')">Activar</button>` : ''}
         </div>
       </td>
     </tr>`).join('') || '<tr><td colspan="4" class="empty-state">Sin eventos. Creá uno.</td></tr>';
@@ -283,8 +293,18 @@ async function updateAttendeeField(id, field, value) {
   }
 }
 
+// ─── Get next available bar slot ──────────────────────────────────────────────
+function getNextAvailableBarSlot() {
+  const usedSlots = new Set(attendees.map(a => a.bar_account_slot).filter(s => s));
+  for (let i = 1; i <= 999; i++) {
+    if (!usedSlots.has(i)) return i;
+  }
+  return null;
+}
+
 // ─── Add/Edit attendee modal ──────────────────────────────────────────────────
 function openAddAttendee() {
+  const nextSlot = getNextAvailableBarSlot();
   showModal(`
     <h3 style="margin:0 0 18px">Agregar asistente</h3>
     <form id="attForm" autocomplete="off">
@@ -293,10 +313,10 @@ function openAddAttendee() {
         <div class="form-group"><label>Estado</label>
           <select name="status">
             <option value="invited">Invitado</option><option value="crew">Crew</option>
-            <option value="in_process">En proceso</option><option value="paid">Pago</option>
+            <option value="in_process">En proceso</option><option value="paid" selected>Pago</option>
           </select>
         </div>
-        <div class="form-group"><label>Cuenta barra #</label><input name="bar_account_slot" type="number" min="1"/></div>
+        <div class="form-group"><label>Cuenta barra # (Auto asignado)</label><input name="bar_account_slot" type="number" value="${nextSlot}" readonly style="background:var(--panel-2);cursor:not-allowed"/></div>
         <div class="form-group"><label>Cédula</label><input name="cedula"/></div>
         <div class="form-group"><label>Email</label><input name="email" type="email"/></div>
         <div class="form-group"><label>Teléfono</label><input name="phone"/></div>
@@ -318,9 +338,20 @@ function openAddAttendee() {
     if (!obj.bar_account_slot) delete obj.bar_account_slot; else obj.bar_account_slot = parseInt(obj.bar_account_slot);
     if (!obj.entry_amount) obj.entry_amount = 0; else obj.entry_amount = parseFloat(obj.entry_amount);
     const db = getDb();
-    const { error } = await db.from('attendees').insert(obj);
+    const { data: newAtt, error } = await db.from('attendees').insert(obj).select().single();
     if (error) toast('Error: ' + error.message, 'error');
-    else { toast('Asistente agregado', 'success'); closeModal(); await loadAll(); }
+    else {
+      // Vincular cuenta de barra con asistente
+      if (newAtt.bar_account_slot) {
+        await db.from('bar_accounts')
+          .update({ attendee_id: newAtt.id })
+          .eq('event_id', activeEvent.id)
+          .eq('slot', newAtt.bar_account_slot);
+      }
+      toast('Asistente agregado', 'success');
+      closeModal();
+      await loadAll();
+    }
   });
 }
 
@@ -371,6 +402,15 @@ async function deleteAttendee(id) {
   const { error } = await db.from('attendees').delete().eq('id', id);
   if (error) toast('Error: ' + error.message, 'error');
   else { attendees = attendees.filter(a => a.id !== id); renderAttendeesTable(); }
+}
+
+// ─── Reopen bar account ──────────────────────────────────────────────────────
+async function reopenBarAccount(accId) {
+  if (!confirm('¿Reabrir esta cuenta de barra?')) return;
+  const db = getDb();
+  const { error } = await db.from('bar_accounts').update({ is_closed: false }).eq('id', accId);
+  if (error) toast('Error: ' + error.message, 'error');
+  else { toast('Cuenta reabierta', 'success'); await loadAll(); }
 }
 
 // ─── Admin close bar account ──────────────────────────────────────────────────
@@ -562,6 +602,20 @@ function showModal(html) {
 }
 function closeModal() { document.getElementById('modalOverlay').classList.add('hidden'); }
 
+// ─── Photo viewer ─────────────────────────────────────────────────────────────
+function viewPhoto(url) {
+  document.getElementById('modalBody').innerHTML = `
+    <div style="text-align:center">
+      <h3 style="margin:0 0 16px;font-size:20px">Comprobante de pago</h3>
+      <img src="${url}" style="max-width:100%;border-radius:14px;max-height:65vh;object-fit:contain;display:block;margin:0 auto"/>
+      <div style="margin-top:18px">
+        <a href="${url}" target="_blank" class="btn btn-sm" style="display:inline-block;text-decoration:none">↗ Abrir en nueva pestaña</a>
+      </div>
+    </div>
+  `;
+  document.getElementById('modalOverlay').classList.remove('hidden');
+}
+
 // ─── Utility ──────────────────────────────────────────────────────────────────
 function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
 
@@ -585,19 +639,10 @@ function setupUI() {
   document.getElementById('addAttendeeBtn').addEventListener('click', openAddAttendee);
   document.getElementById('addExpenseBtn').addEventListener('click', openAddExpense);
   document.getElementById('newEventBtn').addEventListener('click', openNewEvent);
-  document.getElementById('initBarBtn').addEventListener('click', initBarAccounts);
 
   document.getElementById('attSearch').addEventListener('input', renderAttendeesTable);
   document.getElementById('attStatusFilter').addEventListener('change', renderAttendeesTable);
   document.getElementById('barFilter').addEventListener('change', renderBarTable);
-
-  document.getElementById('importCsvBtn').addEventListener('click', () => {
-    document.getElementById('csvFileInput').click();
-  });
-  document.getElementById('csvFileInput').addEventListener('change', async (e) => {
-    if (e.target.files[0]) await importCsv(e.target.files[0]);
-    e.target.value = '';
-  });
 }
 
 document.addEventListener('DOMContentLoaded', init);

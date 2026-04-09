@@ -3,7 +3,7 @@ body { padding: 0; }
 #app { max-width: 1600px; margin: 0 auto; padding: 16px; }
 
 .admin-section-header {
-  font-size: 12px;
+  font-size: 14px;
   text-transform: uppercase;
   letter-spacing: .08em;
   color: var(--muted);
@@ -26,7 +26,7 @@ body { padding: 0; }
   color: var(--text);
   padding: 10px 14px;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: 16px;
   min-width: 220px;
   flex: 1;
 }
@@ -36,7 +36,7 @@ body { padding: 0; }
   color: var(--text);
   padding: 10px 14px;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: 16px;
   cursor: pointer;
 }
 
@@ -56,17 +56,17 @@ body { padding: 0; }
 }
 .admin-table th,
 .admin-table td {
-  padding: 11px 13px;
+  padding: 13px 15px;
   border-bottom: 1px solid var(--line);
   text-align: left;
-  font-size: 13px;
+  font-size: 15px;
   vertical-align: middle;
 }
 .admin-table th {
   background: #111;
   color: var(--muted);
   font-weight: 600;
-  font-size: 11px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: .06em;
   position: sticky;
@@ -92,7 +92,7 @@ body { padding: 0; }
   color: var(--text) !important;
   padding: 4px 8px !important;
   border-radius: 6px !important;
-  font-size: 13px !important;
+  font-size: 15px !important;
   width: 100%;
   outline: none;
 }
@@ -102,7 +102,7 @@ body { padding: 0; }
   color: var(--text);
   padding: 5px 8px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
 }
 .bar-slot-badge {
@@ -111,10 +111,10 @@ body { padding: 0; }
   border-radius: 6px;
   padding: 2px 8px;
   font-family: monospace;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: bold;
 }
-.table-link { color: var(--blue); text-decoration: none; font-size: 12px; }
+.table-link { color: var(--blue); text-decoration: none; font-size: 14px; }
 .table-link:hover { text-decoration: underline; }
 
 /* Modal */
@@ -147,10 +147,10 @@ body { padding: 0; }
   border: 1px solid var(--line);
   color: var(--muted);
   border-radius: 999px;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   cursor: pointer;
-  font-size: 15px;
+  font-size: 17px;
 }
 
 /* Form inside modal */
@@ -161,7 +161,7 @@ body { padding: 0; }
 }
 .form-group { display: flex; flex-direction: column; }
 .form-group label {
-  font-size: 11px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: .06em;
   color: var(--muted);
@@ -174,13 +174,19 @@ body { padding: 0; }
   color: var(--text);
   padding: 10px 13px;
   border-radius: 11px;
-  font-size: 14px;
+  font-size: 16px;
 }
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
   border-color: var(--blue);
 }
+
+/* Status colors */
+.status-invited { color: #3b82f6; font-weight: 600; }
+.status-crew { color: #ef4444; font-weight: 600; }
+.status-in_process { color: #f59e0b; font-weight: 600; }
+.status-paid { color: #1ed760; font-weight: 600; }
 
 @media (max-width: 700px) {
   .form-grid { grid-template-columns: 1fr; }

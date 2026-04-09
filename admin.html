@@ -106,8 +106,6 @@
         <option value="no_show">No vino</option>
       </select>
       <button id="addAttendeeBtn" class="btn btn-primary btn-sm">+ Agregar</button>
-      <button id="importCsvBtn" class="btn btn-sm">Importar CSV</button>
-      <input id="csvFileInput" type="file" accept=".csv" class="hidden"/>
     </div>
 
     <div class="admin-table-wrap">
@@ -116,7 +114,7 @@
           <tr>
             <th>Nombre</th>
             <th>Estado</th>
-            <th>Barra #</th>
+            <th>Barra # (Vinculado)</th>
             <th>Cédula</th>
             <th>Email</th>
             <th>Teléfono</th>
@@ -143,11 +141,10 @@
         <option value="empty">Abiertas vacías</option>
         <option value="closed">Cerradas</option>
       </select>
-      <button id="initBarBtn" class="btn btn-warning btn-sm">Inicializar cuentas</button>
     </div>
     <div class="admin-table-wrap">
       <table class="admin-table">
-        <thead><tr><th>#</th><th>Nombre vinculada</th><th>Total</th><th>160</th><th>260</th><th>360</th><th>Estado</th><th>Acción</th></tr></thead>
+        <thead><tr><th>#</th><th>Nombre vinculada</th><th>Total</th><th>160</th><th>260</th><th>360</th><th>Estado</th><th>Acción</th><th>Foto</th></tr></thead>
         <tbody id="barAccountsBody"></tbody>
       </table>
     </div>
@@ -169,7 +166,6 @@
 
   <!-- ── Evento ─────────────────────────────────────────────── -->
   <section id="tab-evento" class="tab-panel">
-    <div class="admin-section-header">Eventos</div>
     <div style="margin-bottom:16px">
       <button id="newEventBtn" class="btn btn-primary">+ Nuevo evento</button>
     </div>
