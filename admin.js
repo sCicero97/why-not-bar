@@ -139,6 +139,10 @@ function renderAttendeesTable() {
     return true;
   });
 
+  // Ordenar por estado: paid, in_process, crew, invited
+  const statusOrder = { 'paid': 0, 'in_process': 1, 'crew': 2, 'invited': 3, 'no_show': 4 };
+  list.sort((a, b) => (statusOrder[a.status] || 5) - (statusOrder[b.status] || 5));
+
   const tbody = document.getElementById('attendeesBody');
   if (!tbody) return;
 
@@ -146,7 +150,7 @@ function renderAttendeesTable() {
     const barAcc = att.bar_account_slot ? barAccounts.find(b => b.slot === att.bar_account_slot) : null;
     const consumption = barAcc ? barAcc.total + barClosures.filter(c => c.slot === att.bar_account_slot).reduce((s,c)=>s+Number(c.total),0) : 0;
 
-    return `<tr data-id="${att.id}">
+    return `<tr data-id="${att.id}" class="row-${att.status}">
       <td><div class="att-name-cell" title="Doble click para editar">${att.name}</div></td>
       <td>
         <select class="status-select inline-select status-${att.status}" data-id="${att.id}" data-field="status" onchange="updateAttendeeField('${att.id}','status',this.value)">
@@ -316,7 +320,7 @@ function openAddAttendee() {
             <option value="in_process">En proceso</option><option value="paid" selected>Pago</option>
           </select>
         </div>
-        <div class="form-group"><label>Cuenta barra # (Auto asignado)</label><input name="bar_account_slot" type="number" value="${nextSlot}" readonly style="background:var(--panel-2);cursor:not-allowed"/></div>
+        <div class="form-group"><label>Cuenta barra #</label><input name="bar_account_slot" type="number" value="${nextSlot}" readonly style="background:var(--panel-2);cursor:not-allowed"/></div>
         <div class="form-group"><label>Cédula</label><input name="cedula"/></div>
         <div class="form-group"><label>Email</label><input name="email" type="email"/></div>
         <div class="form-group"><label>Teléfono</label><input name="phone"/></div>
@@ -329,28 +333,35 @@ function openAddAttendee() {
       </div>
     </form>
   `);
+  const submitBtn = document.querySelector('#attForm button[type=submit]');
   document.getElementById('attForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const fd  = new FormData(e.target);
-    const obj = Object.fromEntries(fd.entries());
-    if (!activeEvent) { toast('No hay evento activo', 'error'); return; }
-    obj.event_id = activeEvent.id;
-    if (!obj.bar_account_slot) delete obj.bar_account_slot; else obj.bar_account_slot = parseInt(obj.bar_account_slot);
-    if (!obj.entry_amount) obj.entry_amount = 0; else obj.entry_amount = parseFloat(obj.entry_amount);
-    const db = getDb();
-    const { data: newAtt, error } = await db.from('attendees').insert(obj).select().single();
-    if (error) toast('Error: ' + error.message, 'error');
-    else {
-      // Vincular cuenta de barra con asistente
-      if (newAtt.bar_account_slot) {
-        await db.from('bar_accounts')
-          .update({ attendee_id: newAtt.id })
-          .eq('event_id', activeEvent.id)
-          .eq('slot', newAtt.bar_account_slot);
+    if (submitBtn.disabled) return; // Prevent double-submit
+    submitBtn.disabled = true;
+    try {
+      const fd  = new FormData(e.target);
+      const obj = Object.fromEntries(fd.entries());
+      if (!activeEvent) { toast('No hay evento activo', 'error'); return; }
+      obj.event_id = activeEvent.id;
+      if (!obj.bar_account_slot) delete obj.bar_account_slot; else obj.bar_account_slot = parseInt(obj.bar_account_slot);
+      if (!obj.entry_amount) obj.entry_amount = 0; else obj.entry_amount = parseFloat(obj.entry_amount);
+      const db = getDb();
+      const { data: newAtt, error } = await db.from('attendees').insert(obj).select().single();
+      if (error) toast('Error: ' + error.message, 'error');
+      else {
+        // Vincular cuenta de barra con asistente
+        if (newAtt.bar_account_slot) {
+          await db.from('bar_accounts')
+            .update({ attendee_id: newAtt.id })
+            .eq('event_id', activeEvent.id)
+            .eq('slot', newAtt.bar_account_slot);
+        }
+        toast('Asistente agregado', 'success');
+        closeModal();
+        await loadAll();
       }
-      toast('Asistente agregado', 'success');
-      closeModal();
-      await loadAll();
+    } finally {
+      submitBtn.disabled = false;
     }
   });
 }

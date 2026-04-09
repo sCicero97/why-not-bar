@@ -188,6 +188,12 @@ body { padding: 0; }
 .status-in_process { color: #f59e0b; font-weight: 600; }
 .status-paid { color: #1ed760; font-weight: 600; }
 
+/* Row background by status */
+.admin-table tr.row-invited td { background: rgba(59, 130, 246, 0.05); }
+.admin-table tr.row-crew td { background: rgba(239, 68, 68, 0.05); }
+.admin-table tr.row-in_process td { background: rgba(245, 158, 11, 0.05); }
+.admin-table tr.row-paid td { background: rgba(30, 215, 96, 0.05); }
+
 @media (max-width: 700px) {
   .form-grid { grid-template-columns: 1fr; }
   .admin-toolbar { flex-direction: column; align-items: stretch; }

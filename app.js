@@ -108,7 +108,8 @@ function renderSummary() {
 function renderAccounts() {
   const wrap        = document.getElementById('accountsList');
   const searchDig   = document.getElementById('searchInput').value.replace(/\D/g, '');
-  const list        = showClosed ? accounts : accounts.filter(a => !a.is_closed);
+  // Mostrar solo cuentas vinculadas a asistentes
+  const list        = showClosed ? accounts.filter(a => a.attendee_id) : accounts.filter(a => !a.is_closed && a.attendee_id);
   const filtered    = searchDig ? list.filter(a => String(a.slot).padStart(3,'0').includes(searchDig)) : list;
 
   wrap.innerHTML = '';
@@ -261,7 +262,17 @@ async function doAddDrink(accountId, amount) {
   const db   = getDb();
   const { data, error } = await db.rpc('add_drink', { p_account_id: accountId, p_amount: amount });
   if (error || !data?.ok) toast(data?.error || error?.message || 'Error al agregar', 'error');
-  else { await loadData(); }
+  else {
+    // Auto-marcar como llegado si no lo está
+    const acc = accounts.find(a => a.id === accountId);
+    if (acc?.attendee_id) {
+      const { data: att } = await db.from('attendees').select('entered').eq('id', acc.attendee_id).single();
+      if (att && !att.entered) {
+        await db.from('attendees').update({ entered: true, entry_time: new Date().toISOString() }).eq('id', acc.attendee_id);
+      }
+    }
+    await loadData();
+  }
 }
 
 async function doSubtractDrink(accountId, amount) {
