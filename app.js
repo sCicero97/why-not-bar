@@ -21,7 +21,10 @@ async function init() {
     const user = await requireAuth(['bar', 'admin']);
     if (!user) return;
 
-    document.getElementById('userChip').textContent = `🍹 ${user.displayName || user.email}`;
+    const displayName = user.displayName || user.email;
+    document.getElementById('userChip').textContent = `🍹 ${displayName}`;
+    setupUserDropdown();
+    setupNotifChannel('Barra', displayName);
 
     activeEvent = await getActiveEvent();
     if (!activeEvent) {

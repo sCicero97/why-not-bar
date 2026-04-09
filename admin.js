@@ -3,19 +3,27 @@
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('ADMIN v3 2026-03-23');
 
-let activeEvent  = null;
-let attendees    = [];
-let barAccounts  = [];
-let barClosures  = [];
-let expenses     = [];
-let events       = [];
+let activeEvent    = null;
+let attendees      = [];
+let barAccounts    = [];
+let barClosures    = [];
+let expenses       = [];
+let events         = [];
+let tasks          = [];
+let taskChecks     = [];
+let eventSettings  = { door_can_charge: false };
+let profiles       = [];
+let reminderTimers = {};
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   try {
     const user = await requireAuth(['admin']);
     if (!user) return;
-    document.getElementById('userChip').textContent = `⚙️ ${user.displayName || user.email}`;
+    const displayName = user.displayName || user.email;
+    document.getElementById('userChip').textContent = `⚙️ ${displayName}`;
+    setupUserDropdown();
+    setupNotifChannel('Admin', displayName);
     document.getElementById('app').style.display = 'block';
 
     activeEvent = await getActiveEvent();
@@ -37,6 +45,7 @@ async function loadAll() {
 
   const queries = [
     db.from('events').select('*').order('date', { ascending: false }),
+    db.from('profiles').select('id,display_name,role'),
   ];
   if (eventId) {
     queries.push(
@@ -44,15 +53,20 @@ async function loadAll() {
       db.from('bar_accounts').select('*, attendees(name)').eq('event_id', eventId).order('slot'),
       db.from('bar_closures').select('*, attendees(name)').eq('event_id', eventId).order('closed_at', { ascending: false }),
       db.from('expenses').select('*').eq('event_id', eventId).order('created_at', { ascending: false }),
+      db.from('tasks').select('*, task_checks(id,checked_by,checked_at)').eq('event_id', eventId).order('created_at'),
+      db.from('event_settings').select('*').eq('event_id', eventId).maybeSingle(),
     );
   }
 
   const results = await Promise.all(queries);
   if (results[0].data) events = results[0].data;
-  if (results[1]?.data) attendees = results[1].data;
-  if (results[2]?.data) barAccounts = results[2].data;
-  if (results[3]?.data) barClosures = results[3].data;
-  if (results[4]?.data) expenses = results[4].data;
+  if (results[1].data) profiles = results[1].data;
+  if (results[2]?.data) attendees = results[2].data;
+  if (results[3]?.data) barAccounts = results[3].data;
+  if (results[4]?.data) barClosures = results[4].data;
+  if (results[5]?.data) expenses = results[5].data;
+  if (results[6]?.data) tasks = results[6].data;
+  if (results[7]?.data) eventSettings = results[7].data || { door_can_charge: false };
 
   renderAll();
 }
@@ -92,6 +106,7 @@ function renderAll() {
   renderBarTable();
   renderExpenses();
   renderEvents();
+  renderTasks();
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -502,6 +517,14 @@ function openNewEvent() {
     // Init bar accounts
     const count = parseInt(fd.get('accountCount')) || 120;
     await db.rpc('init_bar_accounts', { p_event_id: newEvent.id, p_count: count });
+    // Tarea default: Chequear PH
+    await db.from('tasks').insert({
+      event_id: newEvent.id, name: 'Chequear PH', assigned_to: null,
+      is_active: true, remind: true, remind_freq_minutes: 60,
+      remind_from: '22:00', remind_until: '04:00',
+    });
+    // Event settings default
+    await db.from('event_settings').insert({ event_id: newEvent.id, door_can_charge: false });
     toast(`Evento "${newEvent.name}" creado con ${count} cuentas`, 'success');
     closeModal();
     window.location.reload();
@@ -650,10 +673,198 @@ function setupUI() {
   document.getElementById('addAttendeeBtn').addEventListener('click', openAddAttendee);
   document.getElementById('addExpenseBtn').addEventListener('click', openAddExpense);
   document.getElementById('newEventBtn').addEventListener('click', openNewEvent);
+  document.getElementById('addTaskBtn').addEventListener('click', openAddTask);
+  document.getElementById('doorCanChargeToggle').addEventListener('change', (e) => {
+    saveDoorSettings(e.target.checked);
+  });
 
   document.getElementById('attSearch').addEventListener('input', renderAttendeesTable);
   document.getElementById('attStatusFilter').addEventListener('change', renderAttendeesTable);
   document.getElementById('barFilter').addEventListener('change', renderBarTable);
+}
+
+// ─── Tasks ────────────────────────────────────────────────────────────────────
+function renderTasks() {
+  const container = document.getElementById('tasksList');
+  if (!container) return;
+
+  // Render config portero
+  const toggle = document.getElementById('doorCanChargeToggle');
+  if (toggle) toggle.checked = eventSettings?.door_can_charge || false;
+
+  if (!tasks.length) {
+    container.innerHTML = '<div class="empty-state">Sin tareas. Creá una con el botón +</div>';
+    return;
+  }
+
+  container.innerHTML = tasks.map(task => {
+    const checks = task.task_checks || [];
+    const lastCheck = checks[0];
+    const lastCheckTime = lastCheck ? new Date(lastCheck.checked_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : null;
+    const assignedProfile = task.assigned_to ? profiles.find(p => p.id === task.assigned_to) : null;
+
+    return `
+    <div class="task-card ${task.is_active ? 'task-active' : 'task-inactive'}">
+      <div class="task-header">
+        <div class="task-title">
+          <span class="task-dot" style="background:${task.is_active ? 'var(--green)' : 'var(--muted)'}"></span>
+          <strong>${task.name}</strong>
+          ${!task.is_active ? '<span style="color:var(--muted);font-size:13px"> — Inactiva</span>' : ''}
+        </div>
+        <div class="task-meta">
+          <span>${assignedProfile ? '👤 ' + assignedProfile.display_name : '👥 Todos'}</span>
+          ${task.remind ? `<span>🔔 Cada ${task.remind_freq_minutes} min · ${task.remind_from}–${task.remind_until}</span>` : '<span style="color:var(--muted)">Sin recordatorio</span>'}
+        </div>
+      </div>
+      <div class="task-footer">
+        ${lastCheck ? `<span class="task-last-check">✓ Chequeado a las ${lastCheckTime}</span>` : '<span style="color:var(--muted);font-size:13px">Sin chequeados</span>'}
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-success" onclick="checkTask('${task.id}')">✓ Chequeado</button>
+          <button class="btn btn-sm" onclick="toggleTask('${task.id}',${!task.is_active})">${task.is_active ? 'Desactivar' : 'Activar'}</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteTask('${task.id}')">🗑</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Iniciar/actualizar recordatorios
+  setupReminders();
+}
+
+function setupReminders() {
+  // Limpiar timers anteriores
+  Object.values(reminderTimers).forEach(clearInterval);
+  reminderTimers = {};
+
+  tasks.filter(t => t.is_active && t.remind).forEach(task => {
+    reminderTimers[task.id] = setInterval(() => {
+      if (!isInReminderWindow(task)) return;
+      showReminder(task);
+    }, task.remind_freq_minutes * 60 * 1000);
+  });
+}
+
+function isInReminderWindow(task) {
+  const now = new Date();
+  const [fromH, fromM] = task.remind_from.split(':').map(Number);
+  const [untilH, untilM] = task.remind_until.split(':').map(Number);
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const fromMins = fromH * 60 + fromM;
+  let untilMins = untilH * 60 + untilM;
+  // Si el horario cruza medianoche (ej: 22:00 a 04:00)
+  if (untilMins < fromMins) {
+    return nowMins >= fromMins || nowMins <= untilMins;
+  }
+  return nowMins >= fromMins && nowMins <= untilMins;
+}
+
+function showReminder(task) {
+  if (Notification.permission === 'granted') {
+    new Notification(`⏰ ${task.name}`, { body: 'Recordatorio de tarea del evento', icon: './Logo.png' });
+  }
+  toast(`⏰ Recordatorio: ${task.name}`, 'warning');
+}
+
+async function checkTask(taskId) {
+  const db = getDb();
+  const { data: { user } } = await db.auth.getUser();
+  const { error } = await db.from('task_checks').insert({ task_id: taskId, checked_by: user.id });
+  if (error) toast('Error: ' + error.message, 'error');
+  else {
+    toast('✓ Tarea chequeada', 'success');
+    await loadAll();
+  }
+}
+
+async function toggleTask(taskId, newState) {
+  const db = getDb();
+  const { error } = await db.from('tasks').update({ is_active: newState }).eq('id', taskId);
+  if (error) toast('Error: ' + error.message, 'error');
+  else await loadAll();
+}
+
+async function deleteTask(taskId) {
+  if (!confirm('¿Eliminar esta tarea?')) return;
+  const db = getDb();
+  await db.from('tasks').delete().eq('id', taskId);
+  await loadAll();
+}
+
+function openAddTask() {
+  const profileOptions = [
+    `<option value="">👥 Todos</option>`,
+    ...profiles.map(p => `<option value="${p.id}">${p.display_name || p.role}</option>`)
+  ].join('');
+
+  showModal(`
+    <h3 style="margin:0 0 18px;font-size:20px">Nueva tarea</h3>
+    <form id="taskForm" autocomplete="off">
+      <div class="form-grid">
+        <div class="form-group" style="grid-column:1/-1"><label>Nombre *</label><input name="name" required/></div>
+        <div class="form-group"><label>Asignada a</label>
+          <select name="assigned_to">${profileOptions}</select>
+        </div>
+        <div class="form-group"><label>Estado</label>
+          <select name="is_active">
+            <option value="true" selected>Activa</option>
+            <option value="false">Inactiva</option>
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label><input type="checkbox" id="remindCheck" name="remind" value="true" style="width:auto;margin-right:6px"/> Recordar esta tarea</label>
+        </div>
+        <div class="form-group" id="remindFreqGroup" style="display:none"><label>Frecuencia (minutos)</label><input name="remind_freq_minutes" type="number" value="60" min="5"/></div>
+        <div class="form-group" id="remindFromGroup" style="display:none"><label>Desde</label><input name="remind_from" type="time" value="22:00"/></div>
+        <div class="form-group" id="remindUntilGroup" style="display:none"><label>Hasta</label><input name="remind_until" type="time" value="04:00"/></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" class="btn btn-primary" style="flex:1">Crear</button>
+        <button type="button" class="btn" onclick="closeModal()" style="flex:1">Cancelar</button>
+      </div>
+    </form>
+  `);
+
+  document.getElementById('remindCheck').addEventListener('change', (e) => {
+    const show = e.target.checked;
+    ['remindFreqGroup','remindFromGroup','remindUntilGroup'].forEach(id => {
+      document.getElementById(id).style.display = show ? '' : 'none';
+    });
+  });
+
+  document.getElementById('taskForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!activeEvent) { toast('No hay evento activo', 'error'); return; }
+    const fd  = new FormData(e.target);
+    const obj = {
+      event_id:            activeEvent.id,
+      name:                fd.get('name'),
+      assigned_to:         fd.get('assigned_to') || null,
+      is_active:           fd.get('is_active') === 'true',
+      remind:              !!fd.get('remind'),
+      remind_freq_minutes: parseInt(fd.get('remind_freq_minutes')) || 60,
+      remind_from:         fd.get('remind_from') || '22:00',
+      remind_until:        fd.get('remind_until') || '04:00',
+    };
+    const db = getDb();
+    const { error } = await db.from('tasks').insert(obj);
+    if (error) toast('Error: ' + error.message, 'error');
+    else {
+      // Pedir permiso para notificaciones
+      if (obj.remind && Notification.permission === 'default') {
+        await Notification.requestPermission();
+      }
+      toast('Tarea creada', 'success');
+      closeModal();
+      await loadAll();
+    }
+  });
+}
+
+// ─── Configuración del portero ─────────────────────────────────────────────────
+async function saveDoorSettings(canCharge) {
+  if (!activeEvent) return;
+  const db = getDb();
+  await db.from('event_settings').upsert({ event_id: activeEvent.id, door_can_charge: canCharge });
 }
 
 document.addEventListener('DOMContentLoaded', init);

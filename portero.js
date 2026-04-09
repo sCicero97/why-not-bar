@@ -14,7 +14,10 @@ async function init() {
   try {
     const user = await requireAuth(['door', 'admin']);
     if (!user) return;
-    document.getElementById('userChip').textContent = `🚪 ${user.displayName || user.email}`;
+    const displayName = user.displayName || user.email;
+    document.getElementById('userChip').textContent = `🚪 ${displayName}`;
+    setupUserDropdown();
+    setupNotifChannel('Portería', displayName);
 
     activeEvent = await getActiveEvent();
     if (!activeEvent) {
@@ -80,12 +83,9 @@ function renderAll() {
 function renderStats() {
   const total   = attendees.length;
   const entered = attendees.filter(a => a.entered).length;
-  const exited  = attendees.filter(a => a.exit_time).length;
-  const paidBar = barAccounts.filter(a => a.is_closed).length;
   document.getElementById('statTotal').textContent   = total;
   document.getElementById('statEntered').textContent = entered;
   document.getElementById('statPending').textContent = Math.max(0, total - entered);
-  document.getElementById('statPaidBar').textContent = paidBar;
 }
 
 function renderList() {
@@ -129,8 +129,7 @@ function renderList() {
         <div class="att-info">
           <div class="att-name">${att.name}</div>
           <div class="att-meta">
-            ${att.bar_account_slot ? `<span class="att-bar-num"># ${padId(att.bar_account_slot)}</span>` : ''}
-            <span class="status-pill" style="background:${statusColor(att.status)}22;color:${statusColor(att.status)}">${statusLabel(att.status)}</span>
+            ${att.bar_account_slot ? `<span class="att-bar-num" style="font-size:18px;font-weight:bold"># ${padId(att.bar_account_slot)}</span>` : ''}
             ${alreadyOut ? '<span class="att-tag att-tag-out">Salió</span>' : att.entered ? '<span class="att-tag att-tag-in">Adentro</span>' : ''}
           </div>
           ${barAcc ? `<div class="att-consumption">
@@ -140,9 +139,8 @@ function renderList() {
         </div>
         <div class="att-actions" onclick="event.stopPropagation()">
           ${!att.entered && !alreadyOut ? `<button class="att-btn att-btn-enter" onclick="doCheckIn('${att.id}')">Ingresar</button>` : ''}
-          ${canExit ? `<button class="att-btn att-btn-exit" onclick="doExit('${att.id}')">Salir</button>` : ''}
+          ${canExit ? `<button class="att-btn att-btn-exit" onclick="doExit('${att.id}')">Registrar salida</button>` : ''}
           ${hasBalance && att.entered && !alreadyOut ? `<button class="att-btn att-btn-close" onclick="openPersonModal('${att.id}')">Cobrar</button>` : ''}
-          <button class="att-btn att-btn-detail" onclick="openPersonModal('${att.id}')">Ver</button>
         </div>
       </div>
     `;

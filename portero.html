@@ -26,8 +26,15 @@
       </div>
     </div>
     <div class="top-actions">
-      <span id="userChip" class="user-chip"></span>
-      <button id="logoutBtn" class="btn btn-sm">Salir</button>
+      <button class="notif-btn" id="helpBtn" title="Pedir ayuda en portería">🆘</button>
+      <div class="user-dropdown">
+        <button class="user-dropdown-btn" id="userDropdownBtn">
+          <span id="userChip"></span> ▾
+        </button>
+        <div class="user-dropdown-menu" id="userDropdownMenu">
+          <button id="logoutBtn">Cerrar sesión</button>
+        </div>
+      </div>
     </div>
   </header>
 

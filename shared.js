@@ -307,8 +307,8 @@ function statusColor(s) {
 
 function toast(msg, type = 'info') {
   const el = document.createElement('div');
-  const bg = type === 'error' ? '#ef4444' : type === 'success' ? '#1ed760' : '#2563eb';
-  const color = type === 'success' ? '#06130a' : '#fff';
+  const bg = type === 'error' ? '#ef4444' : type === 'success' ? '#1ed760' : type === 'warning' ? '#f59e0b' : '#2563eb';
+  const color = (type === 'success' || type === 'warning') ? '#06130a' : '#fff';
   el.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
     background:${bg};color:${color};padding:12px 24px;border-radius:14px;
     font-family:Arial,sans-serif;font-size:15px;font-weight:bold;
@@ -317,4 +317,49 @@ function toast(msg, type = 'info') {
   el.textContent = msg;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3000);
+}
+
+// ─── User dropdown ─────────────────────────────────────────────────────────────
+function setupUserDropdown() {
+  const btn  = document.getElementById('userDropdownBtn');
+  const menu = document.getElementById('userDropdownMenu');
+  if (!btn || !menu) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.classList.toggle('open');
+  });
+  document.addEventListener('click', () => menu.classList.remove('open'));
+}
+
+// ─── Notification broadcast ────────────────────────────────────────────────────
+let _notifChannel = null;
+
+function setupNotifChannel(appName, currentUserDisplay) {
+  const db = getDb();
+  _notifChannel = db.channel('app-notifications')
+    .on('broadcast', { event: 'alert' }, ({ payload }) => {
+      if (payload.from !== currentUserDisplay) {
+        toast(`${payload.emoji} ${payload.from}: ${payload.msg}`, 'warning');
+        if (Notification.permission === 'granted') {
+          new Notification(`${payload.emoji} ${payload.msg}`, { body: `Enviado por: ${payload.from}`, icon: './Logo.png' });
+        }
+      }
+    })
+    .subscribe();
+
+  const helpBtn   = document.getElementById('helpBtn');
+  const sneezeBtn = document.getElementById('sneezeBtn');
+
+  if (helpBtn) {
+    helpBtn.addEventListener('click', () => {
+      _notifChannel.send({ type: 'broadcast', event: 'alert', payload: { emoji: '🆘', msg: `Necesita ayuda en ${appName}`, from: currentUserDisplay } });
+      toast('🆘 Ayuda solicitada', 'warning');
+    });
+  }
+  if (sneezeBtn) {
+    sneezeBtn.addEventListener('click', () => {
+      _notifChannel.send({ type: 'broadcast', event: 'alert', payload: { emoji: '🤧', msg: 'Mensaje de admin', from: currentUserDisplay } });
+      toast('🤧 Enviado a todos', 'success');
+    });
+  }
 }

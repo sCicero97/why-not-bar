@@ -85,6 +85,33 @@ create table if not exists expenses (
   created_at  timestamptz default now()
 );
 
+-- ─── Tareas del evento ────────────────────────────────────────────────────────
+create table if not exists tasks (
+  id                   uuid primary key default gen_random_uuid(),
+  event_id             uuid references events(id) on delete cascade,
+  name                 text not null,
+  assigned_to          uuid references profiles(id),  -- null = todos
+  is_active            boolean default true,
+  remind               boolean default false,
+  remind_freq_minutes  integer default 60,
+  remind_from          text default '22:00',
+  remind_until         text default '04:00',
+  created_at           timestamptz default now()
+);
+
+create table if not exists task_checks (
+  id         uuid primary key default gen_random_uuid(),
+  task_id    uuid references tasks(id) on delete cascade,
+  checked_by uuid references profiles(id),
+  checked_at timestamptz default now()
+);
+
+-- ─── Configuración del evento ─────────────────────────────────────────────────
+create table if not exists event_settings (
+  event_id        uuid primary key references events(id) on delete cascade,
+  door_can_charge boolean default false
+);
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Row Level Security
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -129,6 +156,21 @@ create policy "Admin modifies closures" on bar_closures for update to authentica
 -- expenses
 create policy "Staff reads expenses" on expenses for select to authenticated using (true);
 create policy "Admin manages expenses" on expenses for all to authenticated using (get_user_role()='admin');
+
+-- tasks
+alter table tasks enable row level security;
+create policy "Staff reads tasks" on tasks for select to authenticated using (true);
+create policy "Admin manages tasks" on tasks for all to authenticated using (get_user_role()='admin');
+
+-- task_checks
+alter table task_checks enable row level security;
+create policy "Staff reads task_checks" on task_checks for select to authenticated using (true);
+create policy "Staff inserts task_checks" on task_checks for insert to authenticated with check (true);
+
+-- event_settings
+alter table event_settings enable row level security;
+create policy "Staff reads event_settings" on event_settings for select to authenticated using (true);
+create policy "Admin manages event_settings" on event_settings for all to authenticated using (get_user_role()='admin');
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Funciones atómicas (sin race conditions)
