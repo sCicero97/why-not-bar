@@ -7,19 +7,19 @@
   },
   "headers": [
     {
-      "source": "/app.js",
+      "source": "/(.*)\\.html",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]
     },
     {
-      "source": "/index.html",
+      "source": "/(.*)\\.js",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]
     },
     {
-      "source": "/service-worker.js",
+      "source": "/(.*)\\.css",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]
