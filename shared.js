@@ -396,8 +396,9 @@ async function subscribeToPush() {
   }
 }
 
-// Envía push a todos los dispositivos vía Vercel /api/send-push
-async function sendPushToAll(title, body, tag = 'whynot-alert') {
+// Envía push vía Vercel /api/send-push
+// targetRole: si se pasa ('admin'), solo se envía a usuarios con ese rol.
+async function sendPushToAll(title, body, tag = 'whynot-alert', targetRole = null) {
   try {
     const db = getDb();
     const { data: { session } } = await db.auth.getSession();
@@ -413,7 +414,7 @@ async function sendPushToAll(title, body, tag = 'whynot-alert') {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ title, body, tag }),
+      body: JSON.stringify({ title, body, tag, targetRole }),
       signal: controller.signal,
     }).finally(() => clearTimeout(timeout));
   } catch (e) {
@@ -477,9 +478,15 @@ function setupNotifChannel(appName, currentUserDisplay) {
   const db = getDb();
   _notifChannel = db.channel('app-notifications')
     .on('broadcast', { event: 'alert' }, ({ payload }) => {
+      // Filtrar por destinatario: si el target es 'admin', solo los admins ven el aviso
+      const target   = payload.target || 'all';
+      const myRole   = getCurrentUser()?.role || '';
+      const isTarget = target === 'all' || myRole === target;
+      if (!isTarget) return;
+
       if (payload.from !== currentUserDisplay) {
         alertToast(`${payload.emoji} ${payload.from}: ${payload.msg}`);
-        // Mostrar notificación del sistema si la app está en el foco
+        // Notificación del sistema si la app está en foco
         if (Notification.permission === 'granted') {
           try {
             new Notification(`${payload.emoji} ${payload.msg}`, {
@@ -517,23 +524,25 @@ function setupNotifChannel(appName, currentUserDisplay) {
   }
 
   if (helpBtn) {
+    // SOS desde barra o portería → va solo a los admins
     helpBtn.addEventListener('click', () => withCooldown(helpBtn, 10, async () => {
       await requestNotifPermission();
       const msg = `Necesita ayuda en ${appName}`;
       _notifChannel.send({ type: 'broadcast', event: 'alert',
-        payload: { emoji: '🆘', msg, from: currentUserDisplay } });
-      await sendPushToAll(`🆘 ${currentUserDisplay}`, msg, 'whynot-sos');
-      toast('🆘 Señal enviada a todos los dispositivos', 'warning');
+        payload: { emoji: '🆘', msg, from: currentUserDisplay, target: 'admin' } });
+      await sendPushToAll(`🆘 ${currentUserDisplay}`, msg, 'whynot-sos', 'admin');
+      toast('🆘 Señal enviada a los admins', 'warning');
     }));
   }
   if (sneezeBtn) {
+    // Estornudo desde admin → va solo a los admins
     sneezeBtn.addEventListener('click', () => withCooldown(sneezeBtn, 10, async () => {
       await requestNotifPermission();
       const msg = '¡Atención de admin!';
       _notifChannel.send({ type: 'broadcast', event: 'alert',
-        payload: { emoji: '🤧', msg, from: currentUserDisplay } });
-      await sendPushToAll(`🤧 ${currentUserDisplay}`, msg, 'whynot-admin');
-      toast('🤧 Señal enviada a todos los dispositivos', 'success');
+        payload: { emoji: '🤧', msg, from: currentUserDisplay, target: 'admin' } });
+      await sendPushToAll(`🤧 ${currentUserDisplay}`, msg, 'whynot-admin', 'admin');
+      toast('🤧 Señal enviada a los admins', 'success');
     }));
   }
 

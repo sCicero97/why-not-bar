@@ -35,13 +35,24 @@ module.exports = async (req, res) => {
   );
 
   // ── 3. Leer payload ───────────────────────────────────────────────────────────
-  const { title = 'Why Not Bar', body = 'Alerta', tag = 'whynot-alert' } = req.body || {};
+  const { title = 'Why Not Bar', body = 'Alerta', tag = 'whynot-alert', targetRole = null } = req.body || {};
 
-  // ── 4. Obtener todas las suscripciones ────────────────────────────────────────
-  const { data: subs, error: subsErr } = await adminDb
-    .from('push_subscriptions')
-    .select('id, subscription');
+  // ── 4. Obtener suscripciones (filtradas por rol si corresponde) ───────────────
+  let subsQuery = adminDb.from('push_subscriptions').select('id, subscription, user_id');
 
+  // Si se especifica targetRole, filtramos solo los user_ids con ese rol
+  if (targetRole) {
+    const { data: profiles, error: profErr } = await adminDb
+      .from('profiles')
+      .select('id')
+      .eq('role', targetRole);
+    if (profErr) return res.status(500).json({ error: profErr.message });
+    const targetIds = (profiles || []).map(p => p.id);
+    if (!targetIds.length) return res.json({ ok: true, sent: 0 });
+    subsQuery = subsQuery.in('user_id', targetIds);
+  }
+
+  const { data: subs, error: subsErr } = await subsQuery;
   if (subsErr) return res.status(500).json({ error: subsErr.message });
   if (!subs?.length) return res.json({ ok: true, sent: 0 });
 

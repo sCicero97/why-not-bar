@@ -11,7 +11,6 @@ const CLOSE_READY_MS    = 1000;
 let activeEvent   = null;
 let accounts      = [];    // bar_accounts del evento activo
 let closures      = [];    // bar_closures del evento activo
-let showClosed    = false;
 let holdActive    = false;
 let pendingRender = false;
 
@@ -60,24 +59,26 @@ async function loadData() {
 }
 
 // ─── Real-time ────────────────────────────────────────────────────────────────
+// Recarga completa desde la DB para mantener joins (attendees) y manejar
+// cualquier cambio del admin (reabrir cuentas, borrar cierres, etc.)
+async function reloadFromDB() {
+  const db = getDb();
+  const [accsRes, closRes] = await Promise.all([
+    db.from('bar_accounts').select('*, attendees(name,status)').eq('event_id', activeEvent.id).order('slot'),
+    db.from('bar_closures').select('*, attendees(name)').eq('event_id', activeEvent.id).order('closed_at', { ascending: false }),
+  ]);
+  if (accsRes.data) accounts = accsRes.data;
+  if (closRes.data) closures = closRes.data;
+  renderIfNotHolding();
+}
+
 function setupRealtime() {
   const db = getDb();
   db.channel('bar-live')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'bar_accounts', filter: `event_id=eq.${activeEvent.id}` },
-      (payload) => {
-        if (payload.eventType === 'UPDATE') {
-          const idx = accounts.findIndex(a => a.id === payload.new.id);
-          if (idx >= 0) {
-            accounts[idx] = { ...accounts[idx], ...payload.new };
-          }
-        }
-        renderIfNotHolding();
-      })
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bar_closures', filter: `event_id=eq.${activeEvent.id}` },
-      (payload) => {
-        closures.unshift(payload.new);
-        renderIfNotHolding();
-      })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bar_accounts',
+        filter: `event_id=eq.${activeEvent.id}` }, reloadFromDB)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bar_closures',
+        filter: `event_id=eq.${activeEvent.id}` }, reloadFromDB)
     .subscribe();
 }
 
@@ -111,8 +112,8 @@ function renderSummary() {
 function renderAccounts() {
   const wrap        = document.getElementById('accountsList');
   const searchDig   = document.getElementById('searchInput').value.replace(/\D/g, '');
-  // Mostrar solo cuentas vinculadas a asistentes
-  const list        = showClosed ? accounts.filter(a => a.attendee_id) : accounts.filter(a => !a.is_closed && a.attendee_id);
+  // Mostrar solo cuentas abiertas vinculadas a asistentes
+  const list        = accounts.filter(a => !a.is_closed && a.attendee_id);
   const filtered    = searchDig ? list.filter(a => String(a.slot).padStart(3,'0').includes(searchDig)) : list;
 
   wrap.innerHTML = '';
@@ -424,14 +425,6 @@ function setupUI() {
     renderAccounts();
   });
 
-  // Toggle: mostrar/ocultar cuentas cerradas
-  document.getElementById('toggleClosedBtn').addEventListener('click', () => {
-    showClosed = !showClosed;
-    document.getElementById('toggleClosedBtn').textContent = showClosed ? '👁 Ocultar cerradas' : '👁 Ver cerradas';
-    renderAccounts();
-  });
-
-  document.getElementById('exportBtn').addEventListener('click', exportToExcel);
   document.getElementById('logoutBtn').addEventListener('click', signOut);
 }
 

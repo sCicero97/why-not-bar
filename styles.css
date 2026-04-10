@@ -121,6 +121,15 @@ button{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touc
 /* ─── Notification buttons ───────────────────────────────────────────────────  */
 .notif-btn{width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--panel-2);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s}
 .notif-btn:active{transform:scale(.92)}
+/* SOS button — más grande y llamativo */
+.sos-btn{width:54px;height:54px;font-size:28px;border-radius:14px;border-color:#4a1a1a;background:#2b1010}
+
+/* ─── App shell (barra) — margen seguro para notch y bordes del dispositivo ── */
+.app-shell{padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,16px) env(safe-area-inset-left,0px)}
+.app-shell .topbar{padding:16px 18px;margin-bottom:14px}
+.app-shell .summary-grid{padding:0 16px;margin-bottom:14px}
+.app-shell .tabs{padding:0 16px}
+.app-shell main{padding:0 16px}
 
 /* ─── Hidden ─────────────────────────────────────────────────────────────────  */
 .hidden{display:none!important}
