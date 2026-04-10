@@ -3,6 +3,19 @@
 // Incluir ANTES de app.js / portero.js / admin.js
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ─── Debug: muestra errores JS en pantalla en vez de negro ───────────────────
+window.addEventListener('error', (e) => {
+  document.body.style.cssText = 'background:#0b0b0b;color:#fff;padding:24px;font-family:monospace;font-size:14px';
+  document.body.innerHTML = `<h2 style="color:#ef4444;margin:0 0 12px">❌ Error JS</h2>
+    <div style="color:#fbbf24;word-break:break-all;margin-bottom:8px">${e.message}</div>
+    <div style="color:#a0a0a0;font-size:12px">${e.filename?.split('/').pop() || ''}:${e.lineno}</div>`;
+});
+window.addEventListener('unhandledrejection', (e) => {
+  document.body.style.cssText = 'background:#0b0b0b;color:#fff;padding:24px;font-family:monospace;font-size:14px';
+  document.body.innerHTML = `<h2 style="color:#ef4444;margin:0 0 12px">❌ Error async</h2>
+    <div style="color:#fbbf24;word-break:break-all">${e.reason}</div>`;
+});
+
 // ─── ⚠️  COMPLETAR CON TUS VALORES DE SUPABASE ───────────────────────────────
 const SUPABASE_URL      = 'https://snsmgezzqchwlwaramcz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable__CVaQps15sZM9sBtU2vzaw_0lSbKcJU';
