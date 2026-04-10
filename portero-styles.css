@@ -71,6 +71,10 @@ body { padding: 0; }
 .att-inside  { background: #0d1f0d; border-color: #1a3a1a; }
 .att-exited  { background: #131313; opacity: .65; }
 
+/* No pagó — sobreescribe el color base de la card */
+.att-unpaid         { background: #1a0808 !important; border-color: #5c1a1a !important; }
+.att-unpaid.att-inside { background: #1a0d0d !important; border-color: #7f2020 !important; }
+
 .att-main {
   display: flex;
   justify-content: space-between;
@@ -104,10 +108,11 @@ body { padding: 0; }
   text-transform: uppercase;
   letter-spacing: .05em;
 }
-.att-tag-in   { background: #1a3a1a; color: #4ade80; }
-.att-tag-out  { background: #2a2a2a; color: #9ca3af; }
-.att-tag-paid { background: #1a3a1a; color: #1ed760; }
-.att-tag-open { background: #3a2e00; color: #fbbf24; }
+.att-tag-in     { background: #1a3a1a; color: #4ade80; }
+.att-tag-out    { background: #2a2a2a; color: #9ca3af; }
+.att-tag-paid   { background: #1a3a1a; color: #1ed760; }
+.att-tag-open   { background: #3a2e00; color: #fbbf24; }
+.att-tag-unpaid { background: #3a0d0d; color: #f87171; border: 1px solid #7f1d1d; font-size: 12px; }
 
 /* Action buttons on card */
 .att-actions { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
