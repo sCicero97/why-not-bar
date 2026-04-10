@@ -620,6 +620,23 @@ function exportToExcel() {
     ...barClosures.map(c=>[padId(c.slot),c.attendees?.name||'',c.total,c.qty160,c.qty260,c.qty360,c.closed_by,c.closed_at]),
   ]), 'Cuentas cobradas');
 
+  // Cuentas abiertas con saldo
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['Cuenta','Nombre vinculada','Total','#160','#260','#360'],
+    ...barAccounts
+      .filter(a => !a.is_closed && a.total > 0)
+      .map(a => [padId(a.slot), a.attendees?.name || '', a.total, a.qty160, a.qty260, a.qty360]),
+  ]), 'Cuentas abiertas');
+
+  // Todas las cuentas (estado completo)
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['Cuenta','Nombre','Total','#160','#260','#360','Estado'],
+    ...barAccounts.map(a => [
+      padId(a.slot), a.attendees?.name || '', a.total, a.qty160, a.qty260, a.qty360,
+      a.is_closed ? 'Cerrada' : a.total > 0 ? 'Abierta con saldo' : 'Vacía',
+    ]),
+  ]), 'Todas las cuentas');
+
   // Expenses
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
     ['Descripción','Monto','Fecha'],
@@ -715,7 +732,11 @@ function renderUsers() {
         ${u.last_sign_in ? new Date(u.last_sign_in).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'Nunca'}
       </td>
       <td>
-        <button class="btn btn-sm btn-danger" onclick="deleteAppUser('${u.id}','${u.email.replace(/'/g,"&#39;")}')">🗑 Eliminar</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="openChangePasswordModal('${u.id}','${u.email.replace(/'/g,"&#39;")}')"
+            style="background:#1c2a3a;border-color:#2563eb;color:#93c5fd">🔑 Clave</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteAppUser('${u.id}','${u.email.replace(/'/g,"&#39;")}')">🗑</button>
+        </div>
       </td>
     </tr>
   `).join('');
@@ -842,6 +863,61 @@ function openAddUserModal() {
       errEl.textContent = err.message;
       btn.disabled = false;
       btn.textContent = 'Crear usuario';
+    }
+  });
+}
+
+function openChangePasswordModal(userId, email) {
+  showModal(`
+    <h3 style="margin:0 0 6px">Cambiar contraseña</h3>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 18px">${email}</p>
+    <form id="changePwdForm" autocomplete="off">
+      <div class="form-group">
+        <label>Nueva contraseña *</label>
+        <input id="cp-pwd" type="password" placeholder="Mínimo 6 caracteres" required minlength="6"/>
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label>Confirmar contraseña *</label>
+        <input id="cp-pwd2" type="password" placeholder="Repetir contraseña" required minlength="6"/>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" id="cp-submit" class="btn btn-primary" style="flex:1">Guardar</button>
+        <button type="button" class="btn" onclick="closeModal()" style="flex:1">Cancelar</button>
+      </div>
+      <p id="cp-error" style="color:#ef4444;margin-top:10px;font-size:13px"></p>
+    </form>
+  `);
+
+  document.getElementById('changePwdForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn   = document.getElementById('cp-submit');
+    const errEl = document.getElementById('cp-error');
+    const pwd   = document.getElementById('cp-pwd').value;
+    const pwd2  = document.getElementById('cp-pwd2').value;
+
+    if (pwd !== pwd2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Guardando…';
+    errEl.textContent = '';
+
+    const token = await getAuthToken();
+    if (!token) { errEl.textContent = 'Sin sesión activa'; btn.disabled = false; btn.textContent = 'Guardar'; return; }
+
+    try {
+      const res  = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId, password: pwd }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error);
+      closeModal();
+      toast('Contraseña actualizada', 'success');
+    } catch (err) {
+      errEl.textContent = err.message;
+      btn.disabled = false;
+      btn.textContent = 'Guardar';
     }
   });
 }
@@ -1028,6 +1104,22 @@ function openAddTask() {
     const show = e.target.checked;
     ['remindFromGroup','remindUntilGroup','remindFreqGroup'].forEach(id => {
       document.getElementById(id).style.display = show ? '' : 'none';
+    });
+  });
+
+  // Auto-formato HH:MM: escribir "17" → "17:00", "1745" → "17:45"
+  document.querySelectorAll('#taskForm input[name="remind_from"], #taskForm input[name="remind_until"]').forEach(inp => {
+    inp.addEventListener('blur', () => {
+      let v = inp.value.replace(/\D/g, '');
+      if (!v) return;
+      if (v.length <= 2) {
+        inp.value = v.padStart(2, '0') + ':00';
+      } else {
+        inp.value = v.slice(0, 2).padStart(2, '0') + ':' + v.slice(2, 4).padEnd(2, '0');
+      }
+    });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
     });
   });
 

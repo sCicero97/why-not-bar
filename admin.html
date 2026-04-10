@@ -45,14 +45,14 @@
     <button class="tab-btn" data-tab="gastos">Gastos</button>
     <button class="tab-btn" data-tab="evento">Evento</button>
     <button class="tab-btn" data-tab="tareas">Tareas</button>
-    <button class="tab-btn" data-tab="usuarios">👤 Usuarios</button>
+    <button class="tab-btn" data-tab="usuarios">Usuarios</button>
   </nav>
 
   <!-- ── Dashboard ────────────────────────────────────────── -->
   <section id="tab-dashboard" class="tab-panel active">
 
     <div class="admin-section-header">Cuentas</div>
-    <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:8px">
+    <div class="summary-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
       <div class="summary-card">
         <span class="summary-label">Total barra</span>
         <strong id="d-barTotal">$ 0</strong>
@@ -72,7 +72,7 @@
     </div>
 
     <div class="admin-section-header">Asistentes</div>
-    <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:8px">
+    <div class="summary-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
       <div class="summary-card" style="background:#0d1f0d;border-color:#1a3a1a">
         <span class="summary-label">Ingresaron</span>
         <strong id="d-entered">0</strong>
@@ -81,7 +81,7 @@
         <span class="summary-label">Cuentas barra abiertas</span>
         <strong id="d-openAccs">0</strong>
       </div>
-      <div class="summary-card" style="background:#121815;border-color:#1a3a1a">
+      <div class="summary-card" style="background:#121815;border-color:#1a3a1a;grid-column:1/-1">
         <span class="summary-label">Cuentas barra cerradas</span>
         <strong id="d-closedAccs">0</strong>
       </div>
@@ -89,10 +89,10 @@
 
     <!-- Bar breakdown -->
     <div class="admin-section-header">Detalle de la barra</div>
-    <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:24px">
+    <div class="summary-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:24px">
       <div class="summary-card" style="background:#131313"><span class="summary-label">Tragos 160</span><strong id="d-q160">0</strong></div>
       <div class="summary-card" style="background:#131313"><span class="summary-label">Tragos 260</span><strong id="d-q260">0</strong></div>
-      <div class="summary-card" style="background:#131313"><span class="summary-label">Tragos 360</span><strong id="d-q360">0</strong></div>
+      <div class="summary-card" style="background:#131313;grid-column:1/-1"><span class="summary-label">Tragos 360</span><strong id="d-q360">0</strong></div>
     </div>
 
     <!-- Recent closures -->

@@ -183,11 +183,17 @@ function renderPaidTable() {
       <td><strong>${formatMoney(c.total)}</strong></td>
       <td>${c.qty160}</td><td>${c.qty260}</td><td>${c.qty360}</td>
       <td>${c.closed_by || '—'}</td>
-      <td style="font-size:12px;color:var(--muted)">${c.closed_at ? new Date(c.closed_at).toLocaleString('es-UY') : '—'}</td>
-      <td>${c.payment_photo_url ? `<a href="${c.payment_photo_url}" target="_blank" style="color:var(--blue)">Ver foto</a>` : '—'}</td>
+      <td>${c.closed_at ? new Date(c.closed_at).toLocaleString('es-UY') : '—'}</td>
+      <td>${c.payment_photo_url
+        ? `<button class="action-btn btn-photo" data-photo="${c.payment_photo_url}" style="background:#1e3a5f;border-color:#2563eb;color:#93c5fd;font-size:12px;padding:6px 10px">📸 Ver</button>`
+        : '—'}</td>
     `;
     tbody.appendChild(tr);
   }
+  // Listeners para botones de foto en historial
+  tbody.querySelectorAll('.btn-photo').forEach(btn => {
+    btn.addEventListener('click', () => showPaymentPhotoModal(btn.dataset.photo));
+  });
 }
 
 // ─── Lightbox de foto de pago ─────────────────────────────────────────────────

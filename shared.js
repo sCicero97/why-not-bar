@@ -276,7 +276,11 @@ async function uploadPaymentPhoto(blob, eventId, slot) {
   const db = getDb();
   const filename = `${eventId}/${slot}-${Date.now()}.jpg`;
   const { error } = await db.storage.from(STORAGE_BUCKET).upload(filename, blob, { contentType: 'image/jpeg', upsert: true });
-  if (error) { console.error('Error subiendo foto:', error); return null; }
+  if (error) {
+    console.error('Error subiendo foto:', error);
+    toast('⚠️ No se pudo subir la foto del comprobante: ' + error.message, 'warning');
+    return null;
+  }
   const { data } = db.storage.from(STORAGE_BUCKET).getPublicUrl(filename);
   return data.publicUrl;
 }
@@ -399,6 +403,10 @@ async function sendPushToAll(title, body, tag = 'whynot-alert') {
     const { data: { session } } = await db.auth.getSession();
     if (!session?.access_token) return;
 
+    // Timeout de 8 segundos para que no quede colgado si Vercel no responde
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
     await fetch('/api/send-push', {
       method: 'POST',
       headers: {
@@ -406,7 +414,8 @@ async function sendPushToAll(title, body, tag = 'whynot-alert') {
         'Authorization': `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({ title, body, tag }),
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
   } catch (e) {
     console.warn('[Push] sendPushToAll error:', e.message);
   }
@@ -488,27 +497,44 @@ function setupNotifChannel(appName, currentUserDisplay) {
   const helpBtn   = document.getElementById('helpBtn');
   const sneezeBtn = document.getElementById('sneezeBtn');
 
+  // Cooldown helper: bloquea el botón N segundos para evitar spam.
+  // El timer empieza AL INSTANTE — no espera a que el fetch termine.
+  function withCooldown(btn, seconds, fn) {
+    if (btn.dataset.cooldown) return;
+    btn.dataset.cooldown = '1';
+    btn.style.opacity = '0.4';
+    btn.style.pointerEvents = 'none';
+
+    // Desbloquear siempre después de `seconds` segundos, pase lo que pase
+    setTimeout(() => {
+      delete btn.dataset.cooldown;
+      btn.style.opacity = '';
+      btn.style.pointerEvents = '';
+    }, seconds * 1000);
+
+    // Ejecutar la función en paralelo sin bloquear el unlock
+    fn().catch(e => console.warn('[Alert] Error:', e.message));
+  }
+
   if (helpBtn) {
-    helpBtn.addEventListener('click', async () => {
+    helpBtn.addEventListener('click', () => withCooldown(helpBtn, 10, async () => {
       await requestNotifPermission();
       const msg = `Necesita ayuda en ${appName}`;
-      // Realtime (dispositivos con app abierta)
       _notifChannel.send({ type: 'broadcast', event: 'alert',
         payload: { emoji: '🆘', msg, from: currentUserDisplay } });
-      // Web Push (dispositivos bloqueados / app cerrada)
-      sendPushToAll(`🆘 ${currentUserDisplay}`, msg, 'whynot-sos');
+      await sendPushToAll(`🆘 ${currentUserDisplay}`, msg, 'whynot-sos');
       toast('🆘 Señal enviada a todos los dispositivos', 'warning');
-    });
+    }));
   }
   if (sneezeBtn) {
-    sneezeBtn.addEventListener('click', async () => {
+    sneezeBtn.addEventListener('click', () => withCooldown(sneezeBtn, 10, async () => {
       await requestNotifPermission();
       const msg = '¡Atención de admin!';
       _notifChannel.send({ type: 'broadcast', event: 'alert',
         payload: { emoji: '🤧', msg, from: currentUserDisplay } });
-      sendPushToAll(`🤧 ${currentUserDisplay}`, msg, 'whynot-admin');
+      await sendPushToAll(`🤧 ${currentUserDisplay}`, msg, 'whynot-admin');
       toast('🤧 Señal enviada a todos los dispositivos', 'success');
-    });
+    }));
   }
 
   console.log(`[Notif] Permiso: ${Notification?.permission ?? 'no disponible'}`);

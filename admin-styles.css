@@ -211,6 +211,28 @@ body { padding: 0; }
 .task-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
 .task-last-check { color: var(--green); font-size: 14px; font-weight: 600; }
 
+/* ─── Tablas consistentes en todos los tabs ─────────────────────────────────── */
+/* Fuerza el mismo tamaño de letra en TODAS las celdas de todas las tablas,
+   incluso si el JS renderiza celdas con font-size inline diferente. */
+.admin-table td {
+  font-size: 14px !important;
+  padding: 12px 14px !important;
+}
+.admin-table th {
+  font-size: 12px !important;
+  padding: 10px 14px !important;
+}
+/* Espaciado uniforme del contenido de cada tab */
+.tab-panel {
+  padding-top: 14px;
+}
+.tab-panel .admin-toolbar {
+  margin-bottom: 12px;
+}
+.tab-panel .admin-table-wrap {
+  margin-bottom: 20px;
+}
+
 @media (max-width: 700px) {
   .form-grid { grid-template-columns: 1fr; }
   .admin-toolbar { flex-direction: column; align-items: stretch; }

@@ -13,7 +13,7 @@ function getAdminDb() {
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -83,6 +83,17 @@ module.exports = async (req, res) => {
     });
 
     return res.json({ ok: true, user: { id: newUser.id, email: newUser.email } });
+  }
+
+  // ── PATCH: cambiar contraseña ────────────────────────────────────────────────
+  if (req.method === 'PATCH') {
+    const { userId, password } = req.body || {};
+    if (!userId || !password) return res.status(400).json({ error: 'userId y password requeridos' });
+    if (password.length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+
+    const { error } = await adminDb.auth.admin.updateUserById(userId, { password });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
   }
 
   // ── DELETE: eliminar usuario ──────────────────────────────────────────────────
