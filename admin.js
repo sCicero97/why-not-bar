@@ -14,6 +14,7 @@ let taskChecks     = [];
 let eventSettings  = { door_can_charge: false };
 let profiles       = [];
 let reminderTimers = {};
+let appUsers       = [];   // usuarios del sistema (cargados on-demand)
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
@@ -653,18 +654,211 @@ function viewPhoto(url) {
   document.getElementById('modalOverlay').classList.remove('hidden');
 }
 
+// ─── Gestión de usuarios ──────────────────────────────────────────────────────
+
+async function getAuthToken() {
+  const { data: { session } } = await getDb().auth.getSession();
+  return session?.access_token || null;
+}
+
+async function loadUsers() {
+  const tbody = document.getElementById('usersBody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" class="empty-state" style="padding:30px">Cargando usuarios…</td></tr>';
+
+  const token = await getAuthToken();
+  if (!token) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Sin sesión activa.</td></tr>'; return; }
+
+  try {
+    const res  = await fetch('/api/users', { headers: { Authorization: `Bearer ${token}` } });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    appUsers = json.users;
+    renderUsers();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-state" style="color:#ef4444">Error: ${e.message}</td></tr>`;
+  }
+}
+
+const ROLE_LABELS = { admin: '⚙️ Admin', bar: '🍹 Barra', door: '🚪 Portero' };
+const ROLE_COLORS = { admin: '#f59e0b', bar: '#1ed760', door: '#3b82f6' };
+
+function renderUsers() {
+  const tbody = document.getElementById('usersBody');
+  if (!tbody) return;
+
+  if (!appUsers.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Sin usuarios. Creá uno con el botón +</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = appUsers.map(u => `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-weight:600">${u.display_name || '—'}</span>
+          <button class="btn btn-sm" onclick="openEditUserName('${u.id}','${(u.display_name||'').replace(/'/g,"&#39;")}')"
+            style="font-size:12px;padding:3px 8px">✏️</button>
+        </div>
+      </td>
+      <td style="color:var(--muted);font-size:13px">${u.email}</td>
+      <td>
+        <select class="inline-select"
+          style="border-color:${ROLE_COLORS[u.role]||'var(--line)'};color:${ROLE_COLORS[u.role]||'var(--text)'};background:var(--panel-2);border-radius:10px;padding:5px 10px;font-size:13px"
+          onchange="updateUserRole('${u.id}',this.value)">
+          <option value="bar"  ${u.role==='bar'  ?'selected':''}>🍹 Barra</option>
+          <option value="door" ${u.role==='door' ?'selected':''}>🚪 Portero</option>
+          <option value="admin"${u.role==='admin'?'selected':''}>⚙️ Admin</option>
+        </select>
+      </td>
+      <td style="font-size:12px;color:var(--muted)">
+        ${u.last_sign_in ? new Date(u.last_sign_in).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'Nunca'}
+      </td>
+      <td>
+        <button class="btn btn-sm btn-danger" onclick="deleteAppUser('${u.id}','${u.email.replace(/'/g,"&#39;")}')">🗑 Eliminar</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function updateUserRole(userId, newRole) {
+  const db = getDb();
+  const { error } = await db.from('profiles').update({ role: newRole }).eq('id', userId);
+  if (error) { toast('Error al cambiar rol: ' + error.message, 'error'); return; }
+  const u = appUsers.find(u => u.id === userId);
+  if (u) u.role = newRole;
+  renderUsers();
+  toast(`Rol actualizado a ${ROLE_LABELS[newRole]}`, 'success');
+}
+
+function openEditUserName(userId, currentName) {
+  showModal(`
+    <h3 style="margin:0 0 18px">Editar nombre</h3>
+    <form id="editNameForm">
+      <div class="form-group">
+        <label>Nombre para mostrar</label>
+        <input id="newDisplayName" type="text" value="${currentName}" required placeholder="Ej: Barra 1"/>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" class="btn btn-primary" style="flex:1">Guardar</button>
+        <button type="button" class="btn" onclick="closeModal()" style="flex:1">Cancelar</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('editNameForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const newName = document.getElementById('newDisplayName').value.trim();
+    if (!newName) return;
+    const db = getDb();
+    const { error } = await db.from('profiles').update({ display_name: newName }).eq('id', userId);
+    if (error) { toast('Error: ' + error.message, 'error'); return; }
+    const u = appUsers.find(u => u.id === userId);
+    if (u) u.display_name = newName;
+    closeModal();
+    renderUsers();
+    toast('Nombre actualizado', 'success');
+  });
+}
+
+async function deleteAppUser(userId, email) {
+  if (!confirm(`⚠️  Eliminar al usuario:\n${email}\n\nEsta acción no se puede deshacer.`)) return;
+
+  const token = await getAuthToken();
+  if (!token) { toast('Sin sesión', 'error'); return; }
+
+  const res  = await fetch('/api/users', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ userId }),
+  });
+  const json = await res.json();
+  if (!json.ok) { toast('Error: ' + json.error, 'error'); return; }
+
+  appUsers = appUsers.filter(u => u.id !== userId);
+  renderUsers();
+  toast(`Usuario ${email} eliminado`, 'success');
+}
+
+function openAddUserModal() {
+  showModal(`
+    <h3 style="margin:0 0 18px">Nuevo usuario del sistema</h3>
+    <form id="addUserForm" autocomplete="off">
+      <div class="form-group">
+        <label>Nombre para mostrar *</label>
+        <input id="nu-name" type="text" placeholder="Ej: Barra 1" required/>
+      </div>
+      <div class="form-group">
+        <label>Email *</label>
+        <input id="nu-email" type="email" placeholder="barra@ejemplo.com" required/>
+      </div>
+      <div class="form-group">
+        <label>Contraseña *</label>
+        <input id="nu-password" type="password" placeholder="Mínimo 6 caracteres" required minlength="6"/>
+      </div>
+      <div class="form-group">
+        <label>Rol</label>
+        <select id="nu-role">
+          <option value="bar">🍹 Barra</option>
+          <option value="door">🚪 Portero</option>
+          <option value="admin">⚙️ Admin</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" id="nu-submit" class="btn btn-primary" style="flex:1">Crear usuario</button>
+        <button type="button" class="btn" onclick="closeModal()" style="flex:1">Cancelar</button>
+      </div>
+      <p id="nu-error" style="color:#ef4444;margin-top:10px;font-size:13px"></p>
+    </form>
+  `);
+
+  document.getElementById('addUserForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('nu-submit');
+    const errEl = document.getElementById('nu-error');
+    btn.disabled = true;
+    btn.textContent = 'Creando…';
+    errEl.textContent = '';
+
+    const token = await getAuthToken();
+    if (!token) { errEl.textContent = 'Sin sesión activa'; btn.disabled = false; btn.textContent = 'Crear usuario'; return; }
+
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          email:        document.getElementById('nu-email').value.trim(),
+          password:     document.getElementById('nu-password').value,
+          role:         document.getElementById('nu-role').value,
+          display_name: document.getElementById('nu-name').value.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error);
+      closeModal();
+      toast(`Usuario ${json.user.email} creado`, 'success');
+      await loadUsers();
+    } catch (err) {
+      errEl.textContent = err.message;
+      btn.disabled = false;
+      btn.textContent = 'Crear usuario';
+    }
+  });
+}
+
 // ─── Utility ──────────────────────────────────────────────────────────────────
 function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
 
 // ─── UI setup ─────────────────────────────────────────────────────────────────
 function setupUI() {
-  // Tabs
+  // Tabs — cargar usuarios on-demand cuando se abre el tab
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+      if (btn.dataset.tab === 'usuarios') loadUsers();
     });
   });
 
@@ -680,6 +874,9 @@ function setupUI() {
   document.getElementById('doorCanChargeToggle').addEventListener('change', (e) => {
     saveDoorSettings(e.target.checked);
   });
+
+  document.getElementById('addUserBtn').addEventListener('click', openAddUserModal);
+  document.getElementById('refreshUsersBtn').addEventListener('click', loadUsers);
 
   document.getElementById('attSearch').addEventListener('input', renderAttendeesTable);
   document.getElementById('attStatusFilter').addEventListener('change', renderAttendeesTable);

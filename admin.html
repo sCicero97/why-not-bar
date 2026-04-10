@@ -45,6 +45,7 @@
     <button class="tab-btn" data-tab="gastos">Gastos</button>
     <button class="tab-btn" data-tab="evento">Evento</button>
     <button class="tab-btn" data-tab="tareas">Tareas</button>
+    <button class="tab-btn" data-tab="usuarios">👤 Usuarios</button>
   </nav>
 
   <!-- ── Dashboard ────────────────────────────────────────── -->
@@ -205,6 +206,36 @@
 
     <!-- Task list -->
     <div id="tasksList"></div>
+  </section>
+
+
+  <!-- ── Usuarios ───────────────────────────────────────────── -->
+  <section id="tab-usuarios" class="tab-panel">
+    <div class="admin-toolbar">
+      <button id="addUserBtn" class="btn btn-primary btn-sm">+ Nuevo usuario</button>
+      <button id="refreshUsersBtn" class="btn btn-sm" style="background:var(--panel);border-color:var(--line);color:var(--muted)">↺ Actualizar</button>
+    </div>
+
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:16px;font-size:13px;color:var(--muted)">
+      Desde acá podés crear usuarios, cambiar su rol y eliminarlos. Los cambios de rol toman efecto en el próximo inicio de sesión.
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Email</th>
+            <th>Rol</th>
+            <th>Último acceso</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="usersBody">
+          <tr><td colspan="5" class="empty-state" style="padding:40px">Hacé click en el tab para cargar usuarios…</td></tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
 </div>
