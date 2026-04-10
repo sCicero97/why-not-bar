@@ -82,10 +82,13 @@ function setupRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'bar_accounts', filter: `event_id=eq.${eid}` },
       (p) => { applyChange(barAccounts, p); renderAll(); })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'bar_closures', filter: `event_id=eq.${eid}` },
-      (p) => { if (p.eventType === 'INSERT') barClosures.unshift(p.new); renderAll(); })
+      (p) => { applyChange(barClosures, p); renderAll(); })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `event_id=eq.${eid}` },
       (p) => { applyChange(expenses, p); renderAll(); })
     .subscribe();
+
+  // Polling fallback: reload all data every 8s para mantener info siempre fresca
+  setInterval(() => loadAll(), 8000);
 }
 
 function applyChange(arr, payload) {
@@ -813,9 +816,9 @@ function openAddTask() {
         <div class="form-group" style="grid-column:1/-1">
           <label><input type="checkbox" id="remindCheck" name="remind" value="true" style="width:auto;margin-right:6px"/> Recordar esta tarea</label>
         </div>
-        <div class="form-group" id="remindFreqGroup" style="display:none"><label>Frecuencia (minutos)</label><input name="remind_freq_minutes" type="number" value="60" min="5"/></div>
-        <div class="form-group" id="remindFromGroup" style="display:none"><label>Desde</label><input name="remind_from" type="time" value="22:00"/></div>
-        <div class="form-group" id="remindUntilGroup" style="display:none"><label>Hasta</label><input name="remind_until" type="time" value="04:00"/></div>
+        <div class="form-group" id="remindFromGroup" style="display:none"><label>Desde <span style="color:var(--muted);font-size:12px">(ej: 22:00)</span></label><input name="remind_from" type="text" inputmode="numeric" placeholder="22:00" pattern="[0-2][0-9]:[0-5][0-9]" value="22:00"/></div>
+        <div class="form-group" id="remindUntilGroup" style="display:none"><label>Hasta <span style="color:var(--muted);font-size:12px">(ej: 04:00)</span></label><input name="remind_until" type="text" inputmode="numeric" placeholder="04:00" pattern="[0-2][0-9]:[0-5][0-9]" value="04:00"/></div>
+        <div class="form-group" id="remindFreqGroup" style="display:none"><label>Frecuencia (Minutos)</label><input name="remind_freq_minutes" type="number" value="60" min="1"/></div>
       </div>
       <div style="display:flex;gap:10px;margin-top:16px">
         <button type="submit" class="btn btn-primary" style="flex:1">Crear</button>
@@ -826,7 +829,7 @@ function openAddTask() {
 
   document.getElementById('remindCheck').addEventListener('change', (e) => {
     const show = e.target.checked;
-    ['remindFreqGroup','remindFromGroup','remindUntilGroup'].forEach(id => {
+    ['remindFromGroup','remindUntilGroup','remindFreqGroup'].forEach(id => {
       document.getElementById(id).style.display = show ? '' : 'none';
     });
   });

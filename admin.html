@@ -49,7 +49,9 @@
 
   <!-- ── Dashboard ────────────────────────────────────────── -->
   <section id="tab-dashboard" class="tab-panel active">
-    <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+
+    <div class="admin-section-header">Cuentas</div>
+    <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:8px">
       <div class="summary-card">
         <span class="summary-label">Total barra</span>
         <strong id="d-barTotal">$ 0</strong>
@@ -66,10 +68,10 @@
         <span class="summary-label">TOTAL NETO</span>
         <strong id="d-netTotal" style="font-size:32px">$ 0</strong>
       </div>
-      <div class="summary-card">
-        <span class="summary-label">Asistentes</span>
-        <strong id="d-attendees">0</strong>
-      </div>
+    </div>
+
+    <div class="admin-section-header">Asistentes</div>
+    <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:8px">
       <div class="summary-card" style="background:#0d1f0d;border-color:#1a3a1a">
         <span class="summary-label">Ingresaron</span>
         <strong id="d-entered">0</strong>
@@ -79,7 +81,7 @@
         <strong id="d-openAccs">0</strong>
       </div>
       <div class="summary-card" style="background:#121815;border-color:#1a3a1a">
-        <span class="summary-label">Cuentas barra cobradas</span>
+        <span class="summary-label">Cuentas barra cerradas</span>
         <strong id="d-closedAccs">0</strong>
       </div>
     </div>

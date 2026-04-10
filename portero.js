@@ -6,6 +6,7 @@ console.log('PORTERO v3 2026-03-23');
 let activeEvent  = null;
 let attendees    = [];
 let barAccounts  = [];
+let eventSettings = { door_can_charge: false };
 let currentFilter = 'all';
 let selectedPersonId = null;
 
@@ -39,12 +40,14 @@ async function init() {
 
 async function loadData() {
   const db = getDb();
-  const [attRes, barRes] = await Promise.all([
+  const [attRes, barRes, settingsRes] = await Promise.all([
     db.from('attendees').select('*').eq('event_id', activeEvent.id).order('name'),
     db.from('bar_accounts').select('*').eq('event_id', activeEvent.id).order('slot'),
+    db.from('event_settings').select('*').eq('event_id', activeEvent.id).maybeSingle(),
   ]);
   if (attRes.data) attendees = attRes.data;
   if (barRes.data) barAccounts = barRes.data;
+  if (settingsRes.data) eventSettings = settingsRes.data;
   renderAll();
 }
 
@@ -58,6 +61,9 @@ function setupRealtime() {
           if (i >= 0) attendees[i] = { ...attendees[i], ...p.new };
         } else if (p.eventType === 'INSERT') {
           attendees.push(p.new);
+        } else if (p.eventType === 'DELETE') {
+          const i = attendees.findIndex(a => a.id === p.old.id);
+          if (i >= 0) attendees.splice(i, 1);
         }
         renderAll();
         if (selectedPersonId === p.new?.id) renderModal(p.new.id);
@@ -71,7 +77,16 @@ function setupRealtime() {
         renderAll();
         if (selectedPersonId) renderModal(selectedPersonId);
       })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_settings', filter: `event_id=eq.${activeEvent.id}` },
+      (p) => {
+        if (p.new) eventSettings = p.new;
+        renderAll();
+        if (selectedPersonId) renderModal(selectedPersonId);
+      })
     .subscribe();
+
+  // Polling fallback: reload data every 8s para mantener info siempre fresca
+  setInterval(() => loadData(), 8000);
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -116,9 +131,11 @@ function renderList() {
 
   for (const att of list) {
     const barAcc = att.bar_account_slot ? barAccounts.find(b => b.slot === att.bar_account_slot) : null;
+    const canCharge   = eventSettings.door_can_charge;
     const hasBalance  = barAcc && !barAcc.is_closed && barAcc.total > 0;
     const barClosed   = barAcc?.is_closed;
-    const canExit     = att.entered && !att.exit_time && !hasBalance;
+    // If portero can't charge, they can let people exit even with open balance
+    const canExit     = att.entered && !att.exit_time && (!hasBalance || !canCharge);
     const alreadyOut  = !!att.exit_time;
 
     const card = document.createElement('div');
@@ -132,7 +149,7 @@ function renderList() {
             ${att.bar_account_slot ? `<span class="att-bar-num" style="font-size:18px;font-weight:bold"># ${padId(att.bar_account_slot)}</span>` : ''}
             ${alreadyOut ? '<span class="att-tag att-tag-out">Salió</span>' : att.entered ? '<span class="att-tag att-tag-in">Adentro</span>' : ''}
           </div>
-          ${barAcc ? `<div class="att-consumption">
+          ${canCharge && barAcc ? `<div class="att-consumption">
             Barra: <strong>${formatMoney(barAcc.total)}</strong>
             ${barClosed ? ' <span class="att-tag att-tag-paid">✓ Cobrado</span>' : hasBalance ? ' <span class="att-tag att-tag-open">Abierta</span>' : ''}
           </div>` : ''}
@@ -140,7 +157,7 @@ function renderList() {
         <div class="att-actions" onclick="event.stopPropagation()">
           ${!att.entered && !alreadyOut ? `<button class="att-btn att-btn-enter" onclick="doCheckIn('${att.id}')">Ingresar</button>` : ''}
           ${canExit ? `<button class="att-btn att-btn-exit" onclick="doExit('${att.id}')">Registrar salida</button>` : ''}
-          ${hasBalance && att.entered && !alreadyOut ? `<button class="att-btn att-btn-close" onclick="openPersonModal('${att.id}')">Cobrar</button>` : ''}
+          ${canCharge && hasBalance && att.entered && !alreadyOut ? `<button class="att-btn att-btn-close" onclick="openPersonModal('${att.id}')">Cobrar</button>` : ''}
         </div>
       </div>
     `;
@@ -152,23 +169,51 @@ function renderList() {
 async function doCheckIn(attendeeId) {
   const db  = getDb();
   const now = new Date().toISOString();
+
+  // Update optimista: actualizar UI antes de esperar respuesta del servidor
+  const i = attendees.findIndex(a => a.id === attendeeId);
+  const prev = i >= 0 ? { ...attendees[i] } : null;
+  if (i >= 0) { attendees[i].entered = true; attendees[i].entry_time = now; }
+  renderAll();
+
   const { error } = await db.from('attendees')
     .update({ entered: true, entry_time: now })
     .eq('id', attendeeId);
-  if (error) toast('Error al registrar ingreso', 'error');
-  else toast('✓ Ingreso registrado', 'success');
+  if (error) {
+    // Revertir si falla
+    if (i >= 0 && prev) attendees[i] = prev;
+    renderAll();
+    toast('Error al registrar ingreso', 'error');
+  } else {
+    toast('✓ Ingreso registrado', 'success');
+  }
 }
 
 // ─── Exit ─────────────────────────────────────────────────────────────────────
 async function doExit(attendeeId) {
-  const db = getDb();
+  const db  = getDb();
+  const now = new Date().toISOString();
+
+  // Update optimista: actualizar UI antes de esperar respuesta del servidor
+  const i = attendees.findIndex(a => a.id === attendeeId);
+  const prev = i >= 0 ? { ...attendees[i] } : null;
+  if (i >= 0) { attendees[i].exit_time = now; }
+  renderAll();
+  if (selectedPersonId === attendeeId) closeModal();
+
   const { data, error } = await db.rpc('mark_exit', { p_attendee_id: attendeeId });
-  if (error || !data?.ok) {
-    toast(data?.error || error?.message || 'No se pudo registrar salida', 'error');
+  if (error) {
+    // Revertir si hay error de red/DB
+    if (i >= 0 && prev) attendees[i] = prev;
+    renderAll();
+    toast(error.message || 'No se pudo registrar salida', 'error');
+  } else if (data?.error) {
+    // El RPC devolvió un error lógico (ej: cuenta abierta)
+    if (i >= 0 && prev) attendees[i] = prev;
+    renderAll();
+    toast(data.error, 'error');
   } else {
     toast('✓ Salida registrada', 'success');
-    // Close modal if open for this person
-    if (selectedPersonId === attendeeId) closeModal();
   }
 }
 
@@ -216,6 +261,7 @@ function renderModal(id) {
   if (!att) return;
   const barAcc = att.bar_account_slot ? barAccounts.find(b => b.slot === att.bar_account_slot) : null;
   const hasBalance = barAcc && !barAcc.is_closed && barAcc.total > 0;
+  const canCharge  = eventSettings.door_can_charge;
 
   document.getElementById('modalContent').innerHTML = `
     <div class="modal-person-header">
@@ -232,7 +278,7 @@ function renderModal(id) {
       ${att.entry_amount > 0 ? `<div class="modal-info-item"><span>Pago entrada</span><strong>${formatMoney(att.entry_amount)}</strong></div>` : ''}
     </div>
 
-    ${barAcc ? `
+    ${canCharge && barAcc ? `
     <div class="modal-bar-section">
       <div class="modal-bar-header">
         <span>Cuenta barra #${padId(barAcc.slot)}</span>
@@ -245,14 +291,14 @@ function renderModal(id) {
         <span class="pill">360: <strong>${barAcc.qty360}</strong></span>
       </div>
       ${att.payment_photo_url ? `<a href="${att.payment_photo_url}" target="_blank" class="modal-photo-link">📸 Ver foto del pago</a>` : ''}
-    </div>` : '<p style="color:var(--muted);font-size:14px">Sin cuenta de barra asignada.</p>'}
+    </div>` : ''}
 
     <div class="modal-actions">
       ${!att.entered && !att.exit_time ? `<button class="btn btn-success" onclick="doCheckIn('${att.id}')">✓ Registrar ingreso</button>` : ''}
-      ${att.entered && !att.exit_time && !hasBalance ? `<button class="btn btn-warning" onclick="doExit('${att.id}')">Registrar salida</button>` : ''}
-      ${hasBalance && att.entered ? `<button class="btn btn-primary" onclick="doCloseBarAccount('${barAcc.id}', ${barAcc.slot})">💳 Cobrar cuenta</button>` : ''}
+      ${att.entered && !att.exit_time && (!hasBalance || !canCharge) ? `<button class="btn btn-warning" onclick="doExit('${att.id}')">Registrar salida</button>` : ''}
+      ${canCharge && hasBalance && att.entered ? `<button class="btn btn-primary" onclick="doCloseBarAccount('${barAcc.id}', ${barAcc.slot})">💳 Cobrar cuenta</button>` : ''}
     </div>
-    ${hasBalance && att.entered && !att.exit_time ? `<p class="modal-warning">⚠️ Tiene consumo sin pagar. No puede salir.</p>` : ''}
+    ${canCharge && hasBalance && att.entered && !att.exit_time ? `<p class="modal-warning">⚠️ Tiene consumo sin pagar. No puede salir.</p>` : ''}
   `;
 }
 

@@ -334,14 +334,68 @@ function setupUserDropdown() {
 // ─── Notification broadcast ────────────────────────────────────────────────────
 let _notifChannel = null;
 
+// Toast de alerta: más grande, dura más, con sonido y vibración
+function alertToast(msg) {
+  // Vibrar en móvil
+  if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
+
+  // Sonido de alerta (tono corto via Web Audio API)
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [880, 1100, 880].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.25, ctx.currentTime + i * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.12);
+      osc.start(ctx.currentTime + i * 0.15);
+      osc.stop(ctx.currentTime + i * 0.15 + 0.13);
+    });
+  } catch(e) {}
+
+  const el = document.createElement('div');
+  el.style.cssText = `
+    position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:#f59e0b;color:#06130a;
+    padding:20px 32px;border-radius:20px;
+    font-family:Arial,sans-serif;font-size:20px;font-weight:bold;
+    z-index:99999;box-shadow:0 12px 40px rgba(0,0,0,.6);
+    text-align:center;max-width:90vw;
+    animation:fadeInUp .2s ease;pointer-events:none;
+  `;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 6000);
+}
+
+async function requestNotifPermission() {
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') return false;
+  const perm = await Notification.requestPermission();
+  return perm === 'granted';
+}
+
 function setupNotifChannel(appName, currentUserDisplay) {
+  // Solicitar permiso de notificaciones del sistema
+  requestNotifPermission();
+
   const db = getDb();
   _notifChannel = db.channel('app-notifications')
     .on('broadcast', { event: 'alert' }, ({ payload }) => {
       if (payload.from !== currentUserDisplay) {
-        toast(`${payload.emoji} ${payload.from}: ${payload.msg}`, 'warning');
+        alertToast(`${payload.emoji} ${payload.from}: ${payload.msg}`);
         if (Notification.permission === 'granted') {
-          new Notification(`${payload.emoji} ${payload.msg}`, { body: `Enviado por: ${payload.from}`, icon: './Logo.png' });
+          try {
+            new Notification(`${payload.emoji} ${payload.msg}`, {
+              body: `Enviado por: ${payload.from}`,
+              icon: './Logo.png',
+              tag: 'whynot-alert',
+              requireInteraction: true,  // No desaparece sola
+            });
+          } catch(e) {}
         }
       }
     })
@@ -351,15 +405,20 @@ function setupNotifChannel(appName, currentUserDisplay) {
   const sneezeBtn = document.getElementById('sneezeBtn');
 
   if (helpBtn) {
-    helpBtn.addEventListener('click', () => {
+    helpBtn.addEventListener('click', async () => {
+      await requestNotifPermission();
       _notifChannel.send({ type: 'broadcast', event: 'alert', payload: { emoji: '🆘', msg: `Necesita ayuda en ${appName}`, from: currentUserDisplay } });
-      toast('🆘 Ayuda solicitada', 'warning');
+      toast('🆘 Señal enviada a todos los que tienen la app abierta', 'warning');
     });
   }
   if (sneezeBtn) {
-    sneezeBtn.addEventListener('click', () => {
-      _notifChannel.send({ type: 'broadcast', event: 'alert', payload: { emoji: '🤧', msg: 'Mensaje de admin', from: currentUserDisplay } });
-      toast('🤧 Enviado a todos', 'success');
+    sneezeBtn.addEventListener('click', async () => {
+      await requestNotifPermission();
+      _notifChannel.send({ type: 'broadcast', event: 'alert', payload: { emoji: '🤧', msg: '¡Atención de admin!', from: currentUserDisplay } });
+      toast('🤧 Señal enviada a todos los que tienen la app abierta', 'success');
     });
   }
+
+  // Mostrar estado de notificaciones del sistema en consola
+  console.log(`[Notif] Permiso: ${Notification?.permission ?? 'no disponible'}`);
 }
