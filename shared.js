@@ -46,6 +46,33 @@ function showSetupRequired() {
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 let _currentUser = null;
 
+// Redirige al app correspondiente según el rol del usuario
+function redirectToRoleApp(role) {
+  const routes = {
+    bar:   '/',
+    door:  '/portero.html',
+    admin: '/admin.html',
+  };
+  const target = routes[role];
+  if (!target) { window.location.reload(); return; }
+
+  // Evitar redirección infinita si ya estamos en la página correcta
+  const path = window.location.pathname;
+  const onBar   = path === '/' || path.endsWith('/index.html');
+  const onDoor  = path.endsWith('/portero.html');
+  const onAdmin = path.endsWith('/admin.html');
+
+  if (
+    (target === '/'              && onBar)  ||
+    (target === '/portero.html'  && onDoor) ||
+    (target === '/admin.html'    && onAdmin)
+  ) {
+    window.location.reload();
+  } else {
+    window.location.href = target;
+  }
+}
+
 async function requireAuth(allowedRoles) {
   const db = getDb();
   const { data: { session } } = await db.auth.getSession();
@@ -69,8 +96,8 @@ async function requireAuth(allowedRoles) {
 
   const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
   if (!roles.includes(profile.role) && profile.role !== 'admin') {
-    showAuthError(`Tu rol (${profile.role}) no tiene acceso a esta app.`);
-    await db.auth.signOut();
+    // En vez de mostrar error, redirigir al app correcto para este rol
+    redirectToRoleApp(profile.role);
     return null;
   }
 
@@ -90,7 +117,8 @@ async function signIn(email, password) {
 async function signOut() {
   const db = getDb();
   await db.auth.signOut();
-  window.location.reload();
+  // Siempre volver al inicio (login unificado) al cerrar sesión
+  window.location.href = '/';
 }
 
 function showAuthError(msg) {
@@ -106,9 +134,8 @@ function showAuthError(msg) {
 }
 
 function showLoginModal(allowedRoles) {
-  const roleLabels = { bar: 'Barra', door: 'Portero', admin: 'Admin' };
-  const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
-  const label = roles.map(r => roleLabels[r] || r).join(' / ');
+  // Label genérico: cualquier usuario puede ingresar desde cualquier página
+  const label = 'Iniciá sesión';
 
   document.body.innerHTML = `
     <div class="login-screen">
@@ -119,7 +146,8 @@ function showLoginModal(allowedRoles) {
         </div>
         <p class="login-role">${label}</p>
         <form id="loginForm" autocomplete="off">
-          <input type="email" id="loginEmail" placeholder="Email" required autocomplete="email" />
+          <input type="text" id="loginEmail" placeholder="Nombre o email" required autocomplete="username"
+            inputmode="email" style="text-transform:none" />
           <input type="password" id="loginPassword" placeholder="Contraseña" required autocomplete="current-password" />
           <button type="submit" id="loginBtn">Ingresar</button>
           <p id="loginError" class="login-error"></p>
@@ -129,19 +157,49 @@ function showLoginModal(allowedRoles) {
 
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const btn = document.getElementById('loginBtn');
-    const errEl = document.getElementById('loginError');
+    const btn    = document.getElementById('loginBtn');
+    const errEl  = document.getElementById('loginError');
     btn.disabled = true;
     btn.textContent = 'Ingresando…';
     errEl.textContent = '';
+
     try {
-      await signIn(
-        document.getElementById('loginEmail').value,
-        document.getElementById('loginPassword').value
-      );
-      window.location.reload();
+      let identifier = document.getElementById('loginEmail').value.trim();
+      const password  = document.getElementById('loginPassword').value;
+
+      // Si no parece un email, buscar el email por nombre de usuario
+      if (!identifier.includes('@')) {
+        btn.textContent = 'Buscando usuario…';
+        const resp = await fetch(`/api/lookup-email?name=${encodeURIComponent(identifier)}`);
+        const data = await resp.json();
+        if (!resp.ok || !data.email) {
+          throw new Error('Usuario no encontrado. Verificá el nombre o usá tu email.');
+        }
+        identifier = data.email;
+      }
+
+      await signIn(identifier, password);
+      // Obtener el rol del usuario para redirigir al app correcto
+      const db2 = getDb();
+      const { data: { user: authUser } } = await db2.auth.getUser();
+      if (authUser) {
+        const { data: prof } = await db2
+          .from('profiles')
+          .select('role')
+          .eq('id', authUser.id)
+          .single();
+        redirectToRoleApp(prof?.role || 'bar');
+      } else {
+        window.location.reload();
+      }
     } catch (err) {
-      errEl.textContent = err.message.includes('Invalid') ? 'Email o contraseña incorrectos' : err.message;
+      const msg = err.message || '';
+      errEl.textContent =
+        msg.includes('Invalid') || msg.includes('credentials')
+          ? 'Contraseña incorrecta'
+          : msg.includes('not found') || msg.includes('no encontrado')
+            ? 'Usuario no encontrado. Verificá el nombre o usá tu email.'
+            : msg;
       btn.disabled = false;
       btn.textContent = 'Ingresar';
     }
