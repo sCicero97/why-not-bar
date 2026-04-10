@@ -111,11 +111,56 @@ values ('UUID_DEL_USUARIO', 'admin', 'Administrador');
 
 ---
 
-## Paso 8 — Deploy en Vercel
+## Paso 8 — Configurar Web Push (notificaciones en dispositivos bloqueados)
+
+### ¿Qué hace?
+Cuando alguien toca el botón 🆘 (Barra) o 🤧 (Admin), la alerta llega a **todos los teléfonos del staff** como notificación push, aunque el teléfono esté bloqueado o la app esté cerrada.
+
+### Cómo funciona
+1. Cada vez que alguien abre la app, el navegador crea una "suscripción push" que se guarda en Supabase.
+2. Al enviar una alerta, la app llama a `/api/send-push` (Vercel).
+3. Vercel envía la notificación a todos los dispositivos suscritos vía Web Push API.
+
+### Setup (una sola vez)
+
+**8a. Ejecutar la migración SQL en Supabase:**
+```sql
+-- Ir a Supabase → SQL Editor y ejecutar el contenido actualizado de schema.sql
+-- (la tabla push_subscriptions ya está incluida al final del archivo)
+```
+
+**8b. Agregar variables de entorno en Vercel:**
+
+Ir a Vercel → tu proyecto → Settings → Environment Variables y agregar:
+
+| Nombre | Valor |
+|--------|-------|
+| `SUPABASE_URL` | `https://snsmgezzqchwlwaramcz.supabase.co` |
+| `SUPABASE_SERVICE_KEY` | Tu **Service Role Key** de Supabase → Settings → API → `service_role` (la clave larga) |
+| `VAPID_PUBLIC_KEY` | `BO47pb3rswPO0Qkzp05k30WH8kQjJkG9IvloCIqlhtA5geOwvXYoMR9Ea3HOcC5dCgliiEDNHOKZjR7hpm4TELc` |
+| `VAPID_PRIVATE_KEY` | `0laYq3tS0bYVczqt6LEqbdQEvuLKSWJk1c_tyUoWI6M` |
+
+> ⚠️ **IMPORTANTE:** La `VAPID_PRIVATE_KEY` y la `SUPABASE_SERVICE_KEY` son secretas. Nunca las pongas en el código cliente.
+
+**8c. ¿Funciona en iOS?**
+- ✅ Android (Chrome, Firefox, Edge): funciona automáticamente
+- ✅ iOS 16.4+: funciona **solo si la app está instalada en el Home Screen** (Safari → Compartir → Agregar a inicio)
+- ❌ iOS en Safari sin instalar: no recibe push (limitación de Apple)
+
+### Verificar que funciona
+1. Abrir la app en el teléfono → aceptar el permiso de notificaciones
+2. Cerrar la app o bloquear el teléfono
+3. Desde otro dispositivo, tocar el botón 🆘
+4. El teléfono bloqueado debería recibir la notificación
+
+---
+
+## Paso 9 (antes Paso 8) — Deploy en Vercel
 
 1. Asegurarse de que `shared.js` tenga las credenciales correctas
-2. Push al repositorio Git
-3. Vercel re-deploya automáticamente
+2. Asegurarse de configurar las variables de entorno del Paso 8b
+3. Push al repositorio Git
+4. Vercel re-deploya automáticamente
 
 ### URLs de cada app:
 

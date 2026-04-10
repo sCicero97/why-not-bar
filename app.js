@@ -122,8 +122,12 @@ function renderAccounts() {
   }
 
   for (const acc of filtered) {
-    const id   = padId(acc.slot);
-    const name = acc.attendees?.name || '';
+    const id      = padId(acc.slot);
+    const name    = acc.attendees?.name || '';
+    // Buscar el cierre correspondiente para mostrar foto de pago
+    const closure = acc.is_closed ? closures.find(c => c.slot === acc.slot) : null;
+    const photoUrl = closure?.payment_photo_url || null;
+
     const card = document.createElement('article');
     card.className = `account-card ${acc.is_closed ? 'is-closed' : ''} ${!acc.is_closed && acc.total > 0 ? 'has-balance' : ''}`;
     card.innerHTML = `
@@ -140,16 +144,28 @@ function renderAccounts() {
         <div class="pill">260: <strong>${acc.qty260}</strong></div>
         <div class="pill">360: <strong>${acc.qty360}</strong></div>
       </div>
-      ${acc.is_closed ? '' : `
-      <div class="account-actions">
-        <button class="action-btn btn-160" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="160">+160<span class="hold-bar"></span></button>
-        <button class="action-btn btn-260" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="260">+260<span class="hold-bar"></span></button>
-        <button class="action-btn btn-360" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="360">+360<span class="hold-bar"></span></button>
-        <button class="action-btn btn-close ${acc.total === 0 ? 'hidden' : ''}" data-id="${acc.id}" data-slot="${acc.slot}" data-close="1">Cerrar<span class="hold-bar"></span></button>
-      </div>`}
+      ${acc.is_closed
+        ? `<div class="account-actions" style="justify-content:flex-start">
+             ${photoUrl
+               ? `<button class="action-btn btn-photo" data-photo="${photoUrl}" style="background:#1e3a5f;border-color:#2563eb;color:#93c5fd;font-size:13px">📸 Ver comprobante</button>`
+               : `<span style="font-size:12px;color:var(--muted);padding:6px 4px">Sin foto de pago</span>`
+             }
+           </div>`
+        : `<div class="account-actions">
+             <button class="action-btn btn-160" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="160">+160<span class="hold-bar"></span></button>
+             <button class="action-btn btn-260" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="260">+260<span class="hold-bar"></span></button>
+             <button class="action-btn btn-360" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="360">+360<span class="hold-bar"></span></button>
+             <button class="action-btn btn-close ${acc.total === 0 ? 'hidden' : ''}" data-id="${acc.id}" data-slot="${acc.slot}" data-close="1">Cerrar<span class="hold-bar"></span></button>
+           </div>`
+      }
     `;
     wrap.appendChild(card);
   }
+
+  // Listener para botones de foto (delegación de eventos)
+  wrap.querySelectorAll('.btn-photo').forEach(btn => {
+    btn.addEventListener('click', () => showPaymentPhotoModal(btn.dataset.photo));
+  });
 }
 
 function renderPaidTable() {
@@ -172,6 +188,29 @@ function renderPaidTable() {
     `;
     tbody.appendChild(tr);
   }
+}
+
+// ─── Lightbox de foto de pago ─────────────────────────────────────────────────
+function showPaymentPhotoModal(url) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:99999;
+    display:flex;align-items:center;justify-content:center;
+    animation:fadeInUp .15s ease;
+  `;
+  overlay.innerHTML = `
+    <div style="position:relative;max-width:92vw;max-height:92vh">
+      <img src="${url}" alt="Comprobante de pago"
+        style="max-width:100%;max-height:88vh;border-radius:14px;display:block;box-shadow:0 8px 40px rgba(0,0,0,.6)">
+      <button id="closePhotoModal"
+        style="position:absolute;top:-14px;right:-14px;width:34px;height:34px;
+          border-radius:50%;background:#ef4444;border:none;color:#fff;
+          font-size:18px;cursor:pointer;font-weight:bold;line-height:1">✕</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#closePhotoModal').onclick = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
 
 // ─── Hold interaction ─────────────────────────────────────────────────────────
@@ -376,6 +415,13 @@ function setupUI() {
   });
   document.getElementById('clearSearchBtn').addEventListener('click', () => {
     document.getElementById('searchInput').value = '';
+    renderAccounts();
+  });
+
+  // Toggle: mostrar/ocultar cuentas cerradas
+  document.getElementById('toggleClosedBtn').addEventListener('click', () => {
+    showClosed = !showClosed;
+    document.getElementById('toggleClosedBtn').textContent = showClosed ? '👁 Ocultar cerradas' : '👁 Ver cerradas';
     renderAccounts();
   });
 

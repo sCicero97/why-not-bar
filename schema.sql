@@ -269,6 +269,22 @@ begin
 end;
 $$;
 
+-- ─── Suscripciones Web Push ──────────────────────────────────────────────────
+create table if not exists push_subscriptions (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  endpoint     text not null,
+  subscription jsonb not null,
+  created_at   timestamptz default now(),
+  unique(endpoint)
+);
+
+alter table push_subscriptions enable row level security;
+
+-- Cada usuario maneja sus propias suscripciones
+create policy "Users manage own push subs" on push_subscriptions
+  for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 -- ─── Auto-crear perfil al registrar usuario ───────────────────────────────────
 create or replace function handle_new_user()
 returns trigger language plpgsql security definer as $$

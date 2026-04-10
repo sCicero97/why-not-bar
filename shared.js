@@ -3,22 +3,15 @@
 // Incluir ANTES de app.js / portero.js / admin.js
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ─── Debug: muestra errores JS en pantalla en vez de negro ───────────────────
-window.addEventListener('error', (e) => {
-  document.body.style.cssText = 'background:#0b0b0b;color:#fff;padding:24px;font-family:monospace;font-size:14px';
-  document.body.innerHTML = `<h2 style="color:#ef4444;margin:0 0 12px">❌ Error JS</h2>
-    <div style="color:#fbbf24;word-break:break-all;margin-bottom:8px">${e.message}</div>
-    <div style="color:#a0a0a0;font-size:12px">${e.filename?.split('/').pop() || ''}:${e.lineno}</div>`;
-});
-window.addEventListener('unhandledrejection', (e) => {
-  document.body.style.cssText = 'background:#0b0b0b;color:#fff;padding:24px;font-family:monospace;font-size:14px';
-  document.body.innerHTML = `<h2 style="color:#ef4444;margin:0 0 12px">❌ Error async</h2>
-    <div style="color:#fbbf24;word-break:break-all">${e.reason}</div>`;
-});
 
 // ─── ⚠️  COMPLETAR CON TUS VALORES DE SUPABASE ───────────────────────────────
 const SUPABASE_URL      = 'https://snsmgezzqchwlwaramcz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable__CVaQps15sZM9sBtU2vzaw_0lSbKcJU';
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── VAPID Public Key (Web Push) ──────────────────────────────────────────────
+// Generada junto con VAPID_PRIVATE_KEY (que solo vive en Vercel como env var).
+const VAPID_PUBLIC_KEY = 'BO47pb3rswPO0Qkzp05k30WH8kQjJkG9IvloCIqlhtA5geOwvXYoMR9Ea3HOcC5dCgliiEDNHOKZjR7hpm4TELc';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STORAGE_BUCKET = 'payment-photos';
@@ -344,6 +337,81 @@ function setupUserDropdown() {
   document.addEventListener('click', () => menu.classList.remove('open'));
 }
 
+// ─── Web Push: suscripción ─────────────────────────────────────────────────────
+async function registerPushServiceWorker() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  try {
+    // Registrar (o recuperar) el service worker
+    let reg = await navigator.serviceWorker.getRegistration('./');
+    if (!reg) {
+      reg = await navigator.serviceWorker.register('./service-worker.js');
+      await navigator.serviceWorker.ready;
+    }
+    return reg;
+  } catch (e) {
+    console.warn('[Push] SW registration failed:', e.message);
+    return null;
+  }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+async function subscribeToPush() {
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return;
+
+    const reg = await registerPushServiceWorker();
+    if (!reg) return;
+
+    // Suscribir al Push Manager
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+
+    // Guardar en Supabase (el usuario debe estar autenticado)
+    const db = getDb();
+    const { data: { user } } = await db.auth.getUser();
+    if (!user) return;
+
+    await db.from('push_subscriptions').upsert({
+      user_id: user.id,
+      endpoint: subscription.endpoint,
+      subscription: subscription.toJSON(),
+    }, { onConflict: 'endpoint' });
+
+    console.log('[Push] Suscripción guardada correctamente.');
+  } catch (e) {
+    console.warn('[Push] subscribeToPush error:', e.message);
+  }
+}
+
+// Envía push a todos los dispositivos vía Vercel /api/send-push
+async function sendPushToAll(title, body, tag = 'whynot-alert') {
+  try {
+    const db = getDb();
+    const { data: { session } } = await db.auth.getSession();
+    if (!session?.access_token) return;
+
+    await fetch('/api/send-push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ title, body, tag }),
+    });
+  } catch (e) {
+    console.warn('[Push] sendPushToAll error:', e.message);
+  }
+}
+
 // ─── Notification broadcast ────────────────────────────────────────────────────
 let _notifChannel = null;
 
@@ -392,21 +460,24 @@ async function requestNotifPermission() {
 }
 
 function setupNotifChannel(appName, currentUserDisplay) {
-  // Solicitar permiso de notificaciones del sistema
-  requestNotifPermission();
+  // Solicitar permiso de notificaciones del sistema y suscribir al Web Push
+  requestNotifPermission().then(granted => {
+    if (granted) subscribeToPush();
+  });
 
   const db = getDb();
   _notifChannel = db.channel('app-notifications')
     .on('broadcast', { event: 'alert' }, ({ payload }) => {
       if (payload.from !== currentUserDisplay) {
         alertToast(`${payload.emoji} ${payload.from}: ${payload.msg}`);
+        // Mostrar notificación del sistema si la app está en el foco
         if (Notification.permission === 'granted') {
           try {
             new Notification(`${payload.emoji} ${payload.msg}`, {
               body: `Enviado por: ${payload.from}`,
               icon: './Logo.png',
               tag: 'whynot-alert',
-              requireInteraction: true,  // No desaparece sola
+              requireInteraction: true,
             });
           } catch(e) {}
         }
@@ -420,18 +491,25 @@ function setupNotifChannel(appName, currentUserDisplay) {
   if (helpBtn) {
     helpBtn.addEventListener('click', async () => {
       await requestNotifPermission();
-      _notifChannel.send({ type: 'broadcast', event: 'alert', payload: { emoji: '🆘', msg: `Necesita ayuda en ${appName}`, from: currentUserDisplay } });
-      toast('🆘 Señal enviada a todos los que tienen la app abierta', 'warning');
+      const msg = `Necesita ayuda en ${appName}`;
+      // Realtime (dispositivos con app abierta)
+      _notifChannel.send({ type: 'broadcast', event: 'alert',
+        payload: { emoji: '🆘', msg, from: currentUserDisplay } });
+      // Web Push (dispositivos bloqueados / app cerrada)
+      sendPushToAll(`🆘 ${currentUserDisplay}`, msg, 'whynot-sos');
+      toast('🆘 Señal enviada a todos los dispositivos', 'warning');
     });
   }
   if (sneezeBtn) {
     sneezeBtn.addEventListener('click', async () => {
       await requestNotifPermission();
-      _notifChannel.send({ type: 'broadcast', event: 'alert', payload: { emoji: '🤧', msg: '¡Atención de admin!', from: currentUserDisplay } });
-      toast('🤧 Señal enviada a todos los que tienen la app abierta', 'success');
+      const msg = '¡Atención de admin!';
+      _notifChannel.send({ type: 'broadcast', event: 'alert',
+        payload: { emoji: '🤧', msg, from: currentUserDisplay } });
+      sendPushToAll(`🤧 ${currentUserDisplay}`, msg, 'whynot-admin');
+      toast('🤧 Señal enviada a todos los dispositivos', 'success');
     });
   }
 
-  // Mostrar estado de notificaciones del sistema en consola
   console.log(`[Notif] Permiso: ${Notification?.permission ?? 'no disponible'}`);
 }
