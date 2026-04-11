@@ -35,6 +35,7 @@ async function init() {
     await loadAll();
     setupRealtime();
     setupUI();
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(() => {});
   } catch (e) {
     if (e.message !== 'SETUP_REQUIRED') console.error('Admin init error:', e);
   }
@@ -152,6 +153,24 @@ function renderAttendeesTable() {
   const search = document.getElementById('attSearch')?.value?.toLowerCase() || '';
   const statusF = document.getElementById('attStatusFilter')?.value || '';
 
+  // Contadores por estado
+  const counters = document.getElementById('attStatusCounters');
+  if (counters) {
+    const cfg = [
+      { key: 'paid',       label: 'Pago',       color: '#1ed760', bg: '#0d1f0d', border: '#1a3a1a' },
+      { key: 'in_process', label: 'En proceso',  color: '#f59e0b', bg: '#1f1900', border: '#3a2e00' },
+      { key: 'invited',    label: 'Invitado',    color: '#3b82f6', bg: '#0d1420', border: '#1a2a3a' },
+      { key: 'crew',       label: 'Crew',        color: '#8b5cf6', bg: '#130d1f', border: '#2a1a3a' },
+    ];
+    counters.innerHTML = cfg.map(c => {
+      const n = attendees.filter(a => a.status === c.key).length;
+      return `<div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
+        <span style="font-size:22px;font-weight:bold;color:${c.color}">${n}</span>
+        <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+      </div>`;
+    }).join('');
+  }
+
   let list = attendees.filter(a => {
     if (search && !(`${a.name} ${a.cedula || ''} ${a.email || ''}`).toLowerCase().includes(search)) return false;
     if (statusF && a.status !== statusF) return false;
@@ -159,8 +178,8 @@ function renderAttendeesTable() {
   });
 
   // Ordenar por estado: paid, in_process, crew, invited
-  const statusOrder = { 'paid': 0, 'in_process': 1, 'crew': 2, 'invited': 3, 'no_show': 4 };
-  list.sort((a, b) => (statusOrder[a.status] || 5) - (statusOrder[b.status] || 5));
+  const statusOrder = { 'paid': 0, 'in_process': 1, 'crew': 2, 'invited': 3 };
+  list.sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
 
   const tbody = document.getElementById('attendeesBody');
   if (!tbody) return;
@@ -173,7 +192,7 @@ function renderAttendeesTable() {
       <td><div class="att-name-cell" title="Doble click para editar">${att.name}</div></td>
       <td>
         <select class="status-select inline-select status-${att.status}" data-id="${att.id}" data-field="status" onchange="updateAttendeeField('${att.id}','status',this.value)">
-          ${['invited','crew','in_process','paid','no_show'].map(s =>
+          ${['invited','crew','in_process','paid'].map(s =>
             `<option value="${s}" ${att.status===s?'selected':''} style="background:#1c1c1c">${statusLabel(s)}</option>`
           ).join('')}
         </select>
@@ -202,7 +221,9 @@ function renderAttendeesTable() {
 // ─── Bar accounts table ───────────────────────────────────────────────────────
 function renderBarTable() {
   const filter = document.getElementById('barFilter')?.value || 'all';
+  // Solo mostrar cuentas asignadas a un asistente
   let list = barAccounts.filter(a => {
+    if (!a.attendee_id) return false;  // sin asistente → ocultar
     if (filter === 'open')    return !a.is_closed && a.total > 0;
     if (filter === 'empty')   return !a.is_closed && a.total === 0;
     if (filter === 'closed')  return a.is_closed;
@@ -221,11 +242,13 @@ function renderBarTable() {
       <td><strong>${formatMoney(acc.total)}</strong></td>
       <td>${acc.qty160}</td><td>${acc.qty260}</td><td>${acc.qty360}</td>
       <td>${acc.is_closed
-        ? '<span class="status-pill" style="background:#3a202022;color:#f87171">Cerrada</span>'
+        ? '<span class="status-pill" style="background:#1a3a1a;color:#1ed760">Cerrada</span>'
         : acc.total > 0
           ? '<span class="status-pill" style="background:#3a2e0022;color:#fbbf24">Con saldo</span>'
           : '<span class="status-pill" style="background:#1c1c1c;color:#6b7280">Vacía</span>'
       }</td>
+      <td style="font-size:13px">${closure?.closed_by || '—'}</td>
+      <td style="font-size:12px;color:var(--muted)">${closure?.closed_at ? new Date(closure.closed_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td>${!acc.is_closed && acc.total > 0
         ? `<button class="btn btn-sm btn-primary" onclick="adminCloseBarAccount('${acc.id}',${acc.slot})">💳 Cobrar</button>`
         : acc.is_closed
@@ -237,7 +260,7 @@ function renderBarTable() {
         : '—'
       }</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="9" class="empty-state">Sin cuentas. Inicializá el evento.</td></tr>';
+  }).join('') || '<tr><td colspan="11" class="empty-state">Sin cuentas asignadas.</td></tr>';
 }
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
@@ -343,7 +366,7 @@ function openAddAttendee() {
         <div class="form-group"><label>Cédula</label><input name="cedula"/></div>
         <div class="form-group"><label>Email</label><input name="email" type="email"/></div>
         <div class="form-group"><label>Teléfono</label><input name="phone"/></div>
-        <div class="form-group"><label>Pago entrada $</label><input name="entry_amount" type="number" min="0" value="0"/></div>
+        <div class="form-group"><label>Pago entrada $</label><input name="entry_amount" type="number" min="0" value="700"/></div>
         <div class="form-group"><label>Notas</label><input name="notes"/></div>
       </div>
       <div style="display:flex;gap:10px;margin-top:16px">
@@ -352,6 +375,16 @@ function openAddAttendee() {
       </div>
     </form>
   `);
+  // Precio automático según estado
+  document.querySelector('#attForm [name=status]').addEventListener('change', function () {
+    const amountInput = document.querySelector('#attForm [name=entry_amount]');
+    if (this.value === 'invited' || this.value === 'crew') {
+      amountInput.value = 0;
+    } else if (amountInput.value == 0) {
+      amountInput.value = 700;
+    }
+  });
+
   const submitBtn = document.querySelector('#attForm button[type=submit]');
   document.getElementById('attForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -395,7 +428,7 @@ function openEditAttendee(id) {
         <div class="form-group"><label>Nombre *</label><input name="name" value="${att.name || ''}" required/></div>
         <div class="form-group"><label>Estado</label>
           <select name="status">
-            ${['invited','crew','in_process','paid','no_show'].map(s=>`<option value="${s}" ${att.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
+            ${['invited','crew','in_process','paid'].map(s=>`<option value="${s}" ${att.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
           </select>
         </div>
         <div class="form-group"><label>Cuenta barra #</label><input name="bar_account_slot" type="number" value="${att.bar_account_slot||''}"/></div>
@@ -1039,6 +1072,16 @@ function showReminder(task) {
     new Notification(`⏰ ${task.name}`, { body: 'Recordatorio de tarea del evento', icon: './Logo.png' });
   }
   toast(`⏰ Recordatorio: ${task.name}`, 'warning');
+
+  // Tareas asignadas a "Todos" (assigned_to = null) → push a todos los admins
+  if (!task.assigned_to) {
+    sendPushToAll(`⏰ ${task.name}`, 'Recordatorio de tarea — Why Not', 'whynot-task', 'admin');
+    // También broadcast in-app para admins conectados
+    if (_notifChannel) {
+      _notifChannel.send({ type: 'broadcast', event: 'alert',
+        payload: { emoji: '⏰', msg: task.name, from: 'Sistema', target: 'admin' } });
+    }
+  }
 }
 
 async function checkTask(taskId) {
