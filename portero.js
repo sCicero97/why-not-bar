@@ -138,18 +138,18 @@ function renderList() {
     const canExit     = att.entered && !att.exit_time && (!hasBalance || !canCharge);
     const alreadyOut  = !!att.exit_time;
 
-    // No pagó = no es "paid" ni "crew"
-    const unpaid = att.status !== 'paid' && att.status !== 'crew';
+    // Tiene consumo en barra sin pagar
+    const hasUnpaidBar = barAcc && !barAcc.is_closed && barAcc.total > 0;
 
     const card = document.createElement('div');
-    card.className = `att-card ${att.entered ? (alreadyOut ? 'att-exited' : 'att-inside') : 'att-pending'} ${unpaid ? 'att-unpaid' : ''}`;
+    card.className = `att-card ${att.entered ? (alreadyOut ? 'att-exited' : 'att-inside') : 'att-pending'} ${hasUnpaidBar ? 'att-unpaid' : ''}`;
 
     card.innerHTML = `
       <div class="att-main" data-id="${att.id}">
         <div class="att-info">
           <div class="att-name">
             ${att.name}
-            ${unpaid ? '<span class="att-tag att-tag-unpaid">⚠ No pagó</span>' : ''}
+            ${hasUnpaidBar ? `<span class="att-tag att-tag-unpaid">⚠ Debe ${formatMoney(barAcc.total)}</span>` : ''}
           </div>
           <div class="att-meta">
             ${att.bar_account_slot ? `<span class="att-bar-num" style="font-size:18px;font-weight:bold"># ${padId(att.bar_account_slot)}</span>` : ''}
