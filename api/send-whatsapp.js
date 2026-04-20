@@ -16,8 +16,12 @@ module.exports = async (req, res) => {
   const token  = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
+  // DEBUG TEMPORAL — sacar después
+  console.log('[Telegram] token:', token ? token.slice(0,10)+'...' : 'FALTA');
+  console.log('[Telegram] chatId:', chatId || 'FALTA');
+
   if (!token || !chatId) {
-    return res.json({ ok: true, sent: 0, reason: 'Telegram no configurado' });
+    return res.json({ ok: true, sent: 0, reason: 'Telegram no configurado', debug: { token: !!token, chatId: !!chatId } });
   }
 
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
@@ -28,6 +32,7 @@ module.exports = async (req, res) => {
   });
 
   const result = await response.json();
-  if (!result.ok) return res.status(500).json({ error: result.description });
+  console.log('[Telegram] result:', JSON.stringify(result));
+  if (!result.ok) return res.status(500).json({ error: result.description, debug: { chatId, tokenStart: token.slice(0,10) } });
   res.json({ ok: true, sent: 1 });
 };
