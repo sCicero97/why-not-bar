@@ -629,6 +629,7 @@ function setupNotifChannel(appName, currentUserDisplay) {
 // Retorna { method: 'transfer'|'cash', cashReceived, changeGiven }
 // o null si el usuario cancela.
 async function showPaymentMethodSelector(totalAmount) {
+  injectCameraStyles();
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'camera-overlay';

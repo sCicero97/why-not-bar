@@ -86,7 +86,7 @@ button{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touc
 .pill{background:var(--panel-2);border:1px solid var(--line);padding:8px 12px;border-radius:999px;color:var(--muted);font-size:14px}
 
 .account-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.action-btn{position:relative;overflow:hidden;border:none;border-radius:14px;padding:16px 10px;color:#fff;font-weight:bold;font-size:20px;cursor:pointer;min-height:64px;transition:filter .1s,outline .1s}
+.action-btn{position:relative;overflow:hidden;border:none;border-radius:14px;padding:16px 10px;color:#fff;font-weight:bold;font-size:20px;cursor:pointer;min-height:64px;transition:filter .1s,outline .1s;touch-action:none;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 .btn-160{background:var(--blue)}.btn-260{background:var(--orange)}.btn-360{background:var(--purple)}
 .btn-close{background:var(--green);color:#06130a}
 
