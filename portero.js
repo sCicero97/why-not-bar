@@ -33,6 +33,7 @@ async function init() {
     await loadData();
     setupRealtime();
     setupUI();
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(() => {});
   } catch (e) {
     if (e.message !== 'SETUP_REQUIRED') console.error('Portero init error:', e);
   }
@@ -85,8 +86,11 @@ function setupRealtime() {
       })
     .subscribe();
 
-  // Polling fallback: reload data every 8s para mantener info siempre fresca
+  // Polling de respaldo cada 8s
   setInterval(() => loadData(), 8000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') loadData();
+  });
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -225,10 +229,16 @@ async function doExit(attendeeId) {
 
 // ─── Close bar account (from door) ───────────────────────────────────────────
 async function doCloseBarAccount(barAccountId, slot) {
-  const photoBlob = await openCamera();
+  const barAcc = barAccounts.find(b => b.id === barAccountId);
+  const total  = Number(barAcc?.total || 0);
+
+  const payment = await showPaymentMethodSelector(total);
+  if (!payment) return;
+
   let photoUrl = null;
-  if (photoBlob) {
-    photoUrl = await uploadPaymentPhoto(photoBlob, activeEvent.id, slot);
+  if (payment.method === 'transfer') {
+    const photoBlob = await openCamera();
+    if (photoBlob) photoUrl = await uploadPaymentPhoto(photoBlob, activeEvent.id, slot);
   }
 
   const db = getDb();
@@ -242,6 +252,17 @@ async function doCloseBarAccount(barAccountId, slot) {
     toast(data?.error || error?.message || 'Error al cobrar', 'error');
     return;
   }
+
+  // Guardar método de pago (columnas opcionales, falla silenciosamente si no existen)
+  db.from('bar_closures').select('id').eq('event_id', activeEvent.id).eq('slot', slot)
+    .order('closed_at', { ascending: false }).limit(1).single()
+    .then(({ data: c }) => {
+      if (c) db.from('bar_closures').update({
+        payment_method: payment.method,
+        cash_received:  payment.cashReceived,
+        change_given:   payment.changeGiven,
+      }).eq('id', c.id).then(() => {}).catch(() => {});
+    });
 
   toast(`Cuenta ${padId(slot)} cobrada — ${formatMoney(data.total)}`, 'success');
 

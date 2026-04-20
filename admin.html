@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Why Not — Admin</title>
   <meta name="theme-color" content="#0b0b0b"/>
+  <link rel="manifest" href="./admin-manifest.webmanifest"/>
   <link rel="icon" href="./Logo.png" type="image/png"/>
+  <link rel="apple-touch-icon" href="./Logo.png"/>
   <link rel="stylesheet" href="./styles.css"/>
   <link rel="stylesheet" href="./admin-styles.css"/>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -107,6 +109,9 @@
 
   <!-- ── Asistentes ────────────────────────────────────────── -->
   <section id="tab-asistentes" class="tab-panel">
+    <!-- Contadores por estado -->
+    <div id="attStatusCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+
     <div class="admin-toolbar">
       <input id="attSearch" type="text" placeholder="Buscar nombre, cédula…" class="admin-search"/>
       <select id="attStatusFilter" class="admin-select">
@@ -115,9 +120,9 @@
         <option value="crew">Crew</option>
         <option value="in_process">En proceso</option>
         <option value="paid">Pago</option>
-        <option value="no_show">No vino</option>
       </select>
       <button id="addAttendeeBtn" class="btn btn-primary btn-sm">+ Agregar</button>
+      <button id="toggleGroupBtn" class="btn btn-sm"># Ordenar por cuenta</button>
     </div>
 
     <div class="admin-table-wrap">
@@ -156,7 +161,7 @@
     </div>
     <div class="admin-table-wrap">
       <table class="admin-table">
-        <thead><tr><th>#</th><th>Nombre vinculada</th><th>Total</th><th>160</th><th>260</th><th>360</th><th>Estado</th><th>Acción</th><th>Foto</th></tr></thead>
+        <thead><tr><th>#</th><th>Nombre vinculada</th><th>Total</th><th>160</th><th>260</th><th>360</th><th>Estado</th><th>Cobrado por</th><th>Hora</th><th>Pago</th><th>Acción</th><th>Foto</th></tr></thead>
         <tbody id="barAccountsBody"></tbody>
       </table>
     </div>

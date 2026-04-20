@@ -79,7 +79,17 @@ function setupRealtime() {
         filter: `event_id=eq.${activeEvent.id}` }, reloadFromDB)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'bar_closures',
         filter: `event_id=eq.${activeEvent.id}` }, reloadFromDB)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'attendees',
+        filter: `event_id=eq.${activeEvent.id}` }, reloadFromDB)
     .subscribe();
+
+  // Polling de respaldo cada 8s (por si el realtime se cae)
+  setInterval(() => loadData(), 8000);
+
+  // Recargar cuando la pantalla vuelve al foco (ej: se desbloquea el teléfono)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') loadData();
+  });
 }
 
 function renderIfNotHolding() {
@@ -332,14 +342,21 @@ async function doSubtractDrink(accountId, amount) {
 }
 
 async function doCloseAccount(accountId, slot) {
-  // 1. Abrir cámara
-  const photoBlob = await openCamera();
+  const acc   = accounts.find(a => a.id === accountId);
+  const total = Number(acc?.total || 0);
+
+  // 1. Seleccionar método de pago
+  const payment = await showPaymentMethodSelector(total);
+  if (!payment) return; // cancelado
+
+  // 2. Si es transferencia → abrir cámara
   let photoUrl = null;
-  if (photoBlob) {
-    photoUrl = await uploadPaymentPhoto(photoBlob, activeEvent.id, slot);
+  if (payment.method === 'transfer') {
+    const photoBlob = await openCamera();
+    if (photoBlob) photoUrl = await uploadPaymentPhoto(photoBlob, activeEvent.id, slot);
   }
 
-  // 2. Cerrar en DB
+  // 3. Cerrar en DB
   const db = getDb();
   const { data, error } = await db.rpc('close_bar_account', {
     p_account_id: accountId,
@@ -352,22 +369,31 @@ async function doCloseAccount(accountId, slot) {
     return;
   }
 
-  // Actualizar local inmediatamente
-  const idx = accounts.findIndex(a => a.id === accountId);
-  if (idx >= 0) accounts[idx].is_closed = true;
-  toast(`Cuenta ${padId(slot)} cerrada — ${formatMoney(data.total)}`, 'success');
-  renderAll();
-
-  // Recargar cierres
-  const { data: newClosure } = await db.from('bar_closures')
-    .select('*, attendees(name)')
+  // 4. Guardar método de pago en el closure (columnas opcionales)
+  const { data: newClosureRow } = await db.from('bar_closures')
+    .select('id, *, attendees(name)')
     .eq('event_id', activeEvent.id)
     .eq('slot', slot)
     .order('closed_at', { ascending: false })
     .limit(1)
     .single();
-  if (newClosure) closures.unshift(newClosure);
-  renderPaidTable();
+
+  if (newClosureRow) {
+    // Intentar guardar datos de pago (requiere migration, falla silenciosamente si no existen)
+    db.from('bar_closures').update({
+      payment_method: payment.method,
+      cash_received:  payment.cashReceived,
+      change_given:   payment.changeGiven,
+    }).eq('id', newClosureRow.id).then(() => {}).catch(() => {});
+
+    closures.unshift(newClosureRow);
+  }
+
+  // 5. Actualizar UI
+  const idx = accounts.findIndex(a => a.id === accountId);
+  if (idx >= 0) accounts[idx].is_closed = true;
+  toast(`Cuenta ${padId(slot)} cerrada — ${formatMoney(data.total)}`, 'success');
+  renderAll();
 }
 
 // ─── Export Excel ─────────────────────────────────────────────────────────────

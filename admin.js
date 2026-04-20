@@ -4,6 +4,7 @@
 console.log('ADMIN v3 2026-03-23');
 
 let activeEvent    = null;
+let groupByStatus  = true;   // toggle: agrupar por estado o por nro de cuenta
 let attendees      = [];
 let barAccounts    = [];
 let barClosures    = [];
@@ -91,6 +92,11 @@ function setupRealtime() {
 
   // Polling fallback: reload all data every 8s para mantener info siempre fresca
   setInterval(() => loadAll(), 8000);
+
+  // Recargar al volver a la pestaña
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') loadAll();
+  });
 }
 
 function applyChange(arr, payload) {
@@ -177,9 +183,22 @@ function renderAttendeesTable() {
     return true;
   });
 
-  // Ordenar por estado: paid, in_process, crew, invited
-  const statusOrder = { 'paid': 0, 'in_process': 1, 'crew': 2, 'invited': 3 };
-  list.sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
+  // Ordenar: por estado (agrupado) o por número de cuenta
+  if (groupByStatus) {
+    const statusOrder = { 'paid': 0, 'in_process': 1, 'crew': 2, 'invited': 3 };
+    list.sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
+  } else {
+    list.sort((a, b) => (a.bar_account_slot || 9999) - (b.bar_account_slot || 9999));
+  }
+
+  // Actualizar estado visual del botón toggle
+  const toggleBtn = document.getElementById('toggleGroupBtn');
+  if (toggleBtn) {
+    toggleBtn.textContent  = groupByStatus ? '# Ordenar por cuenta' : '⬆ Agrupar por estado';
+    toggleBtn.style.background = groupByStatus ? 'var(--panel)' : '#1a2a3a';
+    toggleBtn.style.borderColor = groupByStatus ? 'var(--line)' : '#3b82f6';
+    toggleBtn.style.color = groupByStatus ? 'var(--muted)' : '#93c5fd';
+  }
 
   const tbody = document.getElementById('attendeesBody');
   if (!tbody) return;
@@ -249,6 +268,13 @@ function renderBarTable() {
       }</td>
       <td style="font-size:13px">${closure?.closed_by || '—'}</td>
       <td style="font-size:12px;color:var(--muted)">${closure?.closed_at ? new Date(closure.closed_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+      <td style="font-size:13px">${
+        closure?.payment_method === 'transfer'
+          ? '🏦 Transfer'
+          : closure?.payment_method === 'cash'
+            ? `💵 Efectivo${closure.change_given > 0 ? `<br><span style="font-size:11px;color:var(--muted)">Vuelto: ${formatMoney(closure.change_given)}</span>` : ''}`
+            : '—'
+      }</td>
       <td>${!acc.is_closed && acc.total > 0
         ? `<button class="btn btn-sm btn-primary" onclick="adminCloseBarAccount('${acc.id}',${acc.slot})">💳 Cobrar</button>`
         : acc.is_closed
@@ -260,7 +286,7 @@ function renderBarTable() {
         : '—'
       }</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="11" class="empty-state">Sin cuentas asignadas.</td></tr>';
+  }).join('') || '<tr><td colspan="12" class="empty-state">Sin cuentas asignadas.</td></tr>';
 }
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
@@ -461,7 +487,17 @@ function openEditAttendee(id) {
 
 async function deleteAttendee(id) {
   if (!confirm('¿Eliminar este asistente?')) return;
-  const db = getDb();
+  const db  = getDb();
+  const att = attendees.find(a => a.id === id);
+
+  // Primero desvincular la cuenta de barra (evita error de FK)
+  if (att?.bar_account_slot) {
+    await db.from('bar_accounts')
+      .update({ attendee_id: null })
+      .eq('event_id', activeEvent.id)
+      .eq('slot', att.bar_account_slot);
+  }
+
   const { error } = await db.from('attendees').delete().eq('id', id);
   if (error) toast('Error: ' + error.message, 'error');
   else { attendees = attendees.filter(a => a.id !== id); renderAttendeesTable(); }
@@ -478,17 +514,31 @@ async function reopenBarAccount(accId) {
 
 // ─── Admin close bar account ──────────────────────────────────────────────────
 async function adminCloseBarAccount(barAccountId, slot) {
-  if (!confirm(`¿Cobrar cuenta #${padId(slot)}?`)) return;
-  const photoBlob = await openCamera();
+  const acc = barAccounts.find(a => a.id === barAccountId);
+  const total = acc?.total || 0;
+
+  const payment = await showPaymentMethodSelector(total);
+  if (!payment) return; // canceló
+
   let photoUrl = null;
-  if (photoBlob) photoUrl = await uploadPaymentPhoto(photoBlob, activeEvent.id, slot);
+  if (payment.method === 'transfer') {
+    const photoBlob = await openCamera();
+    if (photoBlob) photoUrl = await uploadPaymentPhoto(photoBlob, activeEvent.id, slot);
+  }
 
   const db = getDb();
   const { data, error } = await db.rpc('close_bar_account', {
     p_account_id: barAccountId, p_closed_by: 'admin', p_photo_url: photoUrl,
   });
-  if (error || !data?.ok) toast(data?.error || error?.message || 'Error', 'error');
-  else { toast(`Cuenta ${padId(slot)} cobrada — ${formatMoney(data.total)}`, 'success'); await loadAll(); }
+  if (error || !data?.ok) { toast(data?.error || error?.message || 'Error', 'error'); return; }
+
+  // Guardar método de pago en bar_closures
+  await db.from('bar_closures')
+    .update({ payment_method: payment.method, cash_received: payment.cashReceived, change_given: payment.changeGiven })
+    .eq('slot', slot).eq('event_id', activeEvent.id);
+
+  toast(`Cuenta ${padId(slot)} cobrada — ${formatMoney(data.total)}`, 'success');
+  await loadAll();
 }
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
@@ -990,6 +1040,10 @@ function setupUI() {
   document.getElementById('attSearch').addEventListener('input', renderAttendeesTable);
   document.getElementById('attStatusFilter').addEventListener('change', renderAttendeesTable);
   document.getElementById('barFilter').addEventListener('change', renderBarTable);
+  document.getElementById('toggleGroupBtn').addEventListener('click', () => {
+    groupByStatus = !groupByStatus;
+    renderAttendeesTable();
+  });
 }
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────

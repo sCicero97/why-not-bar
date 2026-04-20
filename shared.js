@@ -454,6 +454,22 @@ async function subscribeToPush() {
   }
 }
 
+// ─── WhatsApp vía CallMeBot ───────────────────────────────────────────────────
+async function sendWhatsApp(message) {
+  try {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 8000);
+    await fetch('/api/send-whatsapp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+      signal: controller.signal,
+    });
+  } catch (e) {
+    console.warn('[WhatsApp] error:', e.message);
+  }
+}
+
 // Envía push vía Vercel /api/send-push
 // targetRole: si se pasa ('admin'), solo se envía a usuarios con ese rol.
 async function sendPushToAll(title, body, tag = 'whynot-alert', targetRole = null) {
@@ -589,6 +605,7 @@ function setupNotifChannel(appName, currentUserDisplay) {
       _notifChannel.send({ type: 'broadcast', event: 'alert',
         payload: { emoji: '🆘', msg, from: currentUserDisplay, target: 'admin' } });
       await sendPushToAll(`🆘 ${currentUserDisplay}`, msg, 'whynot-sos', 'admin');
+      await sendWhatsApp(`🆘 SOS - ${currentUserDisplay} necesita ayuda en ${appName}`);
       toast('🆘 Señal enviada a los admins', 'warning');
     }));
   }
@@ -600,9 +617,136 @@ function setupNotifChannel(appName, currentUserDisplay) {
       _notifChannel.send({ type: 'broadcast', event: 'alert',
         payload: { emoji: '🤧', msg, from: currentUserDisplay, target: 'admin' } });
       await sendPushToAll(`🤧 ${currentUserDisplay}`, msg, 'whynot-admin', 'admin');
+      await sendWhatsApp(`🤧 Admin ${currentUserDisplay}: Atención requerida`);
       toast('🤧 Señal enviada a los admins', 'success');
     }));
   }
 
   console.log(`[Notif] Permiso: ${Notification?.permission ?? 'no disponible'}`);
+}
+
+// ─── Selector de método de pago ───────────────────────────────────────────────
+// Retorna { method: 'transfer'|'cash', cashReceived, changeGiven }
+// o null si el usuario cancela.
+async function showPaymentMethodSelector(totalAmount) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'camera-overlay';
+    overlay.innerHTML = `
+      <div class="camera-header">
+        <h3>💳 Método de pago</h3>
+        <span style="color:#a0a0a0;font-size:15px">Total: <strong style="color:#f3f3f3">${formatMoney(totalAmount)}</strong></span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px;padding:48px 24px;width:100%;max-width:380px">
+        <button id="payTransfer" class="camera-btn"
+          style="background:#1d4ed8;color:#fff;font-size:20px;padding:20px;border-radius:16px;border:none;cursor:pointer">
+          📲 Transferencia
+        </button>
+        <button id="payCash" class="camera-btn"
+          style="background:#1ed760;color:#06130a;font-size:20px;padding:20px;border-radius:16px;border:none;cursor:pointer">
+          💵 Efectivo
+        </button>
+        <button id="payCancel" class="camera-btn camera-skip"
+          style="font-size:16px;padding:14px;border-radius:14px;border:1px solid #333;background:#1c1c1c;color:#a0a0a0;cursor:pointer">
+          Cancelar
+        </button>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#payTransfer').onclick = () => {
+      overlay.remove();
+      resolve({ method: 'transfer', cashReceived: null, changeGiven: null });
+    };
+    overlay.querySelector('#payCash').onclick = () => {
+      overlay.remove();
+      _showCashScreen(totalAmount, resolve);
+    };
+    overlay.querySelector('#payCancel').onclick = () => {
+      overlay.remove();
+      resolve(null);
+    };
+  });
+}
+
+function _showCashScreen(totalAmount, resolve) {
+  const overlay = document.createElement('div');
+  overlay.className = 'camera-overlay';
+  overlay.innerHTML = `
+    <div class="camera-header">
+      <h3>💵 Pago en efectivo</h3>
+      <span style="color:#a0a0a0;font-size:15px">Total: <strong style="color:#f3f3f3">${formatMoney(totalAmount)}</strong></span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px;padding:36px 24px;width:100%;max-width:380px">
+      <div>
+        <label style="color:#a0a0a0;font-size:13px;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:8px">
+          ¿Con cuánto paga?
+        </label>
+        <input id="cashInput" type="number" inputmode="numeric" min="0" step="50"
+          style="width:100%;background:#1c1c1c;border:2px solid #3b82f6;color:#f3f3f3;
+                 padding:16px;border-radius:14px;font-size:28px;text-align:center;
+                 outline:none;box-sizing:border-box"/>
+      </div>
+      <div id="changeBox" style="background:#0d1f0d;border:1px solid #1a3a1a;border-radius:14px;
+           padding:16px;text-align:center;display:none">
+        <div style="color:#a0a0a0;font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Vuelto</div>
+        <div id="changeAmt" style="font-size:36px;font-weight:bold;color:#1ed760"></div>
+      </div>
+      <div id="shortBox" style="background:#1f0d0d;border:1px solid #5c1a1a;border-radius:14px;
+           padding:12px;text-align:center;display:none;color:#f87171;font-size:15px">
+        ⚠ Le falta <strong id="shortAmt"></strong>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button id="cashConfirm" class="camera-btn camera-confirm"
+          style="flex:1;background:#1ed760;color:#06130a;border:none;border-radius:14px;padding:16px;font-size:17px;font-weight:bold;cursor:pointer;opacity:.4;pointer-events:none">
+          Confirmar
+        </button>
+        <button id="cashBack" class="camera-btn camera-skip"
+          style="background:#1c1c1c;color:#f3f3f3;border:1px solid #333;border-radius:14px;padding:16px;font-size:17px;cursor:pointer">
+          ← Volver
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const cashInput   = overlay.querySelector('#cashInput');
+  const changeBox   = overlay.querySelector('#changeBox');
+  const changeAmt   = overlay.querySelector('#changeAmt');
+  const shortBox    = overlay.querySelector('#shortBox');
+  const shortAmt    = overlay.querySelector('#shortAmt');
+  const confirmBtn  = overlay.querySelector('#cashConfirm');
+
+  cashInput.focus();
+
+  cashInput.addEventListener('input', () => {
+    const received = parseFloat(cashInput.value) || 0;
+    const diff = received - totalAmount;
+    if (received >= totalAmount) {
+      changeBox.style.display = 'block';
+      shortBox.style.display  = 'none';
+      changeAmt.textContent   = formatMoney(diff);
+      confirmBtn.style.opacity       = '1';
+      confirmBtn.style.pointerEvents = 'auto';
+    } else if (received > 0) {
+      changeBox.style.display = 'none';
+      shortBox.style.display  = 'block';
+      shortAmt.textContent    = formatMoney(totalAmount - received);
+      confirmBtn.style.opacity       = '.4';
+      confirmBtn.style.pointerEvents = 'none';
+    } else {
+      changeBox.style.display = 'none';
+      shortBox.style.display  = 'none';
+      confirmBtn.style.opacity       = '.4';
+      confirmBtn.style.pointerEvents = 'none';
+    }
+  });
+
+  overlay.querySelector('#cashConfirm').onclick = () => {
+    const received = parseFloat(cashInput.value) || 0;
+    overlay.remove();
+    resolve({ method: 'cash', cashReceived: received, changeGiven: received - totalAmount });
+  };
+  overlay.querySelector('#cashBack').onclick = () => {
+    overlay.remove();
+    showPaymentMethodSelector(totalAmount).then(resolve);
+  };
 }
