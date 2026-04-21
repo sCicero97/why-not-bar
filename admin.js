@@ -115,6 +115,7 @@ function renderAll() {
   renderDashboard();
   renderAttendeesTable();
   renderBarTable();
+  renderAdminBarCounters();
   renderExpenses();
   renderEvents();
   renderTasks();
@@ -237,6 +238,31 @@ function renderAttendeesTable() {
   }).join('') || '<tr><td colspan="13" class="empty-state">Sin asistentes. Agregá uno con el botón +</td></tr>';
 }
 
+// ─── Bar counters ─────────────────────────────────────────────────────────────
+function renderAdminBarCounters() {
+  const el = document.getElementById('adminBarCounters');
+  if (!el) return;
+  const assigned = barAccounts.filter(a => a.attendee_id);
+  const open     = assigned.filter(a => !a.is_closed).length;
+  const closed   = barClosures.length;
+  const openTot  = assigned.filter(a => !a.is_closed).reduce((s,a) => s + Number(a.total||0), 0);
+  const closedTot = barClosures.reduce((s,c) => s + Number(c.total||0), 0);
+  const grandTot = openTot + closedTot;
+  el.innerHTML = `
+    <div class="summary-card" style="background:#1a2a1a;border-color:#2a4a2a;padding:8px 16px;border-radius:12px">
+      <span class="summary-label">Abiertas</span>
+      <strong style="color:#4ade80">${open}</strong>
+    </div>
+    <div class="summary-card" style="background:#1a1a2a;border-color:#2a2a4a;padding:8px 16px;border-radius:12px">
+      <span class="summary-label">Cerradas</span>
+      <strong style="color:#60a5fa">${closed}</strong>
+    </div>
+    <div class="summary-card" style="background:#181818;border-color:#333;padding:8px 16px;border-radius:12px">
+      <span class="summary-label">Total general</span>
+      <strong>${formatMoney(grandTot)}</strong>
+    </div>`;
+}
+
 // ─── Bar accounts table ───────────────────────────────────────────────────────
 function renderBarTable() {
   const filter = document.getElementById('barFilter')?.value || 'all';
@@ -266,18 +292,16 @@ function renderBarTable() {
           ? '<span class="status-pill" style="background:#3a2e0022;color:#fbbf24">Con saldo</span>'
           : '<span class="status-pill" style="background:#1c1c1c;color:#6b7280">Vacía</span>'
       }</td>
+      <td style="font-size:13px">${closure?.closed_by || '—'}</td>
+      <td style="font-size:12px;color:var(--muted)">${closure?.closed_at ? new Date(closure.closed_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td style="font-size:13px">${
         closure?.paid_by_slot
           ? `<span style="color:#fbbf24">Pagado por #${String(closure.paid_by_slot).padStart(3,'0')}</span>`
-          : closure?.closed_by || '—'
-      }</td>
-      <td style="font-size:12px;color:var(--muted)">${closure?.closed_at ? new Date(closure.closed_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
-      <td style="font-size:13px">${
-        closure?.payment_method === 'transfer'
-          ? '🏦 Transfer'
-          : closure?.payment_method === 'cash'
-            ? `💵 Efectivo${closure.change_given > 0 ? `<br><span style="font-size:11px;color:var(--muted)">Vuelto: ${formatMoney(closure.change_given)}</span>` : ''}`
-            : '—'
+          : closure?.payment_method === 'transfer'
+            ? '🏦 Transfer'
+            : closure?.payment_method === 'cash'
+              ? `💵 Efectivo${closure.change_given > 0 ? `<br><span style="font-size:11px;color:var(--muted)">Vuelto: ${formatMoney(closure.change_given)}</span>` : ''}`
+              : '—'
       }</td>
       <td>${!acc.is_closed && acc.total > 0
         ? `<button class="btn btn-sm btn-primary" onclick="adminCloseBarAccount('${acc.id}',${acc.slot})">💳 Cobrar</button>`

@@ -90,10 +90,12 @@ button{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touc
 .btn-160{background:var(--blue)}.btn-260{background:var(--orange)}.btn-360{background:var(--purple)}
 .btn-close{background:var(--green);color:#06130a}
 
-/* Hold progress bar */
+/* Hold progress bar (agregar) */
 .hold-bar{position:absolute;bottom:0;left:0;height:5px;width:0%;background:rgba(255,255,255,.75);border-radius:0 0 4px 4px;pointer-events:none}
+/* Barra roja de restar — crece de derecha a izquierda */
+.subtract-bar{position:absolute;top:0;right:0;bottom:0;width:0%;background:rgba(239,68,68,.55);border-radius:14px;pointer-events:none}
 .action-btn.hold-ready-add{filter:brightness(1.35);outline:2px solid rgba(255,255,255,.6);outline-offset:-2px}
-.action-btn.hold-ready-subtract{filter:brightness(.65);outline:2px solid rgba(239,68,68,.9);outline-offset:-2px}
+.action-btn.hold-ready-subtract{filter:brightness(.85)}
 .action-btn.hold-ready-close{filter:brightness(1.4);outline:2px solid rgba(30,215,96,.9);outline-offset:-2px}
 
 /* ─── Paid table ─────────────────────────────────────────────────────────────  */

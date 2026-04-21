@@ -100,28 +100,8 @@ function renderIfNotHolding() {
 // ─── Render ───────────────────────────────────────────────────────────────────
 function renderAll() {
   renderSummary();
-  renderBarCounters();
   renderAccounts();
   renderPaidTable();
-}
-
-function renderBarCounters() {
-  const el = document.getElementById('barCounters');
-  if (!el) return;
-  const open   = accounts.filter(a => !a.is_closed && a.attendee_id).length;
-  const closed = closures.length;
-  const total  = accounts.reduce((s,a) => s + Number(a.total||0), 0)
-               + closures.reduce((s,c) => s + Number(c.total||0), 0);
-  el.innerHTML = `
-    <div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:12px;padding:8px 16px;font-size:14px;color:#86efac">
-      Abiertas <strong style="font-size:18px;color:#4ade80">${open}</strong>
-    </div>
-    <div style="background:#1a1a2a;border:1px solid #2a2a4a;border-radius:12px;padding:8px 16px;font-size:14px;color:#93c5fd">
-      Cerradas <strong style="font-size:18px;color:#60a5fa">${closed}</strong>
-    </div>
-    <div style="background:#181818;border:1px solid #333;border-radius:12px;padding:8px 16px;font-size:14px;color:#a0a0a0">
-      Total <strong style="font-size:18px;color:#f3f3f3">${formatMoney(total)}</strong>
-    </div>`;
 }
 
 function renderSummary() {
@@ -183,9 +163,9 @@ function renderAccounts() {
              }
            </div>`
         : `<div class="account-actions">
-             <button class="action-btn btn-160" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="160">+160<span class="hold-bar"></span></button>
-             <button class="action-btn btn-260" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="260">+260<span class="hold-bar"></span></button>
-             <button class="action-btn btn-360" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="360">+360<span class="hold-bar"></span></button>
+             <button class="action-btn btn-160" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="160">+160<span class="hold-bar"></span><span class="subtract-bar"></span></button>
+             <button class="action-btn btn-260" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="260">+260<span class="hold-bar"></span><span class="subtract-bar"></span></button>
+             <button class="action-btn btn-360" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="360">+360<span class="hold-bar"></span><span class="subtract-bar"></span></button>
              <button class="action-btn btn-close ${acc.total === 0 ? 'hidden' : ''}" onclick="doCloseAccount('${acc.id}',${acc.slot})">Cerrar</button>
            </div>`
       }
@@ -269,8 +249,10 @@ function clearHold(pointerId) {
   activeHolds.delete(pointerId);
   const btn = d.btn;
   btn.classList.remove('hold-ready-add','hold-ready-subtract','hold-ready-close');
-  const bar = btn.querySelector('.hold-bar');
-  if (bar) { bar.style.transition='none'; bar.style.width='0%'; }
+  const bar  = btn.querySelector('.hold-bar');
+  const sbar = btn.querySelector('.subtract-bar');
+  if (bar)  { bar.style.transition='none';  bar.style.width='0%'; }
+  if (sbar) { sbar.style.transition='none'; sbar.style.width='0%'; }
   if (activeHolds.size === 0) {
     holdActive = false;
     if (pendingRender) { pendingRender=false; renderAll(); }
@@ -295,10 +277,23 @@ function setupHoldInteractions() {
       d.addReady = true;
       btn.classList.add('hold-ready-add');
       if (navigator.vibrate) navigator.vibrate(20);
-      animateHoldBar(btn, SUBTRACT_READY_MS - ADD_READY_MS);
+
+      // Solo iniciar animación de restar si hay tragos de ese tipo
+      const amount = parseInt(btn.dataset.amount, 10);
+      const currentAcc = accounts.find(a => a.id === btn.dataset.id);
+      const qty = amount === 160 ? currentAcc?.qty160 : amount === 260 ? currentAcc?.qty260 : currentAcc?.qty360;
+      if (qty > 0) {
+        // Animación roja de derecha a izquierda
+        const sbar = btn.querySelector('.subtract-bar');
+        if (sbar) {
+          sbar.style.transition = 'none'; sbar.style.width = '0%';
+          void sbar.offsetWidth;
+          sbar.style.transition = `width ${SUBTRACT_READY_MS - ADD_READY_MS}ms linear`;
+          sbar.style.width = '100%';
+        }
+      }
     }, ADD_READY_MS));
     d.timers.push(setTimeout(() => {
-      // Solo activar restar si la cantidad actual es > 0
       const amount = parseInt(btn.dataset.amount, 10);
       const currentAcc = accounts.find(a => a.id === btn.dataset.id);
       const qty = amount === 160 ? currentAcc?.qty160 : amount === 260 ? currentAcc?.qty260 : currentAcc?.qty360;
@@ -354,67 +349,70 @@ async function doSubtractDrink(accountId, amount) {
 }
 
 async function doCloseAccount(accountId, slot) {
-  const acc   = accounts.find(a => a.id === accountId);
+  const acc      = accounts.find(a => a.id === accountId);
   const ownTotal = Number(acc?.total || 0);
 
-  // 1. Seleccionar otras cuentas a pagar (opcional)
-  const openOthers = accounts.filter(a => !a.is_closed && a.attendee_id && a.total > 0 && a.id !== accountId);
-  const others = await showPayForOthersScreen(slot, ownTotal, openOthers);
-  if (others === null) return; // cancelado
+  // 1. Seleccionar método + checkbox "pagar por otros"
+  const methodResult = await showPaymentMethodSelector(ownTotal, true);
+  if (!methodResult) return;
 
-  const { coveredAccounts, combinedTotal } = others;
+  // 2. Si marcó "pagar por otros" → mostrar selector de otras cuentas
+  let coveredAccounts = [];
+  let combinedTotal   = ownTotal;
 
-  // 2. Seleccionar método de pago con el total combinado
-  const payment = await showPaymentMethodSelector(combinedTotal);
-  if (!payment) return;
+  if (methodResult.payForOthers) {
+    const openOthers = accounts.filter(a => !a.is_closed && a.attendee_id && a.total > 0 && a.id !== accountId);
+    const othersResult = await showPayForOthersScreen(slot, ownTotal, openOthers);
+    if (othersResult === null) return;
+    coveredAccounts = othersResult.coveredAccounts;
+    combinedTotal   = othersResult.combinedTotal;
+  }
 
-  // 3. Foto del comprobante — obligatoria para transferencia
+  // 3. Si es efectivo → calculadora con total final
+  let cashReceived = methodResult.cashReceived;
+  let changeGiven  = methodResult.changeGiven;
+  if (methodResult.method === 'cash') {
+    if (methodResult.payForOthers) {
+      const cashResult = await showCashCalculator(combinedTotal);
+      if (!cashResult) return;
+      cashReceived = cashResult.cashReceived;
+      changeGiven  = cashResult.changeGiven;
+    } else {
+      cashReceived = methodResult.cashReceived;
+      changeGiven  = methodResult.changeGiven;
+    }
+  }
+
+  // 4. Si es transferencia → foto obligatoria
   let photoUrl = null;
-  if (payment.method === 'transfer') {
-    const photoBlob = await openCamera(true); // required=true → sin botón cancelar
-    if (!photoBlob) return; // el usuario cerró la cámara de otra manera
+  if (methodResult.method === 'transfer') {
+    const photoBlob = await openCamera(true);
+    if (!photoBlob) return;
     photoUrl = await uploadPaymentPhoto(photoBlob, activeEvent.id, slot);
   }
 
-  // 4. Cerrar cuenta principal en DB
+  // 5. Cerrar cuenta principal
   const db = getDb();
   const { data, error } = await db.rpc('close_bar_account', {
-    p_account_id: accountId,
-    p_closed_by:  'bar',
-    p_photo_url:  photoUrl,
+    p_account_id: accountId, p_closed_by: 'bar', p_photo_url: photoUrl,
   });
+  if (error || !data?.ok) { toast(data?.error || error?.message || 'Error al cerrar', 'error'); return; }
 
-  if (error || !data?.ok) {
-    toast(data?.error || error?.message || 'Error al cerrar', 'error');
-    return;
-  }
-
-  // 5. Guardar método de pago en el closure principal
   await db.from('bar_closures')
-    .update({ payment_method: payment.method, cash_received: payment.cashReceived, change_given: payment.changeGiven })
-    .eq('event_id', activeEvent.id).eq('slot', slot)
-    .order('closed_at', { ascending: false });
+    .update({ payment_method: methodResult.method, cash_received: cashReceived, change_given: changeGiven })
+    .eq('event_id', activeEvent.id).eq('slot', slot);
 
-  // 6. Cerrar cuentas de otros y marcar que fueron pagadas por esta cuenta
+  // 6. Cerrar cuentas de otros
   for (const other of coveredAccounts) {
-    await db.rpc('close_bar_account', {
-      p_account_id: other.id,
-      p_closed_by:  'bar',
-      p_photo_url:  photoUrl,
-    });
+    await db.rpc('close_bar_account', { p_account_id: other.id, p_closed_by: 'bar', p_photo_url: photoUrl });
     await db.from('bar_closures')
-      .update({ payment_method: payment.method, paid_by_slot: slot })
-      .eq('event_id', activeEvent.id).eq('slot', other.slot)
-      .order('closed_at', { ascending: false });
+      .update({ payment_method: methodResult.method, paid_by_slot: slot })
+      .eq('event_id', activeEvent.id).eq('slot', other.slot);
   }
 
-  // 7. Actualizar UI
+  // 7. UI
   const closedSlots = [slot, ...coveredAccounts.map(a => a.slot)];
-  closedSlots.forEach(s => {
-    const idx = accounts.findIndex(a => a.slot === s);
-    if (idx >= 0) accounts[idx].is_closed = true;
-  });
-
+  closedSlots.forEach(s => { const i = accounts.findIndex(a => a.slot === s); if (i >= 0) accounts[i].is_closed = true; });
   const extra = coveredAccounts.length ? ` + ${coveredAccounts.length} cuenta${coveredAccounts.length > 1 ? 's' : ''} ajena${coveredAccounts.length > 1 ? 's' : ''}` : '';
   toast(`Cuenta ${padId(slot)} cerrada — ${formatMoney(combinedTotal)}${extra}`, 'success');
   await loadData();
