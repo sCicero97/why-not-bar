@@ -266,7 +266,11 @@ function renderBarTable() {
           ? '<span class="status-pill" style="background:#3a2e0022;color:#fbbf24">Con saldo</span>'
           : '<span class="status-pill" style="background:#1c1c1c;color:#6b7280">Vacía</span>'
       }</td>
-      <td style="font-size:13px">${closure?.closed_by || '—'}</td>
+      <td style="font-size:13px">${
+        closure?.paid_by_slot
+          ? `<span style="color:#fbbf24">Pagado por #${String(closure.paid_by_slot).padStart(3,'0')}</span>`
+          : closure?.closed_by || '—'
+      }</td>
       <td style="font-size:12px;color:var(--muted)">${closure?.closed_at ? new Date(closure.closed_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td style="font-size:13px">${
         closure?.payment_method === 'transfer'

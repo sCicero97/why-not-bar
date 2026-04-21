@@ -4,4 +4,5 @@
 ALTER TABLE bar_closures
   ADD COLUMN IF NOT EXISTS payment_method  TEXT,       -- 'transfer' | 'cash'
   ADD COLUMN IF NOT EXISTS cash_received   NUMERIC,    -- monto recibido en efectivo
-  ADD COLUMN IF NOT EXISTS change_given    NUMERIC;    -- vuelto entregado
+  ADD COLUMN IF NOT EXISTS change_given    NUMERIC,    -- vuelto entregado
+  ADD COLUMN IF NOT EXISTS paid_by_slot    INTEGER;    -- si fue pagado por otra cuenta, slot del pagador

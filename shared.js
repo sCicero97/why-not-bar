@@ -247,20 +247,20 @@ function injectCameraStyles() {
   document.head.appendChild(s);
 }
 
-async function openCamera() {
+async function openCamera(required = false) {
   injectCameraStyles();
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'camera-overlay';
     overlay.innerHTML = `
       <div class="camera-header">
-        <h3>📸 Foto del pago</h3>
-        <span style="color:#a0a0a0;font-size:13px">Apuntá la cámara al comprobante</span>
+        <h3>📸 Foto del comprobante</h3>
+        <span style="color:#a0a0a0;font-size:13px">Apuntá la cámara al comprobante de transferencia</span>
       </div>
       <video class="camera-video" autoplay playsinline muted></video>
       <canvas style="display:none"></canvas>
       <div class="camera-controls">
-        <button class="camera-btn camera-skip">Omitir foto</button>
+        ${required ? '' : '<button class="camera-btn camera-skip">Cancelar</button>'}
         <button class="camera-btn camera-capture">📸 Capturar</button>
       </div>`;
     document.body.appendChild(overlay);
@@ -275,7 +275,6 @@ async function openCamera() {
         video.srcObject = s;
       })
       .catch(() => {
-        // Camera unavailable — skip
         cleanup();
         resolve(null);
       });
@@ -288,10 +287,10 @@ async function openCamera() {
       showPhotoPreview(canvas.toDataURL('image/jpeg', 0.85), canvas, resolve);
     };
 
-    overlay.querySelector('.camera-skip').onclick = () => {
-      cleanup();
-      resolve(null);
-    };
+    const skipBtn = overlay.querySelector('.camera-skip');
+    if (skipBtn) {
+      skipBtn.onclick = () => { cleanup(); resolve(null); };
+    }
 
     function cleanup() {
       if (stream) stream.getTracks().forEach(t => t.stop());
@@ -623,6 +622,76 @@ function setupNotifChannel(appName, currentUserDisplay) {
   }
 
   console.log(`[Notif] Permiso: ${Notification?.permission ?? 'no disponible'}`);
+}
+
+// ─── Selector "pagar por otros" ───────────────────────────────────────────────
+// openAccounts: array de { id, slot, total, attendees: { name } } (sin la cuenta actual)
+// Retorna { coveredAccounts: [{id,slot,total}], combinedTotal }
+async function showPayForOthersScreen(currentSlot, currentTotal, openAccounts) {
+  injectCameraStyles();
+  return new Promise((resolve) => {
+    const others = openAccounts.filter(a => a.slot !== currentSlot && !a.is_closed && a.total > 0);
+    const overlay = document.createElement('div');
+    overlay.className = 'camera-overlay';
+    overlay.style.overflowY = 'auto';
+    overlay.innerHTML = `
+      <div class="camera-header" style="position:relative;padding:16px 20px">
+        <div>
+          <h3 style="margin:0;font-size:18px">👥 Pagar por otros</h3>
+          <span style="color:#a0a0a0;font-size:13px">Seleccioná las cuentas que este asistente va a pagar</span>
+        </div>
+      </div>
+      <div style="width:100%;max-width:480px;padding:72px 16px 100px;display:flex;flex-direction:column;gap:10px" id="othersListWrap">
+        ${others.length === 0
+          ? '<p style="color:#6b7280;text-align:center;margin-top:20px">No hay otras cuentas abiertas con saldo.</p>'
+          : others.map(a => `
+            <label style="display:flex;align-items:center;gap:14px;background:#1c1c1c;border:1px solid #333;border-radius:14px;padding:14px 16px;cursor:pointer">
+              <input type="checkbox" data-id="${a.id}" data-slot="${a.slot}" data-total="${a.total}"
+                style="width:20px;height:20px;cursor:pointer;accent-color:#1ed760"/>
+              <div style="flex:1">
+                <div style="font-size:16px;font-weight:bold">ID ${String(a.slot).padStart(3,'0')} — ${a.attendees?.name || 'Sin nombre'}</div>
+                <div style="font-size:14px;color:#a0a0a0">Saldo: <strong style="color:#f3f3f3">${typeof formatMoney === 'function' ? formatMoney(a.total) : '$'+a.total}</strong></div>
+              </div>
+            </label>`).join('')
+        }
+      </div>
+      <div style="position:fixed;bottom:0;left:0;right:0;background:#111;border-top:1px solid #333;padding:16px 20px;display:flex;gap:12px;align-items:center">
+        <div style="flex:1;font-size:15px;color:#a0a0a0">Total: <strong id="othersTotal" style="color:#fff;font-size:18px">${typeof formatMoney === 'function' ? formatMoney(currentTotal) : '$'+currentTotal}</strong></div>
+        <button id="othersContinue" style="background:#1ed760;color:#06130a;border:none;border-radius:14px;padding:14px 28px;font-size:17px;font-weight:bold;cursor:pointer">Continuar →</button>
+        <button id="othersCancel" style="background:#1c1c1c;color:#f3f3f3;border:1px solid #333;border-radius:14px;padding:14px 20px;font-size:17px;cursor:pointer">Cancelar</button>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const selected = new Map(); // slot → {id, slot, total}
+    const totalEl = overlay.querySelector('#othersTotal');
+
+    function recalc() {
+      const extra = Array.from(selected.values()).reduce((s, a) => s + Number(a.total), 0);
+      const combined = Number(currentTotal) + extra;
+      totalEl.textContent = typeof formatMoney === 'function' ? formatMoney(combined) : '$' + combined;
+    }
+
+    overlay.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const slot = parseInt(cb.dataset.slot, 10);
+        if (cb.checked) selected.set(slot, { id: cb.dataset.id, slot, total: Number(cb.dataset.total) });
+        else selected.delete(slot);
+        recalc();
+      });
+    });
+
+    overlay.querySelector('#othersContinue').onclick = () => {
+      const coveredAccounts = Array.from(selected.values());
+      const combinedTotal = Number(currentTotal) + coveredAccounts.reduce((s, a) => s + a.total, 0);
+      overlay.remove();
+      resolve({ coveredAccounts, combinedTotal });
+    };
+
+    overlay.querySelector('#othersCancel').onclick = () => {
+      overlay.remove();
+      resolve(null);
+    };
+  });
 }
 
 // ─── Selector de método de pago ───────────────────────────────────────────────
