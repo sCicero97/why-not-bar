@@ -156,9 +156,11 @@ function renderAccounts() {
         <div class="pill">360: <strong>${acc.qty360}</strong></div>
       </div>
       ${acc.is_closed
-        ? `<div class="account-actions" style="justify-content:flex-start">
+        ? `<div class="account-actions" style="grid-template-columns:1fr">
              ${photoUrl
-               ? `<button class="action-btn btn-photo" data-photo="${photoUrl}" style="background:#1e3a5f;border-color:#2563eb;color:#93c5fd;font-size:13px">📸 Ver comprobante</button>`
+               ? `<button class="btn-photo" data-photo="${photoUrl}">
+                    <svg width="15" height="15"><use href="#i-camera"/></svg> Ver comprobante
+                  </button>`
                : `<span style="font-size:12px;color:var(--muted);padding:6px 4px">Sin foto de pago</span>`
              }
            </div>`
@@ -196,7 +198,9 @@ function renderPaidTable() {
       <td>${c.closed_by || '—'}</td>
       <td>${c.closed_at ? new Date(c.closed_at).toLocaleString('es-UY') : '—'}</td>
       <td>${c.payment_photo_url
-        ? `<button class="action-btn btn-photo" data-photo="${c.payment_photo_url}" style="background:#1e3a5f;border-color:#2563eb;color:#93c5fd;font-size:12px;padding:6px 10px">📸 Ver</button>`
+        ? `<button class="btn-photo" data-photo="${c.payment_photo_url}" style="font-size:12px !important;padding:7px 11px !important">
+             <svg width="13" height="13"><use href="#i-camera"/></svg> Ver
+           </button>`
         : '—'}</td>
     `;
     tbody.appendChild(tr);

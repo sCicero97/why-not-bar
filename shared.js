@@ -374,12 +374,18 @@ function statusColor(s) {
 
 function toast(msg, type = 'info') {
   const el = document.createElement('div');
-  const bg = type === 'error' ? '#ef4444' : type === 'success' ? '#1ed760' : type === 'warning' ? '#f59e0b' : '#2563eb';
+  const bg = type === 'error'   ? '#ff453a'
+          : type === 'success'  ? '#30d158'
+          : type === 'warning'  ? '#ff9f0a'
+          :                       '#0a84ff';
   const color = (type === 'success' || type === 'warning') ? '#06130a' : '#fff';
-  el.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-    background:${bg};color:${color};padding:12px 24px;border-radius:14px;
-    font-family:Arial,sans-serif;font-size:15px;font-weight:bold;
-    z-index:99999;box-shadow:0 8px 24px rgba(0,0,0,.4);
+  el.style.cssText = `position:fixed;bottom:max(24px,calc(env(safe-area-inset-bottom,0px) + 16px));left:50%;transform:translateX(-50%);
+    background:${bg};color:${color};padding:12px 22px;border-radius:999px;
+    font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif;
+    font-size:14.5px;font-weight:600;letter-spacing:-.01em;
+    z-index:99999;box-shadow:0 10px 30px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.18);
+    backdrop-filter:blur(14px) saturate(160%);
+    -webkit-backdrop-filter:blur(14px) saturate(160%);
     animation:fadeInUp .2s ease;pointer-events:none;white-space:nowrap`;
   el.textContent = msg;
   document.body.appendChild(el);

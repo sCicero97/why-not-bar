@@ -152,22 +152,22 @@ function renderList() {
       <div class="att-main" data-id="${att.id}">
         <div class="att-info">
           <div class="att-name">
-            ${att.name}
-            ${hasUnpaidBar ? `<span class="att-tag att-tag-unpaid">⚠ Debe ${formatMoney(barAcc.total)}</span>` : ''}
+            <span>${att.name}</span>
+            ${hasUnpaidBar ? `<span class="att-tag att-tag-unpaid"><svg width="11" height="11"><use href="#i-warn"/></svg> Debe ${formatMoney(barAcc.total)}</span>` : ''}
           </div>
           <div class="att-meta">
-            ${att.bar_account_slot ? `<span class="att-bar-num" style="font-size:18px;font-weight:bold"># ${padId(att.bar_account_slot)}</span>` : ''}
-            ${alreadyOut ? '<span class="att-tag att-tag-out">Salió</span>' : att.entered ? '<span class="att-tag att-tag-in">Adentro</span>' : ''}
+            ${att.bar_account_slot ? `<span class="att-bar-num">#${padId(att.bar_account_slot)}</span>` : ''}
+            ${alreadyOut ? '<span class="att-tag att-tag-out">Salió</span>' : att.entered ? '<span class="att-tag att-tag-in"><svg width="11" height="11"><use href="#i-check"/></svg> Adentro</span>' : ''}
           </div>
           ${canCharge && barAcc ? `<div class="att-consumption">
             Barra: <strong>${formatMoney(barAcc.total)}</strong>
-            ${barClosed ? ' <span class="att-tag att-tag-paid">✓ Cobrado</span>' : hasBalance ? ' <span class="att-tag att-tag-open">Abierta</span>' : ''}
+            ${barClosed ? '<span class="att-tag att-tag-paid"><svg width="11" height="11"><use href="#i-check"/></svg> Cobrado</span>' : hasBalance ? '<span class="att-tag att-tag-open">Abierta</span>' : ''}
           </div>` : ''}
         </div>
         <div class="att-actions" onclick="event.stopPropagation()">
-          ${!att.entered && !alreadyOut ? `<button class="att-btn att-btn-enter" onclick="doCheckIn('${att.id}')">Ingresar</button>` : ''}
-          ${canExit ? `<button class="att-btn att-btn-exit" onclick="doExit('${att.id}')">Registrar salida</button>` : ''}
-          ${canCharge && hasBalance && att.entered && !alreadyOut ? `<button class="att-btn att-btn-close" onclick="openPersonModal('${att.id}')">Cobrar</button>` : ''}
+          ${!att.entered && !alreadyOut ? `<button class="att-btn att-btn-enter" onclick="doCheckIn('${att.id}')"><svg width="14" height="14"><use href="#i-check"/></svg> Ingresar</button>` : ''}
+          ${canExit ? `<button class="att-btn att-btn-exit" onclick="doExit('${att.id}')"><svg width="14" height="14"><use href="#i-door-out"/></svg> Salida</button>` : ''}
+          ${canCharge && hasBalance && att.entered && !alreadyOut ? `<button class="att-btn att-btn-close" onclick="openPersonModal('${att.id}')"><svg width="14" height="14"><use href="#i-card"/></svg> Cobrar</button>` : ''}
         </div>
       </div>
     `;
@@ -309,7 +309,7 @@ function renderModal(id) {
     <div class="modal-bar-section">
       <div class="modal-bar-header">
         <span>Cuenta barra #${padId(barAcc.slot)}</span>
-        ${barAcc.is_closed ? '<span class="att-tag att-tag-paid">✓ Cobrada</span>' : '<span class="att-tag att-tag-open">Abierta</span>'}
+        ${barAcc.is_closed ? '<span class="att-tag att-tag-paid"><svg width="11" height="11"><use href="#i-check"/></svg> Cobrada</span>' : '<span class="att-tag att-tag-open">Abierta</span>'}
       </div>
       <div class="modal-bar-total">${formatMoney(barAcc.total)}</div>
       <div class="modal-bar-pills">
@@ -317,15 +317,15 @@ function renderModal(id) {
         <span class="pill">260: <strong>${barAcc.qty260}</strong></span>
         <span class="pill">360: <strong>${barAcc.qty360}</strong></span>
       </div>
-      ${att.payment_photo_url ? `<a href="${att.payment_photo_url}" target="_blank" class="modal-photo-link">📸 Ver foto del pago</a>` : ''}
+      ${att.payment_photo_url ? `<a href="${att.payment_photo_url}" target="_blank" class="modal-photo-link"><svg width="14" height="14"><use href="#i-camera"/></svg> Ver foto del pago</a>` : ''}
     </div>` : ''}
 
     <div class="modal-actions">
-      ${!att.entered && !att.exit_time ? `<button class="btn btn-success" onclick="doCheckIn('${att.id}')">✓ Registrar ingreso</button>` : ''}
-      ${att.entered && !att.exit_time && (!hasBalance || !canCharge) ? `<button class="btn btn-warning" onclick="doExit('${att.id}')">Registrar salida</button>` : ''}
-      ${canCharge && hasBalance && att.entered ? `<button class="btn btn-primary" onclick="doCloseBarAccount('${barAcc.id}', ${barAcc.slot})">💳 Cobrar cuenta</button>` : ''}
+      ${!att.entered && !att.exit_time ? `<button class="btn btn-success" onclick="doCheckIn('${att.id}')"><svg width="15" height="15"><use href="#i-check"/></svg> Registrar ingreso</button>` : ''}
+      ${att.entered && !att.exit_time && (!hasBalance || !canCharge) ? `<button class="btn btn-warning" onclick="doExit('${att.id}')"><svg width="15" height="15"><use href="#i-door-out"/></svg> Registrar salida</button>` : ''}
+      ${canCharge && hasBalance && att.entered ? `<button class="btn btn-primary" onclick="doCloseBarAccount('${barAcc.id}', ${barAcc.slot})"><svg width="15" height="15"><use href="#i-card"/></svg> Cobrar cuenta</button>` : ''}
     </div>
-    ${canCharge && hasBalance && att.entered && !att.exit_time ? `<p class="modal-warning">⚠️ Tiene consumo sin pagar. No puede salir.</p>` : ''}
+    ${canCharge && hasBalance && att.entered && !att.exit_time ? `<p class="modal-warning"><svg width="12" height="12" style="vertical-align:-1px;margin-right:3px"><use href="#i-warn"/></svg> Tiene consumo sin pagar. No puede salir.</p>` : ''}
   `;
 }
 

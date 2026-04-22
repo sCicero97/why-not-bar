@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <title>Why Not — Portero</title>
-  <meta name="theme-color" content="#0b0b0b"/>
+  <meta name="theme-color" content="#08080a"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="Portero"/>
@@ -16,68 +16,149 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
+
+<!-- ═══════════ SVG ICON SPRITE ═══════════ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>
+    </symbol>
+    <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 6l12 12M6 18L18 6"/>
+    </symbol>
+    <symbol id="i-sos" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3l9.5 17H2.5L12 3z"/><path d="M12 10v4"/>
+      <circle cx="12" cy="17" r=".8" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h11"/>
+    </symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 9l6 6 6-6"/>
+    </symbol>
+    <symbol id="i-people" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/>
+      <circle cx="10" cy="7" r="4"/>
+      <path d="M21 20v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 12l5 5L20 7"/>
+    </symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+    </symbol>
+    <symbol id="i-door" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 21V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v17"/>
+      <path d="M3 21h18"/>
+      <circle cx="15" cy="13" r=".8" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="i-door-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"/>
+      <path d="M14 8l4 4-4 4"/><path d="M18 12H9"/>
+    </symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3l10 18H2L12 3z"/><path d="M12 10v5"/>
+      <circle cx="12" cy="18" r=".8" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="i-card" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/><path d="M6 15h4"/>
+    </symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 7h3l1.5-2h7L17 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/>
+      <circle cx="12" cy="13" r="3.5"/>
+    </symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 5h18l-7 9v5l-4 2v-7L3 5z"/>
+    </symbol>
+  </defs>
+</svg>
+
 <div id="app" style="display:none">
 
-  <header class="topbar" style="padding:14px 18px">
-    <div class="brand">
-      <div class="brand-dot" style="background:var(--purple);box-shadow:0 0 16px rgba(139,92,246,.65)"></div>
-      <div>
+  <!-- ═══════════ GLASS TOP BAR ═══════════ -->
+  <header class="glass-topbar">
+    <div class="topbar-brand">
+      <div class="brand-dot" style="background:var(--purple-ios);box-shadow:0 0 14px rgba(191,90,242,.55)"></div>
+      <div class="topbar-brand-text">
         <h1>Why Not</h1>
         <p id="eventName">Cargando…</p>
       </div>
     </div>
-    <div class="top-actions">
-      <button class="notif-btn sos-btn" id="helpBtn" title="Pedir ayuda en portería">🆘</button>
+    <div class="topbar-actions">
+      <button class="icon-btn danger-btn ghost-btn" id="helpBtn" title="Pedir ayuda en portería" aria-label="SOS">
+        <svg width="20" height="20"><use href="#i-sos"/></svg>
+      </button>
       <div class="user-dropdown">
         <button class="user-dropdown-btn" id="userDropdownBtn">
-          <span id="userChip"></span> ▾
+          <span id="userChip"></span>
+          <svg width="14" height="14"><use href="#i-chevron-down"/></svg>
         </button>
         <div class="user-dropdown-menu" id="userDropdownMenu">
-          <button id="logoutBtn">Cerrar sesión</button>
+          <button id="logoutBtn">
+            <svg width="15" height="15" style="vertical-align:-2px;margin-right:6px"><use href="#i-logout"/></svg>
+            Cerrar sesión
+          </button>
         </div>
       </div>
     </div>
   </header>
 
-  <!-- Counters -->
-  <div class="door-stats">
-    <div class="door-stat">
-      <span class="door-stat-label">Total invitados</span>
-      <strong id="statTotal">0</strong>
-    </div>
-    <div class="door-stat door-stat-green">
-      <span class="door-stat-label">Ingresaron</span>
-      <strong id="statEntered">0</strong>
-    </div>
-    <div class="door-stat door-stat-yellow">
-      <span class="door-stat-label">Pendientes</span>
-      <strong id="statPending">0</strong>
-    </div>
-  </div>
+  <main>
 
-  <!-- Search + filters -->
-  <div class="door-toolbar">
-    <div class="search-wrap" style="flex:1">
-      <input id="searchInput" type="text" placeholder="Buscar por nombre…" autocomplete="off" style="min-width:0;width:100%"/>
-      <button id="clearSearchBtn" class="clear-search-btn">✕</button>
-    </div>
-    <div class="filter-btns">
-      <button class="filter-btn active" data-filter="all">Todos</button>
-      <button class="filter-btn" data-filter="inside">Adentro</button>
-      <button class="filter-btn" data-filter="pending">Pendientes</button>
-      <button class="filter-btn" data-filter="exited">Salieron</button>
-    </div>
-  </div>
+    <!-- ═══════════ STATS ═══════════ -->
+    <section class="door-stats">
+      <div class="door-stat">
+        <span class="door-stat-label">Total invitados</span>
+        <strong id="statTotal">0</strong>
+      </div>
+      <div class="door-stat door-stat-green">
+        <span class="door-stat-label">Ingresaron</span>
+        <strong id="statEntered">0</strong>
+      </div>
+      <div class="door-stat door-stat-yellow">
+        <span class="door-stat-label">Pendientes</span>
+        <strong id="statPending">0</strong>
+      </div>
+    </section>
 
-  <!-- Attendee list -->
-  <div id="attendeeList" class="attendee-list"></div>
+    <!-- ═══════════ TOOLBAR ═══════════ -->
+    <div class="door-toolbar">
+      <div class="search-field">
+        <svg width="16" height="16"><use href="#i-search"/></svg>
+        <input id="searchInput" type="text" placeholder="Buscar por nombre…" autocomplete="off"/>
+      </div>
+      <button id="clearSearchBtn" class="clear-search-btn" aria-label="Limpiar búsqueda">
+        <svg width="16" height="16"><use href="#i-close"/></svg>
+      </button>
+      <div class="filter-btns">
+        <button class="filter-btn active" data-filter="all">
+          <svg width="14" height="14"><use href="#i-people"/></svg> Todos
+        </button>
+        <button class="filter-btn" data-filter="inside">
+          <svg width="14" height="14"><use href="#i-check"/></svg> Adentro
+        </button>
+        <button class="filter-btn" data-filter="pending">
+          <svg width="14" height="14"><use href="#i-clock"/></svg> Pendientes
+        </button>
+        <button class="filter-btn" data-filter="exited">
+          <svg width="14" height="14"><use href="#i-door-out"/></svg> Salieron
+        </button>
+      </div>
+    </div>
 
+    <!-- ═══════════ ATTENDEE LIST ═══════════ -->
+    <div id="attendeeList" class="attendee-list"></div>
+
+  </main>
 </div>
 
-<!-- Modal: person detail -->
+<!-- ═══════════ PERSON MODAL ═══════════ -->
 <div id="personModal" class="modal-overlay hidden">
   <div class="modal-card">
-    <button id="closeModalBtn" class="modal-close-btn">✕</button>
+    <button id="closeModalBtn" class="modal-close-btn" aria-label="Cerrar">
+      <svg width="18" height="18"><use href="#i-close"/></svg>
+    </button>
     <div id="modalContent"></div>
   </div>
 </div>
