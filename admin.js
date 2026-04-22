@@ -1,7 +1,16 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // admin.js — Panel de Administración
 // ═══════════════════════════════════════════════════════════════════════════
-console.log('ADMIN v3 2026-03-23');
+console.log('ADMIN v4 2026-04-22 (Apple UI)');
+
+// ─── SVG icon helper ──────────────────────────────────────────────────────────
+// Returns inline <svg> that references the sprite defined in admin.html
+function icon(name, size = 16) {
+  return `<svg width="${size}" height="${size}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+}
+
+// Labels de rol sin emoji (los íconos los ponemos con SVG al costado)
+const ROLE_ICON = { admin: 'user-gear', bar: 'glass', door: 'door' };
 
 let activeEvent    = null;
 let groupByStatus  = true;   // toggle: agrupar por estado o por nro de cuenta
@@ -23,7 +32,8 @@ async function init() {
     const user = await requireAuth(['admin']);
     if (!user) return;
     const displayName = user.displayName || user.email;
-    document.getElementById('userChip').textContent = `⚙️ ${displayName}`;
+    const chip = document.getElementById('userChip');
+    if (chip) chip.innerHTML = `${icon('user-gear', 16)}<span>${displayName}</span>`;
     setupUserDropdown();
     setupNotifChannel('Admin', displayName);
     document.getElementById('app').style.display = 'block';
@@ -151,7 +161,7 @@ function renderDashboard() {
       <td><strong>${formatMoney(c.total)}</strong></td>
       <td>${c.closed_by || '—'}</td>
       <td style="font-size:12px;color:var(--muted)">${c.closed_at ? new Date(c.closed_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
-      <td>${c.payment_photo_url ? `<button class="btn btn-sm" onclick="viewPhoto('${c.payment_photo_url}')" style="font-size:14px">📸 Ver</button>` : '—'}</td>
+      <td>${c.payment_photo_url ? `<button class="btn btn-sm icon-label-btn" onclick="viewPhoto('${c.payment_photo_url}')">${icon('camera',14)}Ver</button>` : '—'}</td>
     </tr>`).join('') || '<tr><td colspan="6" class="empty-state">Sin cobros todavía.</td></tr>';
 }
 
@@ -194,11 +204,10 @@ function renderAttendeesTable() {
 
   // Actualizar estado visual del botón toggle
   const toggleBtn = document.getElementById('toggleGroupBtn');
-  if (toggleBtn) {
-    toggleBtn.textContent  = groupByStatus ? '# Ordenar por cuenta' : '⬆ Agrupar por estado';
-    toggleBtn.style.background = groupByStatus ? 'var(--panel)' : '#1a2a3a';
-    toggleBtn.style.borderColor = groupByStatus ? 'var(--line)' : '#3b82f6';
-    toggleBtn.style.color = groupByStatus ? 'var(--muted)' : '#93c5fd';
+  const toggleTxt = document.getElementById('toggleGroupText');
+  if (toggleBtn && toggleTxt) {
+    toggleTxt.textContent = groupByStatus ? 'Ordenar por cuenta' : 'Agrupar por estado';
+    toggleBtn.classList.toggle('btn-primary', !groupByStatus);
   }
 
   const tbody = document.getElementById('attendeesBody');
@@ -226,12 +235,12 @@ function renderAttendeesTable() {
       <td>${consumption > 0 ? formatMoney(consumption) : '<span style="color:var(--muted)">—</span>'}</td>
       <td style="font-size:12px;color:var(--muted)">${att.entry_time ? new Date(att.entry_time).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td style="font-size:12px;color:var(--muted)">${att.exit_time ? new Date(att.exit_time).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
-      <td>${att.payment_photo_url ? `<button class="btn btn-sm" onclick="viewPhoto('${att.payment_photo_url}')" style="font-size:14px">📸 Ver</button>` : '—'}</td>
+      <td>${att.payment_photo_url ? `<button class="btn btn-sm icon-label-btn" onclick="viewPhoto('${att.payment_photo_url}')">${icon('camera',14)}Ver</button>` : '—'}</td>
       <td>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-sm" onclick="openEditAttendee('${att.id}')" title="Editar">✏️</button>
-          ${barAcc && !barAcc.is_closed && barAcc.total > 0 ? `<button class="btn btn-sm btn-primary" onclick="adminCloseBarAccount('${barAcc.id}',${barAcc.slot})" title="Cobrar cuenta">💳</button>` : ''}
-          <button class="btn btn-sm btn-danger" onclick="deleteAttendee('${att.id}')" title="Eliminar">🗑</button>
+        <div class="row-actions">
+          <button class="btn btn-sm" onclick="openEditAttendee('${att.id}')" title="Editar">${icon('edit',15)}</button>
+          ${barAcc && !barAcc.is_closed && barAcc.total > 0 ? `<button class="btn btn-sm btn-primary" onclick="adminCloseBarAccount('${barAcc.id}',${barAcc.slot})" title="Cobrar cuenta">${icon('card',15)}</button>` : ''}
+          <button class="btn btn-sm btn-danger" onclick="deleteAttendee('${att.id}')" title="Eliminar">${icon('trash',15)}</button>
         </div>
       </td>
     </tr>`;
@@ -296,21 +305,21 @@ function renderBarTable() {
       <td style="font-size:12px;color:var(--muted)">${closure?.closed_at ? new Date(closure.closed_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td style="font-size:13px">${
         closure?.paid_by_slot
-          ? `<span style="color:#fbbf24">Pagado por #${String(closure.paid_by_slot).padStart(3,'0')}</span>`
+          ? `<span style="color:var(--amber-ios,#ff9f0a)">Pagado por #${String(closure.paid_by_slot).padStart(3,'0')}</span>`
           : closure?.payment_method === 'transfer'
-            ? '🏦 Transfer'
+            ? `<span class="icon-label-btn" style="gap:6px;display:inline-flex;align-items:center">${icon('bank',14)}Transfer</span>`
             : closure?.payment_method === 'cash'
-              ? `💵 Efectivo${closure.change_given > 0 ? `<br><span style="font-size:11px;color:var(--muted)">Vuelto: ${formatMoney(closure.change_given)}</span>` : ''}`
+              ? `<span class="icon-label-btn" style="gap:6px;display:inline-flex;align-items:center">${icon('cash',14)}Efectivo</span>${closure.change_given > 0 ? `<br><span style="font-size:11px;color:var(--muted)">Vuelto: ${formatMoney(closure.change_given)}</span>` : ''}`
               : '—'
       }</td>
       <td>${!acc.is_closed && acc.total > 0
-        ? `<button class="btn btn-sm btn-primary" onclick="adminCloseBarAccount('${acc.id}',${acc.slot})">💳 Cobrar</button>`
+        ? `<button class="btn btn-sm btn-primary icon-label-btn" onclick="adminCloseBarAccount('${acc.id}',${acc.slot})">${icon('card',14)}Cobrar</button>`
         : acc.is_closed
-          ? `<button class="btn btn-sm" onclick="reopenBarAccount('${acc.id}')" style="background:var(--muted);color:#000">Reabrir</button>`
+          ? `<button class="btn btn-sm" onclick="reopenBarAccount('${acc.id}')">Reabrir</button>`
           : '—'
       }</td>
       <td>${photoUrl
-        ? `<button class="btn btn-sm" onclick="viewPhoto('${photoUrl}')" style="font-size:14px">📸 Ver</button>`
+        ? `<button class="btn btn-sm icon-label-btn" onclick="viewPhoto('${photoUrl}')">${icon('camera',14)}Ver</button>`
         : '—'
       }</td>
     </tr>`;
@@ -328,7 +337,7 @@ function renderExpenses() {
       <td>${exp.description}</td>
       <td><strong>${formatMoney(exp.amount)}</strong></td>
       <td style="font-size:12px;color:var(--muted)">${new Date(exp.created_at).toLocaleDateString('es-UY')}</td>
-      <td><button class="btn btn-sm btn-danger" onclick="deleteExpense('${exp.id}')">🗑</button></td>
+      <td><button class="btn btn-sm btn-danger" onclick="deleteExpense('${exp.id}')" title="Eliminar">${icon('trash',15)}</button></td>
     </tr>`).join('') || '<tr><td colspan="4" class="empty-state">Sin gastos registrados.</td></tr>';
 
   document.getElementById('expensesTotalRow').innerHTML =
@@ -348,8 +357,8 @@ function renderEvents() {
         : '<span class="status-pill" style="background:#1c1c1c;color:#6b7280">Inactivo</span>'
       }</td>
       <td>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-sm btn-danger" onclick="deleteEvent('${ev.id}')">🗑</button>
+        <div class="row-actions">
+          <button class="btn btn-sm btn-danger" onclick="deleteEvent('${ev.id}')" title="Eliminar">${icon('trash',15)}</button>
           ${!ev.is_active ? `<button class="btn btn-sm btn-success" onclick="activateEvent('${ev.id}')">Activar</button>` : ''}
         </div>
       </td>
@@ -394,12 +403,46 @@ async function updateAttendeeField(id, field, value) {
 }
 
 // ─── Get next available bar slot ──────────────────────────────────────────────
+// Considera tanto los slots ya asignados a asistentes como los bar_accounts existentes.
+// Devuelve el primer hueco libre. No hay cap duro: si llegás a 50k, devuelve 50001.
 function getNextAvailableBarSlot() {
-  const usedSlots = new Set(attendees.map(a => a.bar_account_slot).filter(s => s));
-  for (let i = 1; i <= 999; i++) {
-    if (!usedSlots.has(i)) return i;
+  const used = new Set([
+    ...attendees.map(a => a.bar_account_slot).filter(Boolean),
+  ]);
+  const maxExisting = barAccounts.reduce((m, a) => Math.max(m, a.slot || 0), 0);
+  // Buscar el primer hueco (1..maxExisting+1)
+  for (let i = 1; i <= maxExisting + 1; i++) {
+    if (!used.has(i)) return i;
   }
-  return null;
+  return maxExisting + 1;
+}
+
+// ─── Asegurar que exista una bar_account para un slot ─────────────────────────
+// Si el slot ya existe en bar_accounts, sólo se vincula el attendee_id.
+// Si no existe (ej: el usuario asigna slot 250 cuando sólo hay 120), se crea.
+async function ensureBarAccountSlot(slot, attendeeId = null) {
+  if (!activeEvent || !slot) return;
+  const db = getDb();
+  const existing = barAccounts.find(a => a.slot === slot);
+  if (existing) {
+    await db.from('bar_accounts')
+      .update({ attendee_id: attendeeId })
+      .eq('event_id', activeEvent.id)
+      .eq('slot', slot);
+    return;
+  }
+  // No existe → crear con upsert por (event_id, slot)
+  const { error } = await db.from('bar_accounts').upsert({
+    event_id:    activeEvent.id,
+    slot,
+    total:       0,
+    qty160:      0,
+    qty260:      0,
+    qty360:      0,
+    is_closed:   false,
+    attendee_id: attendeeId,
+  }, { onConflict: 'event_id,slot' });
+  if (error) console.warn('[ensureBarAccountSlot] upsert error:', error.message);
 }
 
 // ─── Add/Edit attendee modal ──────────────────────────────────────────────────
@@ -416,7 +459,7 @@ function openAddAttendee() {
             <option value="in_process">En proceso</option><option value="paid" selected>Pago</option>
           </select>
         </div>
-        <div class="form-group"><label>Cuenta barra #</label><input name="bar_account_slot" type="number" value="${nextSlot}" readonly style="background:var(--panel-2);cursor:not-allowed"/></div>
+        <div class="form-group"><label>Cuenta barra #</label><input name="bar_account_slot" type="number" value="${nextSlot}" min="1" placeholder="Nº de barra (se crea automáticamente)"/></div>
         <div class="form-group"><label>Cédula</label><input name="cedula"/></div>
         <div class="form-group"><label>Email</label><input name="email" type="email"/></div>
         <div class="form-group"><label>Teléfono</label><input name="phone"/></div>
@@ -455,12 +498,9 @@ function openAddAttendee() {
       const { data: newAtt, error } = await db.from('attendees').insert(obj).select().single();
       if (error) toast('Error: ' + error.message, 'error');
       else {
-        // Vincular cuenta de barra con asistente
+        // Vincular (o auto-crear) la cuenta de barra con el asistente
         if (newAtt.bar_account_slot) {
-          await db.from('bar_accounts')
-            .update({ attendee_id: newAtt.id })
-            .eq('event_id', activeEvent.id)
-            .eq('slot', newAtt.bar_account_slot);
+          await ensureBarAccountSlot(newAtt.bar_account_slot, newAtt.id);
         }
         toast('Asistente agregado', 'success');
         closeModal();
@@ -507,9 +547,29 @@ function openEditAttendee(id) {
     obj.entry_amount = parseFloat(obj.entry_amount) || 0;
     obj.amount_paid  = parseFloat(obj.amount_paid)  || 0;
     const db = getDb();
+
+    const prevSlot = att.bar_account_slot || null;
+    const newSlot  = obj.bar_account_slot;
+
     const { error } = await db.from('attendees').update(obj).eq('id', id);
-    if (error) toast('Error: ' + error.message, 'error');
-    else { toast('Guardado', 'success'); closeModal(); await loadAll(); }
+    if (error) { toast('Error: ' + error.message, 'error'); return; }
+
+    // Si cambió el slot: desvincular el anterior y vincular/crear el nuevo
+    if (prevSlot !== newSlot) {
+      if (prevSlot) {
+        await db.from('bar_accounts')
+          .update({ attendee_id: null })
+          .eq('event_id', activeEvent.id)
+          .eq('slot', prevSlot);
+      }
+      if (newSlot) {
+        await ensureBarAccountSlot(newSlot, id);
+      }
+    }
+
+    toast('Guardado', 'success');
+    closeModal();
+    await loadAll();
   });
 }
 
@@ -611,7 +671,8 @@ function openNewEvent() {
     <form id="eventForm">
       <div class="form-group"><label>Nombre del evento *</label><input name="name" required/></div>
       <div class="form-group"><label>Fecha *</label><input name="date" type="date" value="${new Date().toISOString().slice(0,10)}" required/></div>
-      <div class="form-group"><label>Cuentas de barra a crear</label><input name="accountCount" type="number" value="120" min="1" max="500"/></div>
+      <div class="form-group"><label>Cuentas de barra iniciales</label><input name="accountCount" type="number" value="120" min="0"/></div>
+      <div style="grid-column:1/-1;font-size:12px;color:#8e8e93;margin-top:-4px">Se crean al inicio. Si necesitás más, se agregan automáticamente al asignar números a los asistentes — no hay límite.</div>
       <div style="display:flex;gap:10px;margin-top:16px">
         <button type="submit" class="btn btn-primary" style="flex:1">Crear y activar</button>
         <button type="button" class="btn" onclick="closeModal()" style="flex:1">Cancelar</button>
@@ -700,9 +761,16 @@ async function importCsv(file) {
 
   if (!rows.length) { toast('No se encontraron filas válidas', 'error'); return; }
   const db = getDb();
-  const { error } = await db.from('attendees').insert(rows);
-  if (error) toast('Error importando: ' + error.message, 'error');
-  else { toast(`${rows.length} asistentes importados`, 'success'); await loadAll(); }
+  const { data: inserted, error } = await db.from('attendees').insert(rows).select();
+  if (error) { toast('Error importando: ' + error.message, 'error'); return; }
+
+  // Auto-crear / vincular bar_accounts para todos los slots importados
+  for (const a of (inserted || [])) {
+    if (a.bar_account_slot) await ensureBarAccountSlot(a.bar_account_slot, a.id);
+  }
+
+  toast(`${rows.length} asistentes importados`, 'success');
+  await loadAll();
 }
 
 // ─── Export Excel ─────────────────────────────────────────────────────────────
@@ -775,7 +843,7 @@ function viewPhoto(url) {
       <h3 style="margin:0 0 16px;font-size:20px">Comprobante de pago</h3>
       <img src="${url}" style="max-width:100%;border-radius:14px;max-height:65vh;object-fit:contain;display:block;margin:0 auto"/>
       <div style="margin-top:18px">
-        <a href="${url}" target="_blank" class="btn btn-sm" style="display:inline-block;text-decoration:none">↗ Abrir en nueva pestaña</a>
+        <a href="${url}" target="_blank" class="btn btn-sm icon-label-btn" style="display:inline-flex;text-decoration:none">${icon('external',14)}Abrir en nueva pestaña</a>
       </div>
     </div>
   `;
@@ -808,8 +876,8 @@ async function loadUsers() {
   }
 }
 
-const ROLE_LABELS = { admin: '⚙️ Admin', bar: '🍹 Barra', door: '🚪 Portero' };
-const ROLE_COLORS = { admin: '#f59e0b', bar: '#1ed760', door: '#3b82f6' };
+const ROLE_LABELS = { admin: 'Admin', bar: 'Barra', door: 'Portero' };
+const ROLE_COLORS = { admin: '#ff9f0a', bar: '#30d158', door: '#64a9ff' };
 
 function renderUsers() {
   const tbody = document.getElementById('usersBody');
@@ -824,29 +892,30 @@ function renderUsers() {
     <tr>
       <td>
         <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:${ROLE_COLORS[u.role]||'#8e8e93'};display:inline-flex">${icon(ROLE_ICON[u.role]||'user',16)}</span>
           <span style="font-weight:600">${u.display_name || '—'}</span>
           <button class="btn btn-sm" onclick="openEditUserName('${u.id}','${(u.display_name||'').replace(/'/g,"&#39;")}')"
-            style="font-size:12px;padding:3px 8px">✏️</button>
+            title="Editar nombre" style="padding:4px 8px">${icon('edit',13)}</button>
         </div>
       </td>
-      <td style="color:var(--muted);font-size:13px">${u.email}</td>
+      <td style="color:#8e8e93;font-size:13px">${u.email}</td>
       <td>
         <select class="inline-select"
-          style="border-color:${ROLE_COLORS[u.role]||'var(--line)'};color:${ROLE_COLORS[u.role]||'var(--text)'};background:var(--panel-2);border-radius:10px;padding:5px 10px;font-size:13px"
+          style="border-color:${ROLE_COLORS[u.role]||'rgba(255,255,255,.1)'};color:${ROLE_COLORS[u.role]||'#f5f5f7'}"
           onchange="updateUserRole('${u.id}',this.value)">
-          <option value="bar"  ${u.role==='bar'  ?'selected':''}>🍹 Barra</option>
-          <option value="door" ${u.role==='door' ?'selected':''}>🚪 Portero</option>
-          <option value="admin"${u.role==='admin'?'selected':''}>⚙️ Admin</option>
+          <option value="bar"  ${u.role==='bar'  ?'selected':''}>Barra</option>
+          <option value="door" ${u.role==='door' ?'selected':''}>Portero</option>
+          <option value="admin"${u.role==='admin'?'selected':''}>Admin</option>
         </select>
       </td>
-      <td style="font-size:12px;color:var(--muted)">
+      <td style="font-size:12px;color:#8e8e93">
         ${u.last_sign_in ? new Date(u.last_sign_in).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'Nunca'}
       </td>
       <td>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-sm" onclick="openChangePasswordModal('${u.id}','${u.email.replace(/'/g,"&#39;")}')"
-            style="background:#1c2a3a;border-color:#2563eb;color:#93c5fd">🔑 Clave</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteAppUser('${u.id}','${u.email.replace(/'/g,"&#39;")}')">🗑</button>
+        <div class="row-actions">
+          <button class="btn btn-sm icon-label-btn" onclick="openChangePasswordModal('${u.id}','${u.email.replace(/'/g,"&#39;")}')"
+            title="Cambiar contraseña">${icon('key',14)}Clave</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteAppUser('${u.id}','${u.email.replace(/'/g,"&#39;")}')" title="Eliminar">${icon('trash',15)}</button>
         </div>
       </td>
     </tr>
@@ -893,7 +962,7 @@ function openEditUserName(userId, currentName) {
 }
 
 async function deleteAppUser(userId, email) {
-  if (!confirm(`⚠️  Eliminar al usuario:\n${email}\n\nEsta acción no se puede deshacer.`)) return;
+  if (!confirm(`Eliminar al usuario:\n${email}\n\nEsta acción no se puede deshacer.`)) return;
 
   const token = await getAuthToken();
   if (!token) { toast('Sin sesión', 'error'); return; }
@@ -930,9 +999,9 @@ function openAddUserModal() {
       <div class="form-group">
         <label>Rol</label>
         <select id="nu-role">
-          <option value="bar">🍹 Barra</option>
-          <option value="door">🚪 Portero</option>
-          <option value="admin">⚙️ Admin</option>
+          <option value="bar">Barra</option>
+          <option value="door">Portero</option>
+          <option value="admin">Admin</option>
         </select>
       </div>
       <div style="display:flex;gap:10px;margin-top:16px">
@@ -1037,18 +1106,127 @@ function openChangePasswordModal(userId, email) {
 function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
 
 // ─── UI setup ─────────────────────────────────────────────────────────────────
+const TAB_TITLES = {
+  dashboard: 'Dashboard',
+  asistentes: 'Asistentes',
+  barra: 'Barra',
+  gastos: 'Gastos',
+  evento: 'Evento',
+  tareas: 'Tareas',
+  usuarios: 'Usuarios',
+};
+const TAB_ICONS = {
+  dashboard: 'dashboard',
+  asistentes: 'people',
+  barra: 'glass',
+  gastos: 'receipt',
+  evento: 'calendar',
+  tareas: 'tasks',
+  usuarios: 'user-gear',
+};
+// Tabs visibles en la tab-bar inferior (mobile). El resto va en "Más".
+const PRIMARY_MOBILE_TABS = ['dashboard', 'asistentes', 'barra', 'gastos'];
+
+function activateTab(tab) {
+  // Paneles
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById(`tab-${tab}`);
+  if (panel) panel.classList.add('active');
+  // Sidebar nav items
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  // Bottom tabbar
+  document.querySelectorAll('.bottom-tab').forEach(b => {
+    if (b.id === 'bottomMoreBtn') {
+      // "Más" queda activo sólo si el tab actual no es uno primario
+      b.classList.toggle('active', !PRIMARY_MOBILE_TABS.includes(tab));
+    } else {
+      b.classList.toggle('active', b.dataset.tab === tab);
+    }
+  });
+  // Título en topbar
+  const titleEl = document.getElementById('topbarTitle');
+  if (titleEl) titleEl.textContent = TAB_TITLES[tab] || '';
+  // Cerrar sidebar en mobile al navegar
+  closeSidebar();
+  // Cerrar bottom sheet
+  closeMoreSheet();
+  // Carga bajo demanda
+  if (tab === 'usuarios') loadUsers();
+  // Scroll top
+  const scroll = document.querySelector('.main-scroll');
+  if (scroll) scroll.scrollTop = 0;
+}
+
+function openSidebar() {
+  document.getElementById('sidebar')?.classList.add('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar')?.classList.remove('open');
+}
+
+// ─── Bottom sheet ("Más") para mobile ─────────────────────────────────────────
+function openMoreSheet() {
+  let sheet = document.getElementById('moreSheet');
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'moreSheet';
+    sheet.className = 'bottom-sheet';
+    document.body.appendChild(sheet);
+  }
+  const currentTab = document.querySelector('.tab-panel.active')?.id.replace('tab-', '') || 'dashboard';
+  const items = Object.keys(TAB_TITLES).map(key => `
+    <button class="bottom-sheet-item ${key === currentTab ? 'active' : ''}" data-tab="${key}">
+      ${icon(TAB_ICONS[key], 22)}
+      <span>${TAB_TITLES[key]}</span>
+    </button>
+  `).join('');
+  sheet.innerHTML = `
+    <div class="bottom-sheet-handle"></div>
+    <div class="bottom-sheet-grid">${items}</div>
+  `;
+  sheet.querySelectorAll('.bottom-sheet-item').forEach(it => {
+    it.addEventListener('click', () => activateTab(it.dataset.tab));
+  });
+  // Backdrop click
+  if (!document.getElementById('sheetBackdrop')) {
+    const bd = document.createElement('div');
+    bd.id = 'sheetBackdrop';
+    bd.className = 'sidebar-backdrop';
+    bd.style.display = 'block';
+    bd.style.zIndex = '998';
+    bd.addEventListener('click', closeMoreSheet);
+    document.body.appendChild(bd);
+  } else {
+    document.getElementById('sheetBackdrop').style.display = 'block';
+  }
+  requestAnimationFrame(() => sheet.classList.add('open'));
+}
+function closeMoreSheet() {
+  const sheet = document.getElementById('moreSheet');
+  if (sheet) sheet.classList.remove('open');
+  const bd = document.getElementById('sheetBackdrop');
+  if (bd) bd.style.display = 'none';
+}
+
 function setupUI() {
-  // Tabs — cargar usuarios on-demand cuando se abre el tab
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-      if (btn.dataset.tab === 'usuarios') loadUsers();
-    });
+  // Sidebar nav (desktop + mobile slide-in)
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => activateTab(btn.dataset.tab));
   });
 
+  // Bottom tabbar
+  document.querySelectorAll('.bottom-tab').forEach(btn => {
+    if (btn.id === 'bottomMoreBtn') return;
+    btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+  });
+  document.getElementById('bottomMoreBtn')?.addEventListener('click', openMoreSheet);
+
+  // Sidebar open/close (mobile)
+  document.getElementById('sidebarOpenBtn')?.addEventListener('click', openSidebar);
+  document.getElementById('sidebarCloseBtn')?.addEventListener('click', closeSidebar);
+  document.getElementById('sidebarBackdrop')?.addEventListener('click', closeSidebar);
+
+  // Header actions
   document.getElementById('logoutBtn').addEventListener('click', signOut);
   document.getElementById('exportBtn').addEventListener('click', exportToExcel);
   document.getElementById('closeModalBtn').addEventListener('click', closeModal);
@@ -1072,6 +1250,10 @@ function setupUI() {
     groupByStatus = !groupByStatus;
     renderAttendeesTable();
   });
+
+  // Título inicial
+  const titleEl = document.getElementById('topbarTitle');
+  if (titleEl) titleEl.textContent = TAB_TITLES.dashboard;
 }
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────
@@ -1098,21 +1280,23 @@ function renderTasks() {
     <div class="task-card ${task.is_active ? 'task-active' : 'task-inactive'}">
       <div class="task-header">
         <div class="task-title">
-          <span class="task-dot" style="background:${task.is_active ? 'var(--green)' : 'var(--muted)'}"></span>
+          <span class="task-dot" style="background:${task.is_active ? 'var(--green-ios,#30d158)' : '#8e8e93'}"></span>
           <strong>${task.name}</strong>
-          ${!task.is_active ? '<span style="color:var(--muted);font-size:13px"> — Inactiva</span>' : ''}
+          ${!task.is_active ? '<span style="color:#8e8e93;font-size:13px"> — Inactiva</span>' : ''}
         </div>
         <div class="task-meta">
-          <span>${assignedProfile ? '👤 ' + assignedProfile.display_name : '👥 Todos'}</span>
-          ${task.remind ? `<span>🔔 Cada ${task.remind_freq_minutes} min · ${task.remind_from}–${task.remind_until}</span>` : '<span style="color:var(--muted)">Sin recordatorio</span>'}
+          <span>${icon(assignedProfile ? 'user' : 'people', 14)} ${assignedProfile ? assignedProfile.display_name : 'Todos'}</span>
+          ${task.remind
+            ? `<span>${icon('bell',14)} Cada ${task.remind_freq_minutes} min · ${task.remind_from}–${task.remind_until}</span>`
+            : '<span style="color:#8e8e93">Sin recordatorio</span>'}
         </div>
       </div>
       <div class="task-footer">
-        ${lastCheck ? `<span class="task-last-check">✓ Chequeado a las ${lastCheckTime}</span>` : '<span style="color:var(--muted);font-size:13px">Sin chequeados</span>'}
+        ${lastCheck ? `<span class="task-last-check">${icon('check',14)} Chequeado a las ${lastCheckTime}</span>` : '<span style="color:#8e8e93;font-size:13px">Sin chequeados</span>'}
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-sm btn-success" onclick="checkTask('${task.id}')">✓ Chequeado</button>
+          <button class="btn btn-sm btn-success icon-label-btn" onclick="checkTask('${task.id}')">${icon('check',14)}Chequeado</button>
           <button class="btn btn-sm" onclick="toggleTask('${task.id}',${!task.is_active})">${task.is_active ? 'Desactivar' : 'Activar'}</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteTask('${task.id}')">🗑</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteTask('${task.id}')" title="Eliminar">${icon('trash',15)}</button>
         </div>
       </div>
     </div>`;
@@ -1151,17 +1335,17 @@ function isInReminderWindow(task) {
 
 function showReminder(task) {
   if (Notification.permission === 'granted') {
-    new Notification(`⏰ ${task.name}`, { body: 'Recordatorio de tarea del evento', icon: './Logo.png' });
+    new Notification(task.name, { body: 'Recordatorio de tarea del evento', icon: './Logo.png' });
   }
-  toast(`⏰ Recordatorio: ${task.name}`, 'warning');
+  toast(`Recordatorio: ${task.name}`, 'warning');
 
   // Tareas asignadas a "Todos" (assigned_to = null) → push a todos los admins
   if (!task.assigned_to) {
-    sendPushToAll(`⏰ ${task.name}`, 'Recordatorio de tarea — Why Not', 'whynot-task', 'admin');
+    sendPushToAll(task.name, 'Recordatorio de tarea — Why Not', 'whynot-task', 'admin');
     // También broadcast in-app para admins conectados
     if (_notifChannel) {
       _notifChannel.send({ type: 'broadcast', event: 'alert',
-        payload: { emoji: '⏰', msg: task.name, from: 'Sistema', target: 'admin' } });
+        payload: { emoji: '', msg: task.name, from: 'Sistema', target: 'admin' } });
     }
   }
 }
@@ -1172,7 +1356,7 @@ async function checkTask(taskId) {
   const { error } = await db.from('task_checks').insert({ task_id: taskId, checked_by: user.id });
   if (error) toast('Error: ' + error.message, 'error');
   else {
-    toast('✓ Tarea chequeada', 'success');
+    toast('Tarea chequeada', 'success');
     await loadAll();
   }
 }
@@ -1193,7 +1377,7 @@ async function deleteTask(taskId) {
 
 function openAddTask() {
   const profileOptions = [
-    `<option value="">👥 Todos</option>`,
+    `<option value="">Todos</option>`,
     ...profiles.map(p => `<option value="${p.id}">${p.display_name || p.role}</option>`)
   ].join('');
 

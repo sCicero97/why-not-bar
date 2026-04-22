@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <title>Why Not — Admin</title>
   <meta name="theme-color" content="#0b0b0b"/>
   <link rel="manifest" href="./admin-manifest.webmanifest"/>
@@ -13,243 +13,535 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
-<body>
-<div id="app" style="display:none">
+<body class="admin-body">
 
-  <header class="topbar" style="padding:14px 20px">
-    <div class="brand">
-      <div class="brand-dot" style="background:#f59e0b;box-shadow:0 0 16px rgba(245,158,11,.6)"></div>
-      <div>
+<!-- ═══════════ SVG ICON SPRITE ═══════════ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- Grid/Dashboard -->
+    <symbol id="i-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3"  width="7" height="9"  rx="2"/>
+      <rect x="14" y="3" width="7" height="5"  rx="2"/>
+      <rect x="14" y="12" width="7" height="9" rx="2"/>
+      <rect x="3" y="16" width="7" height="5"  rx="2"/>
+    </symbol>
+    <!-- People -->
+    <symbol id="i-people" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/>
+      <circle cx="10" cy="7" r="4"/>
+      <path d="M21 20v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </symbol>
+    <!-- Cocktail (barra) -->
+    <symbol id="i-glass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 5h16l-7 8v7"/>
+      <path d="M8 20h10"/>
+      <path d="M6 9h12"/>
+    </symbol>
+    <!-- Receipt / expenses -->
+    <symbol id="i-receipt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 3h14v18l-3-2-3 2-3-2-3 2-2-2V3z"/>
+      <path d="M9 8h6M9 12h6M9 16h4"/>
+    </symbol>
+    <!-- Calendar -->
+    <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="5" width="18" height="16" rx="2.5"/>
+      <path d="M3 10h18"/>
+      <path d="M8 3v4M16 3v4"/>
+    </symbol>
+    <!-- Tasks (checklist) -->
+    <symbol id="i-tasks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 6l2 2 4-4"/>
+      <path d="M4 13l2 2 4-4"/>
+      <path d="M4 20l2 2 4-4"/>
+      <path d="M14 6h7M14 13h7M14 20h7"/>
+    </symbol>
+    <!-- User-shield (admin users) -->
+    <symbol id="i-user-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="9" cy="8" r="4"/>
+      <path d="M2 21v-1a6 6 0 0 1 6-6h2"/>
+      <path d="M19 14l.9 1.6L22 16l-1.5 1.5.3 2.1-1.8-.9-1.8.9.3-2.1L16 16l2.1-.4L19 14z"/>
+    </symbol>
+    <!-- Logout -->
+    <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/>
+      <path d="M10 17l-5-5 5-5"/>
+      <path d="M5 12h11"/>
+    </symbol>
+    <!-- Sneeze (droplet+face) -->
+    <symbol id="i-sneeze" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="9" cy="10" r="6"/>
+      <path d="M7 12c.8.8 2.2.8 3 0"/>
+      <path d="M7 9h0M11 9h0"/>
+      <path d="M18 14c1.5 0 2.5 1 2.5 2.5S19.5 19 18 19s-2.5-1-2.5-2.5c0-1 1.3-3 2.5-4.5"/>
+    </symbol>
+    <!-- SOS / alert -->
+    <symbol id="i-sos" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3l9.5 17H2.5L12 3z"/>
+      <path d="M12 10v4"/>
+      <circle cx="12" cy="17" r=".8" fill="currentColor" stroke="none"/>
+    </symbol>
+    <!-- Download / excel -->
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3v13"/>
+      <path d="M7 11l5 5 5-5"/>
+      <path d="M4 20h16"/>
+    </symbol>
+    <!-- Pencil / edit -->
+    <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 20h4l10-10-4-4L4 16v4z"/>
+      <path d="M14 6l4 4"/>
+    </symbol>
+    <!-- Trash -->
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 7h16"/>
+      <path d="M10 11v6M14 11v6"/>
+      <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/>
+      <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/>
+    </symbol>
+    <!-- Credit card -->
+    <symbol id="i-card" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="5" width="20" height="14" rx="2.5"/>
+      <path d="M2 10h20"/>
+      <path d="M6 15h4"/>
+    </symbol>
+    <!-- Camera / photo -->
+    <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 7h3l1.5-2h7L17 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/>
+      <circle cx="12" cy="13" r="3.5"/>
+    </symbol>
+    <!-- Bank / transfer -->
+    <symbol id="i-bank" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 10l9-5 9 5"/>
+      <path d="M5 10v8M9 10v8M15 10v8M19 10v8"/>
+      <path d="M3 20h18"/>
+    </symbol>
+    <!-- Cash / bills -->
+    <symbol id="i-cash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="6" width="20" height="12" rx="2"/>
+      <circle cx="12" cy="12" r="2.5"/>
+      <path d="M6 9v0M18 15v0" stroke-linecap="round"/>
+    </symbol>
+    <!-- Key -->
+    <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="8" cy="15" r="4"/>
+      <path d="M11 12l9-9"/>
+      <path d="M17 6l3 3"/>
+      <path d="M14 9l3 3"/>
+    </symbol>
+    <!-- Bell -->
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8z"/>
+      <path d="M10 21a2 2 0 0 0 4 0"/>
+    </symbol>
+    <!-- Clock -->
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M12 7v5l3 2"/>
+    </symbol>
+    <!-- Check -->
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 12l5 5L20 7"/>
+    </symbol>
+    <!-- Plus -->
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 5v14M5 12h14"/>
+    </symbol>
+    <!-- Close -->
+    <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 6l12 12M6 18L18 6"/>
+    </symbol>
+    <!-- Search -->
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="7"/>
+      <path d="M20 20l-4-4"/>
+    </symbol>
+    <!-- Hamburger -->
+    <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 7h16M4 12h16M4 17h16"/>
+    </symbol>
+    <!-- Refresh -->
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a9 9 0 1 1-3-6.7"/>
+      <path d="M21 4v5h-5"/>
+    </symbol>
+    <!-- External link -->
+    <symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 4h6v6"/>
+      <path d="M10 14L20 4"/>
+      <path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/>
+    </symbol>
+    <!-- Chevron down -->
+    <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 9l6 6 6-6"/>
+    </symbol>
+    <!-- Arrow up sort -->
+    <symbol id="i-sort" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 20V4M7 4l-3 3M7 4l3 3"/>
+      <path d="M13 8h8M13 13h6M13 18h4"/>
+    </symbol>
+    <!-- Single user (person) -->
+    <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="8" r="4"/>
+      <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>
+    </symbol>
+    <!-- Door -->
+    <symbol id="i-door" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 21V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v17"/>
+      <path d="M3 21h18"/>
+      <circle cx="15" cy="13" r=".8" fill="currentColor" stroke="none"/>
+    </symbol>
+    <!-- Warning / alert triangle -->
+    <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3l10 18H2L12 3z"/>
+      <path d="M12 10v5"/>
+      <circle cx="12" cy="18" r=".8" fill="currentColor" stroke="none"/>
+    </symbol>
+    <!-- Hash -->
+    <symbol id="i-hash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 9h14M5 15h14M10 4l-2 16M16 4l-2 16"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="app" class="admin-shell" style="display:none">
+
+  <!-- ═══════════ SIDEBAR (desktop) ═══════════ -->
+  <aside class="sidebar" id="sidebar">
+    <header class="sidebar-brand">
+      <div class="brand-dot" style="background:#f59e0b;box-shadow:0 0 18px rgba(245,158,11,.6)"></div>
+      <div class="sidebar-brand-text">
         <h1>Why Not</h1>
         <p id="eventName">Admin</p>
       </div>
-    </div>
-    <div class="top-actions">
-      <button class="notif-btn" id="sneezeBtn" title="Notificar a todos">🤧</button>
-      <button class="notif-btn" id="helpBtn" title="Pedir ayuda">🆘</button>
-      <button id="exportBtn" class="btn btn-sm" style="background:#0d9488;border-color:#0f766e;color:#fff">Excel</button>
-      <div class="user-dropdown">
-        <button class="user-dropdown-btn" id="userDropdownBtn">
-          <span id="userChip"></span> ▾
+      <button class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Cerrar menú">
+        <svg width="22" height="22"><use href="#i-close"/></svg>
+      </button>
+    </header>
+
+    <nav class="sidebar-nav">
+      <div class="sidebar-section">Panel</div>
+      <button class="nav-item active" data-tab="dashboard">
+        <svg width="20" height="20"><use href="#i-dashboard"/></svg>
+        <span>Dashboard</span>
+      </button>
+      <button class="nav-item" data-tab="asistentes">
+        <svg width="20" height="20"><use href="#i-people"/></svg>
+        <span>Asistentes</span>
+      </button>
+      <button class="nav-item" data-tab="barra">
+        <svg width="20" height="20"><use href="#i-glass"/></svg>
+        <span>Barra</span>
+      </button>
+      <button class="nav-item" data-tab="gastos">
+        <svg width="20" height="20"><use href="#i-receipt"/></svg>
+        <span>Gastos</span>
+      </button>
+      <button class="nav-item" data-tab="tareas">
+        <svg width="20" height="20"><use href="#i-tasks"/></svg>
+        <span>Tareas</span>
+      </button>
+
+      <div class="sidebar-section">Gestión</div>
+      <button class="nav-item" data-tab="evento">
+        <svg width="20" height="20"><use href="#i-calendar"/></svg>
+        <span>Evento</span>
+      </button>
+      <button class="nav-item" data-tab="usuarios">
+        <svg width="20" height="20"><use href="#i-user-gear"/></svg>
+        <span>Usuarios</span>
+      </button>
+    </nav>
+
+    <footer class="sidebar-footer">
+      <div class="user-chip-compact" id="userChip">
+        <svg width="18" height="18"><use href="#i-user-gear"/></svg>
+        <span>Admin</span>
+      </div>
+      <button id="logoutBtn" class="sidebar-logout" title="Cerrar sesión">
+        <svg width="18" height="18"><use href="#i-logout"/></svg>
+        Salir
+      </button>
+    </footer>
+  </aside>
+
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+  <!-- ═══════════ MAIN AREA ═══════════ -->
+  <main class="main-area">
+
+    <!-- Top bar (minimal, floating glass) -->
+    <header class="glass-topbar">
+      <button class="icon-btn ghost-btn mobile-menu-btn" id="sidebarOpenBtn" aria-label="Abrir menú">
+        <svg width="22" height="22"><use href="#i-menu"/></svg>
+      </button>
+
+      <div class="topbar-title" id="topbarTitle">Dashboard</div>
+
+      <div class="topbar-actions">
+        <button class="icon-btn ghost-btn" id="sneezeBtn" title="Notificar a todos">
+          <svg width="20" height="20"><use href="#i-sneeze"/></svg>
         </button>
-        <div class="user-dropdown-menu" id="userDropdownMenu">
-          <button id="logoutBtn">Cerrar sesión</button>
+        <button class="icon-btn danger-btn" id="helpBtn" title="Pedir ayuda">
+          <svg width="20" height="20"><use href="#i-sos"/></svg>
+        </button>
+        <button id="exportBtn" class="icon-btn accent-btn" title="Exportar Excel">
+          <svg width="20" height="20"><use href="#i-download"/></svg>
+          <span class="icon-btn-label">Excel</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="main-scroll">
+
+      <!-- ── Dashboard ────────────────────────────────────────── -->
+      <section id="tab-dashboard" class="tab-panel active">
+
+        <div class="admin-section-header">Cuentas</div>
+        <div class="summary-grid summary-grid-2">
+          <div class="glass-card stat-card">
+            <span class="summary-label">Total barra</span>
+            <strong id="d-barTotal">$ 0</strong>
+          </div>
+          <div class="glass-card stat-card tint-green">
+            <span class="summary-label">Total entradas</span>
+            <strong id="d-entryTotal">$ 0</strong>
+          </div>
+          <div class="glass-card stat-card tint-amber">
+            <span class="summary-label">Gastos</span>
+            <strong id="d-expenses">$ 0</strong>
+          </div>
+          <div class="glass-card stat-card tint-neutral">
+            <span class="summary-label">TOTAL NETO</span>
+            <strong id="d-netTotal" style="font-size:32px">$ 0</strong>
+          </div>
         </div>
-      </div>
-    </div>
-  </header>
 
-  <!-- Tabs -->
-  <nav class="tabs">
-    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
-    <button class="tab-btn" data-tab="asistentes">Asistentes</button>
-    <button class="tab-btn" data-tab="barra">Barra</button>
-    <button class="tab-btn" data-tab="gastos">Gastos</button>
-    <button class="tab-btn" data-tab="evento">Evento</button>
-    <button class="tab-btn" data-tab="tareas">Tareas</button>
-    <button class="tab-btn" data-tab="usuarios">Usuarios</button>
-  </nav>
+        <div class="admin-section-header">Asistentes</div>
+        <div class="summary-grid summary-grid-2">
+          <div class="glass-card stat-card tint-green">
+            <span class="summary-label">Ingresaron</span>
+            <strong id="d-entered">0</strong>
+          </div>
+          <div class="glass-card stat-card">
+            <span class="summary-label">Cuentas barra abiertas</span>
+            <strong id="d-openAccs">0</strong>
+          </div>
+          <div class="glass-card stat-card tint-green">
+            <span class="summary-label">Cuentas barra cerradas</span>
+            <strong id="d-closedAccs">0</strong>
+          </div>
+        </div>
 
-  <!-- ── Dashboard ────────────────────────────────────────── -->
-  <section id="tab-dashboard" class="tab-panel active">
+        <div class="admin-section-header">Detalle de la barra</div>
+        <div class="summary-grid summary-grid-2">
+          <div class="glass-card stat-card"><span class="summary-label">Tragos 160</span><strong id="d-q160">0</strong></div>
+          <div class="glass-card stat-card"><span class="summary-label">Tragos 260</span><strong id="d-q260">0</strong></div>
+          <div class="glass-card stat-card"><span class="summary-label">Tragos 360</span><strong id="d-q360">0</strong></div>
+        </div>
 
-    <div class="admin-section-header">Cuentas</div>
-    <div class="summary-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
-      <div class="summary-card">
-        <span class="summary-label">Total barra</span>
-        <strong id="d-barTotal">$ 0</strong>
-      </div>
-      <div class="summary-card" style="background:#0d1f0d;border-color:#1a3a1a">
-        <span class="summary-label">Total entradas</span>
-        <strong id="d-entryTotal">$ 0</strong>
-      </div>
-      <div class="summary-card" style="background:#1f1900;border-color:#3a2e00">
-        <span class="summary-label">Gastos</span>
-        <strong id="d-expenses">$ 0</strong>
-      </div>
-      <div class="summary-card" style="background:#181818;border-color:#333">
-        <span class="summary-label">TOTAL NETO</span>
-        <strong id="d-netTotal" style="font-size:32px">$ 0</strong>
-      </div>
-    </div>
+        <div class="admin-section-header">Últimos cobros</div>
+        <div class="admin-table-wrap glass-card">
+          <table class="admin-table">
+            <thead><tr><th>Cuenta</th><th>Nombre</th><th>Total</th><th>Por</th><th>Hora</th><th>Foto</th></tr></thead>
+            <tbody id="d-recentClosures"></tbody>
+          </table>
+        </div>
+      </section>
 
-    <div class="admin-section-header">Asistentes</div>
-    <div class="summary-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
-      <div class="summary-card" style="background:#0d1f0d;border-color:#1a3a1a">
-        <span class="summary-label">Ingresaron</span>
-        <strong id="d-entered">0</strong>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">Cuentas barra abiertas</span>
-        <strong id="d-openAccs">0</strong>
-      </div>
-      <div class="summary-card" style="background:#121815;border-color:#1a3a1a">
-        <span class="summary-label">Cuentas barra cerradas</span>
-        <strong id="d-closedAccs">0</strong>
-      </div>
-    </div>
+      <!-- ── Asistentes ────────────────────────────────────────── -->
+      <section id="tab-asistentes" class="tab-panel">
+        <div id="attStatusCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
 
-    <!-- Bar breakdown -->
-    <div class="admin-section-header">Detalle de la barra</div>
-    <div class="summary-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:24px">
-      <div class="summary-card" style="background:#131313"><span class="summary-label">Tragos 160</span><strong id="d-q160">0</strong></div>
-      <div class="summary-card" style="background:#131313"><span class="summary-label">Tragos 260</span><strong id="d-q260">0</strong></div>
-      <div class="summary-card" style="background:#131313"><span class="summary-label">Tragos 360</span><strong id="d-q360">0</strong></div>
-    </div>
+        <div class="admin-toolbar">
+          <div class="search-field">
+            <svg width="18" height="18"><use href="#i-search"/></svg>
+            <input id="attSearch" type="text" placeholder="Buscar nombre, cédula…"/>
+          </div>
+          <select id="attStatusFilter" class="admin-select">
+            <option value="">Todos los estados</option>
+            <option value="invited">Invitado</option>
+            <option value="crew">Crew</option>
+            <option value="in_process">En proceso</option>
+            <option value="paid">Pago</option>
+          </select>
+          <button id="addAttendeeBtn" class="btn btn-primary btn-sm icon-label-btn">
+            <svg width="16" height="16"><use href="#i-plus"/></svg>
+            Agregar
+          </button>
+          <button id="toggleGroupBtn" class="btn btn-sm icon-label-btn">
+            <svg width="16" height="16"><use href="#i-sort"/></svg>
+            <span id="toggleGroupText">Ordenar por cuenta</span>
+          </button>
+        </div>
 
-    <!-- Recent closures -->
-    <div class="admin-section-header">Últimos cobros</div>
-    <div class="admin-table-wrap">
-      <table class="admin-table">
-        <thead><tr><th>Cuenta</th><th>Nombre</th><th>Total</th><th>Por</th><th>Hora</th><th>Foto</th></tr></thead>
-        <tbody id="d-recentClosures"></tbody>
-      </table>
-    </div>
-  </section>
+        <div class="admin-table-wrap glass-card">
+          <table class="admin-table" id="attendeesTable">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Estado</th>
+                <th>Barra # (Vinculado)</th>
+                <th>Cédula</th>
+                <th>Email</th>
+                <th>Teléfono</th>
+                <th>Entrada $</th>
+                <th>Total pago</th>
+                <th>Consumo</th>
+                <th>Ingresó</th>
+                <th>Salió</th>
+                <th>Foto pago</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="attendeesBody"></tbody>
+          </table>
+        </div>
+      </section>
 
-  <!-- ── Asistentes ────────────────────────────────────────── -->
-  <section id="tab-asistentes" class="tab-panel">
-    <!-- Contadores por estado -->
-    <div id="attStatusCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+      <!-- ── Barra ─────────────────────────────────────────────── -->
+      <section id="tab-barra" class="tab-panel">
+        <div id="adminBarCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+        <div class="admin-toolbar">
+          <select id="barFilter" class="admin-select">
+            <option value="all">Todas</option>
+            <option value="open">Abiertas con saldo</option>
+            <option value="empty">Abiertas vacías</option>
+            <option value="closed">Cerradas</option>
+          </select>
+        </div>
+        <div class="admin-table-wrap glass-card">
+          <table class="admin-table">
+            <thead><tr><th>#</th><th>Nombre vinculada</th><th>Total</th><th>160</th><th>260</th><th>360</th><th>Estado</th><th>Cobrado por</th><th>Hora</th><th>Pago</th><th>Acción</th><th>Foto</th></tr></thead>
+            <tbody id="barAccountsBody"></tbody>
+          </table>
+        </div>
+      </section>
 
-    <div class="admin-toolbar">
-      <input id="attSearch" type="text" placeholder="Buscar nombre, cédula…" class="admin-search"/>
-      <select id="attStatusFilter" class="admin-select">
-        <option value="">Todos los estados</option>
-        <option value="invited">Invitado</option>
-        <option value="crew">Crew</option>
-        <option value="in_process">En proceso</option>
-        <option value="paid">Pago</option>
-      </select>
-      <button id="addAttendeeBtn" class="btn btn-primary btn-sm">+ Agregar</button>
-      <button id="toggleGroupBtn" class="btn btn-sm"># Ordenar por cuenta</button>
-    </div>
+      <!-- ── Gastos ─────────────────────────────────────────────── -->
+      <section id="tab-gastos" class="tab-panel">
+        <div class="admin-toolbar">
+          <button id="addExpenseBtn" class="btn btn-primary btn-sm icon-label-btn">
+            <svg width="16" height="16"><use href="#i-plus"/></svg>
+            Agregar gasto
+          </button>
+        </div>
+        <div class="admin-table-wrap glass-card">
+          <table class="admin-table">
+            <thead><tr><th>Descripción</th><th>Monto</th><th>Fecha</th><th></th></tr></thead>
+            <tbody id="expensesBody"></tbody>
+            <tfoot id="expensesTotalRow"></tfoot>
+          </table>
+        </div>
+      </section>
 
-    <div class="admin-table-wrap">
-      <table class="admin-table" id="attendeesTable">
-        <thead>
-          <tr>
-            <th>Nombre</th>
-            <th>Estado</th>
-            <th>Barra # (Vinculado)</th>
-            <th>Cédula</th>
-            <th>Email</th>
-            <th>Teléfono</th>
-            <th>Entrada $</th>
-            <th>Total pago</th>
-            <th>Consumo</th>
-            <th>Ingresó</th>
-            <th>Salió</th>
-            <th>Foto pago</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="attendeesBody"></tbody>
-      </table>
-    </div>
-  </section>
+      <!-- ── Evento ─────────────────────────────────────────────── -->
+      <section id="tab-evento" class="tab-panel">
+        <div style="margin-bottom:16px">
+          <button id="newEventBtn" class="btn btn-primary icon-label-btn">
+            <svg width="16" height="16"><use href="#i-plus"/></svg>
+            Nuevo evento
+          </button>
+        </div>
+        <div class="admin-table-wrap glass-card">
+          <table class="admin-table">
+            <thead><tr><th>Nombre</th><th>Fecha</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="eventsBody"></tbody>
+          </table>
+        </div>
+      </section>
 
-  <!-- ── Barra ─────────────────────────────────────────────── -->
-  <section id="tab-barra" class="tab-panel">
-    <div id="adminBarCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
-    <div class="admin-toolbar">
-      <select id="barFilter" class="admin-select">
-        <option value="all">Todas</option>
-        <option value="open">Abiertas con saldo</option>
-        <option value="empty">Abiertas vacías</option>
-        <option value="closed">Cerradas</option>
-      </select>
-    </div>
-    <div class="admin-table-wrap">
-      <table class="admin-table">
-        <thead><tr><th>#</th><th>Nombre vinculada</th><th>Total</th><th>160</th><th>260</th><th>360</th><th>Estado</th><th>Cobrado por</th><th>Hora</th><th>Pago</th><th>Acción</th><th>Foto</th></tr></thead>
-        <tbody id="barAccountsBody"></tbody>
-      </table>
-    </div>
-  </section>
+      <!-- ── Tareas ────────────────────────────────────────────────── -->
+      <section id="tab-tareas" class="tab-panel">
+        <div class="admin-toolbar">
+          <button id="addTaskBtn" class="btn btn-primary btn-sm icon-label-btn">
+            <svg width="16" height="16"><use href="#i-plus"/></svg>
+            Nueva tarea
+          </button>
+        </div>
 
-  <!-- ── Gastos ─────────────────────────────────────────────── -->
-  <section id="tab-gastos" class="tab-panel">
-    <div class="admin-toolbar">
-      <button id="addExpenseBtn" class="btn btn-primary btn-sm">+ Agregar gasto</button>
-    </div>
-    <div class="admin-table-wrap">
-      <table class="admin-table">
-        <thead><tr><th>Descripción</th><th>Monto</th><th>Fecha</th><th></th></tr></thead>
-        <tbody id="expensesBody"></tbody>
-        <tfoot id="expensesTotalRow"></tfoot>
-      </table>
-    </div>
-  </section>
+        <!-- Config portero -->
+        <div class="glass-card config-card">
+          <strong style="font-size:15px">Configuración de portería:</strong>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:15px">
+            <input type="checkbox" id="doorCanChargeToggle" style="width:18px;height:18px;cursor:pointer"/>
+            El portero puede cobrar cuentas de barra
+          </label>
+        </div>
 
-  <!-- ── Evento ─────────────────────────────────────────────── -->
-  <section id="tab-evento" class="tab-panel">
-    <div style="margin-bottom:16px">
-      <button id="newEventBtn" class="btn btn-primary">+ Nuevo evento</button>
-    </div>
-    <div class="admin-table-wrap">
-      <table class="admin-table">
-        <thead><tr><th>Nombre</th><th>Fecha</th><th>Estado</th><th>Acciones</th></tr></thead>
-        <tbody id="eventsBody"></tbody>
-      </table>
-    </div>
-  </section>
+        <div id="tasksList"></div>
+      </section>
 
-  <!-- ── Tareas ────────────────────────────────────────────────── -->
-  <section id="tab-tareas" class="tab-panel">
-    <div class="admin-toolbar">
-      <button id="addTaskBtn" class="btn btn-primary btn-sm">+ Nueva tarea</button>
-    </div>
+      <!-- ── Usuarios ───────────────────────────────────────────── -->
+      <section id="tab-usuarios" class="tab-panel">
+        <div class="admin-toolbar">
+          <button id="addUserBtn" class="btn btn-primary btn-sm icon-label-btn">
+            <svg width="16" height="16"><use href="#i-plus"/></svg>
+            Nuevo usuario
+          </button>
+          <button id="refreshUsersBtn" class="btn btn-sm icon-label-btn ghost-outline">
+            <svg width="16" height="16"><use href="#i-refresh"/></svg>
+            Actualizar
+          </button>
+        </div>
 
-    <!-- Config portero -->
-    <div style="background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-      <strong style="font-size:15px">Configuración de portería:</strong>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:15px">
-        <input type="checkbox" id="doorCanChargeToggle" style="width:18px;height:18px;cursor:pointer"/>
-        El portero puede cobrar cuentas de barra
-      </label>
-    </div>
+        <div class="glass-card info-card">
+          Desde acá podés crear usuarios, cambiar su rol y eliminarlos. Los cambios de rol toman efecto en el próximo inicio de sesión.
+        </div>
 
-    <!-- Task list -->
-    <div id="tasksList"></div>
-  </section>
+        <div class="admin-table-wrap glass-card">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Email</th>
+                <th>Rol</th>
+                <th>Último acceso</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="usersBody">
+              <tr><td colspan="5" class="empty-state" style="padding:40px">Hacé click en el tab para cargar usuarios…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
+    </div><!-- /main-scroll -->
 
-  <!-- ── Usuarios ───────────────────────────────────────────── -->
-  <section id="tab-usuarios" class="tab-panel">
-    <div class="admin-toolbar">
-      <button id="addUserBtn" class="btn btn-primary btn-sm">+ Nuevo usuario</button>
-      <button id="refreshUsersBtn" class="btn btn-sm" style="background:var(--panel);border-color:var(--line);color:var(--muted)">↺ Actualizar</button>
-    </div>
+    <!-- ═══════════ MOBILE BOTTOM TAB BAR ═══════════ -->
+    <nav class="bottom-tabbar" id="bottomTabbar">
+      <button class="bottom-tab active" data-tab="dashboard">
+        <svg width="22" height="22"><use href="#i-dashboard"/></svg>
+        <span>Inicio</span>
+      </button>
+      <button class="bottom-tab" data-tab="asistentes">
+        <svg width="22" height="22"><use href="#i-people"/></svg>
+        <span>Asist.</span>
+      </button>
+      <button class="bottom-tab" data-tab="barra">
+        <svg width="22" height="22"><use href="#i-glass"/></svg>
+        <span>Barra</span>
+      </button>
+      <button class="bottom-tab" data-tab="gastos">
+        <svg width="22" height="22"><use href="#i-receipt"/></svg>
+        <span>Gastos</span>
+      </button>
+      <button class="bottom-tab" id="bottomMoreBtn">
+        <svg width="22" height="22"><use href="#i-menu"/></svg>
+        <span>Más</span>
+      </button>
+    </nav>
 
-    <div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:16px;font-size:13px;color:var(--muted)">
-      Desde acá podés crear usuarios, cambiar su rol y eliminarlos. Los cambios de rol toman efecto en el próximo inicio de sesión.
-    </div>
-
-    <div class="admin-table-wrap">
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>Nombre</th>
-            <th>Email</th>
-            <th>Rol</th>
-            <th>Último acceso</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="usersBody">
-          <tr><td colspan="5" class="empty-state" style="padding:40px">Hacé click en el tab para cargar usuarios…</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
+  </main>
 </div>
 
 <!-- Modals -->
 <div id="modalOverlay" class="modal-overlay hidden">
-  <div id="modalBox" class="admin-modal-box">
-    <button id="closeModalBtn" class="modal-close-btn">✕</button>
+  <div id="modalBox" class="admin-modal-box glass-card-strong">
+    <button id="closeModalBtn" class="modal-close-btn" aria-label="Cerrar">
+      <svg width="18" height="18"><use href="#i-close"/></svg>
+    </button>
     <div id="modalBody"></div>
   </div>
 </div>
