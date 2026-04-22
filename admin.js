@@ -36,7 +36,7 @@ async function init() {
     if (chip) chip.innerHTML = `${icon('user-gear', 16)}<span>${displayName}</span>`;
     setupUserDropdown();
     setupNotifChannel('Admin', displayName);
-    document.getElementById('app').style.display = 'block';
+    document.getElementById('app').style.display = 'grid';
 
     activeEvent = await getActiveEvent();
     if (activeEvent) {
