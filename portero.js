@@ -27,7 +27,7 @@ async function init() {
         '<div class="empty-state" style="padding:40px">No hay evento activo.</div>';
       return;
     }
-    document.getElementById('eventName').textContent = `${activeEvent.name} — ${activeEvent.date}`;
+    document.getElementById('eventName').textContent = activeEvent.name;
     document.getElementById('app').style.display = 'block';
 
     await loadData();

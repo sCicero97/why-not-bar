@@ -34,7 +34,7 @@ async function init() {
       return;
     }
 
-    document.getElementById('eventName').textContent = `${activeEvent.name} — ${activeEvent.date}`;
+    document.getElementById('eventName').textContent = activeEvent.name;
     document.getElementById('app').style.display = 'block';
 
     await loadData();

@@ -575,25 +575,94 @@ body.admin-body {
   background: rgba(10, 132, 255, .06);
 }
 
-/* ═══════════ TASK CARDS ═══════════ */
+/* ═══════════ BLOCKED CARDS (Tarjetas) ═══════════ */
+.blocked-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+.blocked-card-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, var(--tint-red), transparent 140%), var(--glass-bg);
+  border: 1px solid rgba(255, 69, 58, .22);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.blocked-card-chip strong {
+  font-size: 18px;
+  letter-spacing: .02em;
+  color: var(--text-hi);
+}
+.blocked-card-chip .unblock-btn {
+  background: rgba(255, 69, 58, .22);
+  color: var(--red-ios);
+  border: 1px solid rgba(255, 69, 58, .35);
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background .15s;
+}
+.blocked-card-chip .unblock-btn:hover { background: rgba(255, 69, 58, .38); }
+
+.admin-input {
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--glass-border);
+  color: var(--text-hi);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  outline: none;
+  transition: border-color .15s, background .15s;
+}
+.admin-input:focus {
+  border-color: var(--accent);
+  background: rgba(10, 132, 255, .08);
+}
+
+/* ═══════════ TASK CARDS (rectangle grid) ═══════════ */
+.tasks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
 .task-card {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  padding: 16px 20px;
-  margin-bottom: 12px;
-  transition: opacity .2s;
+  padding: 14px 16px;
+  transition: opacity .2s, transform .15s, border-color .2s;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 160px;
 }
+.task-card:hover { border-color: var(--glass-border-hi); }
 .task-inactive { opacity: .5; }
-.task-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-.task-title { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+.task-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.task-title { display: flex; align-items: center; gap: 8px; font-size: 15px; flex: 1; min-width: 0; }
+.task-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.task-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13.5px; color: #8e8e93; align-items: center; }
+.task-meta { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: #8e8e93; }
 .task-meta svg { vertical-align: middle; margin-right: 4px; }
-.task-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
-.task-last-check { color: var(--green-ios); font-size: 13.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.task-footer { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+.task-last-check { color: var(--green-ios); font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.task-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.task-actions .btn { flex: 1; min-width: 0; padding: 6px 8px; font-size: 12px; justify-content: center; }
+
+@media (max-width: 900px) {
+  .tasks-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .task-card { padding: 12px 14px; min-height: 150px; }
+  .task-title { font-size: 14px; }
+  .task-actions .btn { padding: 6px; font-size: 11px; }
+}
 
 .tab-panel { display: none; padding-top: 4px; }
 .tab-panel.active { display: block; }
@@ -658,20 +727,12 @@ body.admin-body {
   :root { --sidebar-w: 0px; }
   .admin-shell { grid-template-columns: 1fr; }
 
-  .sidebar {
-    position: fixed;
-    left: 0; top: 0;
-    width: 280px; height: 100vh;
-    transform: translateX(-100%);
-    transition: transform .28s cubic-bezier(.32, .72, 0, 1);
-    border-right: 1px solid var(--glass-border);
-    padding: 16px 12px calc(16px + env(safe-area-inset-bottom, 0px));
-  }
-  .sidebar.open { transform: translateX(0); }
-  .sidebar.open ~ .sidebar-backdrop { display: block; }
-  .sidebar-close-btn { display: inline-flex; }
+  /* Sidebar completely hidden on mobile — bottom tabbar is the nav */
+  .sidebar,
+  .sidebar-backdrop,
+  .sidebar-close-btn { display: none !important; }
 
-  .mobile-menu-btn { display: inline-flex; }
+  .mobile-menu-btn { display: none !important; }
   .bottom-tabbar { display: flex; }
 
   .glass-topbar {

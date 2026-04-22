@@ -21,7 +21,7 @@ let expenses       = [];
 let events         = [];
 let tasks          = [];
 let taskChecks     = [];
-let eventSettings  = { door_can_charge: false };
+let eventSettings  = { door_can_charge: false, blocked_slots: [] };
 let profiles       = [];
 let reminderTimers = {};
 let appUsers       = [];   // usuarios del sistema (cargados on-demand)
@@ -40,7 +40,7 @@ async function init() {
 
     activeEvent = await getActiveEvent();
     if (activeEvent) {
-      document.getElementById('eventName').textContent = `${activeEvent.name} — ${activeEvent.date}`;
+      document.getElementById('eventName').textContent = activeEvent.name;
     }
 
     await loadAll();
@@ -79,7 +79,10 @@ async function loadAll() {
   if (results[4]?.data) barClosures = results[4].data;
   if (results[5]?.data) expenses = results[5].data;
   if (results[6]?.data) tasks = results[6].data;
-  if (results[7]?.data) eventSettings = results[7].data || { door_can_charge: false };
+  if (results[7]?.data) {
+    eventSettings = results[7].data || { door_can_charge: false, blocked_slots: [] };
+    if (!Array.isArray(eventSettings.blocked_slots)) eventSettings.blocked_slots = [];
+  }
 
   renderAll();
 }
@@ -129,6 +132,7 @@ function renderAll() {
   renderExpenses();
   renderEvents();
   renderTasks();
+  renderBlockedCards();
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -257,19 +261,19 @@ function renderAdminBarCounters() {
   const openTot  = assigned.filter(a => !a.is_closed).reduce((s,a) => s + Number(a.total||0), 0);
   const closedTot = barClosures.reduce((s,c) => s + Number(c.total||0), 0);
   const grandTot = openTot + closedTot;
-  el.innerHTML = `
-    <div class="summary-card" style="background:#1a2a1a;border-color:#2a4a2a;padding:8px 16px;border-radius:12px">
-      <span class="summary-label">Abiertas</span>
-      <strong style="color:#4ade80">${open}</strong>
-    </div>
-    <div class="summary-card" style="background:#1a1a2a;border-color:#2a2a4a;padding:8px 16px;border-radius:12px">
-      <span class="summary-label">Cerradas</span>
-      <strong style="color:#60a5fa">${closed}</strong>
-    </div>
-    <div class="summary-card" style="background:#181818;border-color:#333;padding:8px 16px;border-radius:12px">
-      <span class="summary-label">Total general</span>
-      <strong>${formatMoney(grandTot)}</strong>
-    </div>`;
+
+  const cfg = [
+    { label: 'Abiertas',      value: open,                color: '#1ed760', bg: '#0d1f0d', border: '#1a3a1a' },
+    { label: 'Cerradas',      value: closed,              color: '#3b82f6', bg: '#0d1420', border: '#1a2a3a' },
+    { label: 'Total abierto', value: formatMoney(openTot),   color: '#f59e0b', bg: '#1f1900', border: '#3a2e00' },
+    { label: 'Total cerrado', value: formatMoney(closedTot), color: '#8b5cf6', bg: '#130d1f', border: '#2a1a3a' },
+    { label: 'Total general', value: formatMoney(grandTot),  color: '#f5f5f7', bg: '#181818', border: '#2a2a2a' },
+  ];
+  el.innerHTML = cfg.map(c => `
+    <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
+      <span style="font-size:22px;font-weight:bold;color:${c.color}">${c.value}</span>
+      <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+    </div>`).join('');
 }
 
 // ─── Bar accounts table ───────────────────────────────────────────────────────
@@ -331,17 +335,34 @@ function renderExpenses() {
   const tbody = document.getElementById('expensesBody');
   if (!tbody) return;
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
+  const countItems = expenses.length;
+
+  // Counter (mismo estilo que asistentes)
+  const counters = document.getElementById('expensesCounters');
+  if (counters) {
+    const cfg = [
+      { label: 'Total gastos', value: formatMoney(total), color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
+      { label: 'Ítems',        value: countItems,         color: '#f5f5f7', bg: '#181818', border: '#2a2a2a' },
+    ];
+    counters.innerHTML = cfg.map(c => `
+      <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
+        <span style="font-size:22px;font-weight:bold;color:${c.color}">${c.value}</span>
+        <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+      </div>`).join('');
+  }
 
   tbody.innerHTML = expenses.map(exp => `
     <tr>
       <td>${exp.description}</td>
       <td><strong>${formatMoney(exp.amount)}</strong></td>
       <td style="font-size:12px;color:var(--muted)">${new Date(exp.created_at).toLocaleDateString('es-UY')}</td>
-      <td><button class="btn btn-sm btn-danger" onclick="deleteExpense('${exp.id}')" title="Eliminar">${icon('trash',15)}</button></td>
+      <td>
+        <div class="row-actions">
+          <button class="btn btn-sm" onclick="openEditExpense('${exp.id}')" title="Editar">${icon('edit',15)}</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteExpense('${exp.id}')" title="Eliminar">${icon('trash',15)}</button>
+        </div>
+      </td>
     </tr>`).join('') || '<tr><td colspan="4" class="empty-state">Sin gastos registrados.</td></tr>';
-
-  document.getElementById('expensesTotalRow').innerHTML =
-    `<tr style="border-top:2px solid var(--line)"><td><strong>Total gastos</strong></td><td colspan="3"><strong>${formatMoney(total)}</strong></td></tr>`;
 }
 
 // ─── Events ───────────────────────────────────────────────────────────────────
@@ -392,6 +413,15 @@ document.addEventListener('dblclick', async (e) => {
 });
 
 async function updateAttendeeField(id, field, value) {
+  // Validación: si se asigna un slot bloqueado, rechazar
+  if (field === 'bar_account_slot') {
+    const n = parseInt(value, 10);
+    if (Number.isFinite(n) && isSlotBlocked(n)) {
+      toast(`Tarjeta ${padId(n)} está bloqueada`, 'error');
+      renderAttendeesTable();
+      return;
+    }
+  }
   const db = getDb();
   const { error } = await db.from('attendees').update({ [field]: value }).eq('id', id);
   if (error) toast('Error al actualizar: ' + error.message, 'error');
@@ -408,13 +438,17 @@ async function updateAttendeeField(id, field, value) {
 function getNextAvailableBarSlot() {
   const used = new Set([
     ...attendees.map(a => a.bar_account_slot).filter(Boolean),
+    ...getBlockedSlots(),
   ]);
   const maxExisting = barAccounts.reduce((m, a) => Math.max(m, a.slot || 0), 0);
-  // Buscar el primer hueco (1..maxExisting+1)
+  // Buscar el primer hueco (1..maxExisting+1) saltando bloqueadas y ocupadas
   for (let i = 1; i <= maxExisting + 1; i++) {
     if (!used.has(i)) return i;
   }
-  return maxExisting + 1;
+  // Si todas hasta maxExisting están usadas/bloqueadas, buscar más allá
+  let next = maxExisting + 1;
+  while (used.has(next)) next++;
+  return next;
 }
 
 // ─── Asegurar que exista una bar_account para un slot ─────────────────────────
@@ -494,6 +528,11 @@ function openAddAttendee() {
       obj.event_id = activeEvent.id;
       if (!obj.bar_account_slot) delete obj.bar_account_slot; else obj.bar_account_slot = parseInt(obj.bar_account_slot);
       if (!obj.entry_amount) obj.entry_amount = 0; else obj.entry_amount = parseFloat(obj.entry_amount);
+      // Validación: no permitir asignar una tarjeta bloqueada
+      if (obj.bar_account_slot && isSlotBlocked(obj.bar_account_slot)) {
+        toast(`La tarjeta ${padId(obj.bar_account_slot)} está bloqueada`, 'error');
+        return;
+      }
       const db = getDb();
       const { data: newAtt, error } = await db.from('attendees').insert(obj).select().single();
       if (error) toast('Error: ' + error.message, 'error');
@@ -546,6 +585,11 @@ function openEditAttendee(id) {
     if (!obj.bar_account_slot) obj.bar_account_slot = null; else obj.bar_account_slot = parseInt(obj.bar_account_slot);
     obj.entry_amount = parseFloat(obj.entry_amount) || 0;
     obj.amount_paid  = parseFloat(obj.amount_paid)  || 0;
+    // Validación: tarjeta bloqueada
+    if (obj.bar_account_slot && isSlotBlocked(obj.bar_account_slot)) {
+      toast(`La tarjeta ${padId(obj.bar_account_slot)} está bloqueada`, 'error');
+      return;
+    }
     const db = getDb();
 
     const prevSlot = att.bar_account_slot || null;
@@ -664,15 +708,66 @@ async function deleteExpense(id) {
   else { expenses = expenses.filter(e => e.id !== id); renderExpenses(); renderDashboard(); }
 }
 
+function openEditExpense(id) {
+  const exp = expenses.find(e => e.id === id);
+  if (!exp) return;
+  showModal(`
+    <h3 style="margin:0 0 18px">Editar gasto</h3>
+    <form id="expenseEditForm">
+      <div class="form-group"><label>Descripción *</label><input name="description" value="${(exp.description||'').replace(/"/g,'&quot;')}" required/></div>
+      <div class="form-group"><label>Monto *</label><input name="amount" type="number" min="0" step="0.01" value="${exp.amount}" required/></div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" class="btn btn-primary" style="flex:1">Guardar</button>
+        <button type="button" class="btn" onclick="closeModal()" style="flex:1">Cancelar</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('expenseEditForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const db = getDb();
+    const { error } = await db.from('expenses').update({
+      description: fd.get('description'),
+      amount: parseFloat(fd.get('amount')),
+    }).eq('id', id);
+    if (error) toast('Error: ' + error.message, 'error');
+    else { toast('Gasto actualizado', 'success'); closeModal(); await loadAll(); }
+  });
+}
+window.openEditExpense = openEditExpense;
+
 // ─── Events management ────────────────────────────────────────────────────────
+// Defaults al crear un nuevo evento
+const DEFAULT_CREW = [
+  // Sin cuenta en el bar
+  { name: 'Dave',   status: 'crew', bar_account_slot: null },
+  { name: 'Angus',  status: 'crew', bar_account_slot: null },
+  { name: 'Cicero', status: 'crew', bar_account_slot: null },
+  // Con cuenta en el bar
+  { name: 'Daniel Anselmi',   status: 'crew', bar_account_slot: 1 },
+  { name: 'Junion Rupenian',  status: 'crew', bar_account_slot: 2 },
+  { name: 'Lautaro Moreno',   status: 'crew', bar_account_slot: 3 },
+  { name: 'Matias Nario',     status: 'crew', bar_account_slot: 4 },
+];
+const DEFAULT_EXPENSES = [
+  'PH',
+  'Vasos',
+  'Personal barra',
+  'Personal seguridad',
+  'Limpieza',
+  'Distribuidora',
+];
+const DEFAULT_BAR_ACCOUNTS = 150;
+
 function openNewEvent() {
   showModal(`
     <h3 style="margin:0 0 18px">Nuevo evento</h3>
     <form id="eventForm">
       <div class="form-group"><label>Nombre del evento *</label><input name="name" required/></div>
       <div class="form-group"><label>Fecha *</label><input name="date" type="date" value="${new Date().toISOString().slice(0,10)}" required/></div>
-      <div class="form-group"><label>Cuentas de barra iniciales</label><input name="accountCount" type="number" value="120" min="0"/></div>
-      <div style="grid-column:1/-1;font-size:12px;color:#8e8e93;margin-top:-4px">Se crean al inicio. Si necesitás más, se agregan automáticamente al asignar números a los asistentes — no hay límite.</div>
+      <div style="grid-column:1/-1;font-size:12px;color:#8e8e93;margin-top:-4px">
+        Se crean ${DEFAULT_BAR_ACCOUNTS} cuentas de barra, el crew habitual y los gastos por defecto (todos en 0).
+      </div>
       <div style="display:flex;gap:10px;margin-top:16px">
         <button type="submit" class="btn btn-primary" style="flex:1">Crear y activar</button>
         <button type="button" class="btn" onclick="closeModal()" style="flex:1">Cancelar</button>
@@ -683,25 +778,55 @@ function openNewEvent() {
     e.preventDefault();
     const fd = new FormData(e.target);
     const db = getDb();
-    // Deactivate all events
+    // Desactivar los demás
     await db.from('events').update({ is_active: false }).eq('is_active', true);
-    // Create new event
+    // Crear evento
     const { data: newEvent, error } = await db.from('events')
       .insert({ name: fd.get('name'), date: fd.get('date'), is_active: true })
       .select().single();
     if (error) { toast('Error: ' + error.message, 'error'); return; }
-    // Init bar accounts
-    const count = parseInt(fd.get('accountCount')) || 120;
-    await db.rpc('init_bar_accounts', { p_event_id: newEvent.id, p_count: count });
+
+    // Inicializar cuentas de barra (150 por defecto)
+    await db.rpc('init_bar_accounts', { p_event_id: newEvent.id, p_count: DEFAULT_BAR_ACCOUNTS });
+
+    // Insertar crew por defecto (asistentes)
+    const crewRows = DEFAULT_CREW.map(c => ({
+      event_id: newEvent.id,
+      name: c.name,
+      status: c.status,
+      bar_account_slot: c.bar_account_slot,
+      entry_amount: 0,
+    }));
+    const { data: insertedCrew, error: crewErr } = await db.from('attendees').insert(crewRows).select();
+    if (crewErr) console.warn('Crew default:', crewErr.message);
+    // Vincular bar_accounts a los crew con slot
+    for (const a of (insertedCrew || [])) {
+      if (a.bar_account_slot) await ensureBarAccountSlot(a.bar_account_slot, a.id);
+    }
+
+    // Insertar gastos por defecto (en 0)
+    const expenseRows = DEFAULT_EXPENSES.map(d => ({
+      event_id: newEvent.id,
+      description: d,
+      amount: 0,
+    }));
+    await db.from('expenses').insert(expenseRows);
+
     // Tarea default: Chequear PH
     await db.from('tasks').insert({
       event_id: newEvent.id, name: 'Chequear PH', assigned_to: null,
       is_active: true, remind: true, remind_freq_minutes: 60,
       remind_from: '22:00', remind_until: '04:00',
     });
-    // Event settings default
-    await db.from('event_settings').insert({ event_id: newEvent.id, door_can_charge: false });
-    toast(`Evento "${newEvent.name}" creado con ${count} cuentas`, 'success');
+
+    // Event settings default (incluye blocked_slots vacío)
+    await db.from('event_settings').insert({
+      event_id: newEvent.id,
+      door_can_charge: false,
+      blocked_slots: [],
+    });
+
+    toast(`Evento "${newEvent.name}" creado con ${DEFAULT_BAR_ACCOUNTS} cuentas y crew por defecto`, 'success');
     closeModal();
     window.location.reload();
   });
@@ -726,7 +851,7 @@ async function deleteEvent(id) {
 
 async function initBarAccounts() {
   if (!activeEvent) { toast('No hay evento activo', 'error'); return; }
-  const n = window.prompt('¿Cuántas cuentas de barra crear?', '120');
+  const n = window.prompt('¿Cuántas cuentas de barra crear?', String(DEFAULT_BAR_ACCOUNTS));
   if (!n) return;
   const count = parseInt(n);
   if (isNaN(count) || count < 1) { toast('Número inválido', 'error'); return; }
@@ -1113,6 +1238,7 @@ const TAB_TITLES = {
   gastos: 'Gastos',
   evento: 'Evento',
   tareas: 'Tareas',
+  tarjetas: 'Tarjetas',
   usuarios: 'Usuarios',
 };
 const TAB_ICONS = {
@@ -1122,6 +1248,7 @@ const TAB_ICONS = {
   gastos: 'receipt',
   evento: 'calendar',
   tareas: 'tasks',
+  tarjetas: 'card',
   usuarios: 'user-gear',
 };
 // Tabs visibles en la tab-bar inferior (mobile). El resto va en "Más".
@@ -1243,6 +1370,17 @@ function setupUI() {
   document.getElementById('addUserBtn').addEventListener('click', openAddUserModal);
   document.getElementById('refreshUsersBtn').addEventListener('click', loadUsers);
 
+  // Tarjetas bloqueadas
+  document.getElementById('blockCardForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = document.getElementById('blockCardInput');
+    const n = parseInt(input.value, 10);
+    if (Number.isFinite(n)) {
+      addBlockedCard(n);
+      input.value = '';
+    }
+  });
+
   document.getElementById('attSearch').addEventListener('input', renderAttendeesTable);
   document.getElementById('attStatusFilter').addEventListener('change', renderAttendeesTable);
   document.getElementById('barFilter').addEventListener('change', renderBarTable);
@@ -1281,22 +1419,24 @@ function renderTasks() {
       <div class="task-header">
         <div class="task-title">
           <span class="task-dot" style="background:${task.is_active ? 'var(--green-ios,#30d158)' : '#8e8e93'}"></span>
-          <strong>${task.name}</strong>
-          ${!task.is_active ? '<span style="color:#8e8e93;font-size:13px"> — Inactiva</span>' : ''}
-        </div>
-        <div class="task-meta">
-          <span>${icon(assignedProfile ? 'user' : 'people', 14)} ${assignedProfile ? assignedProfile.display_name : 'Todos'}</span>
-          ${task.remind
-            ? `<span>${icon('bell',14)} Cada ${task.remind_freq_minutes} min · ${task.remind_from}–${task.remind_until}</span>`
-            : '<span style="color:#8e8e93">Sin recordatorio</span>'}
+          <strong title="${(task.name||'').replace(/"/g,'&quot;')}">${task.name}</strong>
         </div>
       </div>
+      <div class="task-meta">
+        <span>${icon(assignedProfile ? 'user' : 'people', 13)} ${assignedProfile ? assignedProfile.display_name : 'Todos'}</span>
+        ${task.remind
+          ? `<span>${icon('bell',13)} Cada ${task.remind_freq_minutes} min · ${task.remind_from}–${task.remind_until}</span>`
+          : '<span style="color:#8e8e93">Sin recordatorio</span>'}
+      </div>
       <div class="task-footer">
-        ${lastCheck ? `<span class="task-last-check">${icon('check',14)} Chequeado a las ${lastCheckTime}</span>` : '<span style="color:#8e8e93;font-size:13px">Sin chequeados</span>'}
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-sm btn-success icon-label-btn" onclick="checkTask('${task.id}')">${icon('check',14)}Chequeado</button>
-          <button class="btn btn-sm" onclick="toggleTask('${task.id}',${!task.is_active})">${task.is_active ? 'Desactivar' : 'Activar'}</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteTask('${task.id}')" title="Eliminar">${icon('trash',15)}</button>
+        ${lastCheck
+          ? `<span class="task-last-check">${icon('check',13)} Chequeado a las ${lastCheckTime}</span>`
+          : '<span style="color:#8e8e93;font-size:12.5px">Sin chequeados</span>'}
+        <div class="task-actions">
+          <button class="btn btn-sm btn-success" onclick="checkTask('${task.id}')" title="Chequeado">${icon('check',14)}</button>
+          <button class="btn btn-sm" onclick="openEditTask('${task.id}')" title="Editar">${icon('edit',14)}</button>
+          <button class="btn btn-sm" onclick="toggleTask('${task.id}',${!task.is_active})" title="${task.is_active ? 'Desactivar' : 'Activar'}">${task.is_active ? '⏸' : '▶'}</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteTask('${task.id}')" title="Eliminar">${icon('trash',14)}</button>
         </div>
       </div>
     </div>`;
@@ -1353,12 +1493,40 @@ function showReminder(task) {
 async function checkTask(taskId) {
   const db = getDb();
   const { data: { user } } = await db.auth.getUser();
+  const task = tasks.find(t => t.id === taskId);
   const { error } = await db.from('task_checks').insert({ task_id: taskId, checked_by: user.id });
-  if (error) toast('Error: ' + error.message, 'error');
-  else {
-    toast('Tarea chequeada', 'success');
-    await loadAll();
-  }
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  toast('Tarea chequeada', 'success');
+
+  // Telegram: avisar que fue chequeada + próximo recordatorio
+  try {
+    const who = (await getProfileName(user.id)) || user.email || 'Admin';
+    const now = new Date();
+    const hhmm = now.toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' });
+    let nextStr = 'sin recordatorio configurado';
+    if (task && task.remind && task.remind_freq_minutes) {
+      const next = new Date(now.getTime() + task.remind_freq_minutes * 60 * 1000);
+      nextStr = next.toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' });
+    }
+    const msg = `✅ "${task?.name || 'Tarea'}" chequeada por ${who} a las ${hhmm}. Próximo aviso: ${nextStr}.`;
+    await fetch('/api/send-whatsapp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg }),
+    }).catch(()=>{}); // best-effort
+  } catch (_) { /* silencioso */ }
+
+  await loadAll();
+}
+
+async function getProfileName(userId) {
+  try {
+    const prof = profiles.find(p => p.id === userId);
+    if (prof?.display_name) return prof.display_name;
+    const db = getDb();
+    const { data } = await db.from('profiles').select('display_name').eq('id', userId).single();
+    return data?.display_name || null;
+  } catch { return null; }
 }
 
 async function toggleTask(taskId, newState) {
@@ -1461,11 +1629,158 @@ function openAddTask() {
   });
 }
 
+function openEditTask(taskId) {
+  const task = tasks.find(t => t.id === taskId);
+  if (!task) return;
+
+  const profileOptions = [
+    `<option value="">Todos</option>`,
+    ...profiles.map(p => `<option value="${p.id}" ${task.assigned_to === p.id ? 'selected' : ''}>${p.display_name || p.role}</option>`)
+  ].join('');
+
+  showModal(`
+    <h3 style="margin:0 0 18px;font-size:20px">Editar tarea</h3>
+    <form id="taskEditForm" autocomplete="off">
+      <div class="form-grid">
+        <div class="form-group" style="grid-column:1/-1"><label>Nombre *</label><input name="name" value="${(task.name||'').replace(/"/g,'&quot;')}" required/></div>
+        <div class="form-group"><label>Asignada a</label>
+          <select name="assigned_to">${profileOptions}</select>
+        </div>
+        <div class="form-group"><label>Estado</label>
+          <select name="is_active">
+            <option value="true"  ${task.is_active ? 'selected':''}>Activa</option>
+            <option value="false" ${!task.is_active ? 'selected':''}>Inactiva</option>
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label><input type="checkbox" id="remindCheckEdit" name="remind" value="true" ${task.remind ? 'checked':''} style="width:auto;margin-right:6px"/> Recordar esta tarea</label>
+        </div>
+        <div class="form-group" id="remindFromGroupE" style="display:${task.remind ? '' : 'none'}"><label>Desde</label><input name="remind_from" type="text" inputmode="numeric" value="${task.remind_from || '22:00'}" pattern="[0-2][0-9]:[0-5][0-9]"/></div>
+        <div class="form-group" id="remindUntilGroupE" style="display:${task.remind ? '' : 'none'}"><label>Hasta</label><input name="remind_until" type="text" inputmode="numeric" value="${task.remind_until || '04:00'}" pattern="[0-2][0-9]:[0-5][0-9]"/></div>
+        <div class="form-group" id="remindFreqGroupE" style="display:${task.remind ? '' : 'none'}"><label>Frecuencia (Minutos)</label><input name="remind_freq_minutes" type="number" value="${task.remind_freq_minutes || 60}" min="1"/></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" class="btn btn-primary" style="flex:1">Guardar</button>
+        <button type="button" class="btn" onclick="closeModal()" style="flex:1">Cancelar</button>
+      </div>
+    </form>
+  `);
+
+  document.getElementById('remindCheckEdit').addEventListener('change', (e) => {
+    const show = e.target.checked;
+    ['remindFromGroupE','remindUntilGroupE','remindFreqGroupE'].forEach(id => {
+      document.getElementById(id).style.display = show ? '' : 'none';
+    });
+  });
+
+  document.getElementById('taskEditForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const obj = {
+      name:                fd.get('name'),
+      assigned_to:         fd.get('assigned_to') || null,
+      is_active:           fd.get('is_active') === 'true',
+      remind:              !!fd.get('remind'),
+      remind_freq_minutes: parseInt(fd.get('remind_freq_minutes')) || 60,
+      remind_from:         fd.get('remind_from') || '22:00',
+      remind_until:        fd.get('remind_until') || '04:00',
+    };
+    const db = getDb();
+    const { error } = await db.from('tasks').update(obj).eq('id', taskId);
+    if (error) toast('Error: ' + error.message, 'error');
+    else { toast('Tarea actualizada', 'success'); closeModal(); await loadAll(); }
+  });
+}
+window.openEditTask = openEditTask;
+
 // ─── Configuración del portero ─────────────────────────────────────────────────
 async function saveDoorSettings(canCharge) {
   if (!activeEvent) return;
   const db = getDb();
-  await db.from('event_settings').upsert({ event_id: activeEvent.id, door_can_charge: canCharge });
+  await db.from('event_settings').upsert({
+    event_id: activeEvent.id,
+    door_can_charge: canCharge,
+    blocked_slots: eventSettings.blocked_slots || [],
+  });
+  eventSettings.door_can_charge = canCharge;
+}
+
+// ─── Tarjetas bloqueadas ─────────────────────────────────────────────────────
+function getBlockedSlots() {
+  const arr = eventSettings?.blocked_slots;
+  return Array.isArray(arr) ? arr.map(n => Number(n)).filter(n => Number.isFinite(n)) : [];
+}
+
+function renderBlockedCards() {
+  const list = document.getElementById('blockedCardsList');
+  const counter = document.getElementById('blockedCardsCounters');
+  if (!list) return;
+  const blocked = getBlockedSlots().sort((a, b) => a - b);
+
+  if (counter) {
+    const cfg = [
+      { label: 'Tarjetas bloqueadas', value: blocked.length, color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
+    ];
+    counter.innerHTML = cfg.map(c => `
+      <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
+        <span style="font-size:22px;font-weight:bold;color:${c.color}">${c.value}</span>
+        <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+      </div>`).join('');
+  }
+
+  if (!blocked.length) {
+    list.innerHTML = '<div class="empty-state" style="grid-column:1/-1;padding:28px">Sin tarjetas bloqueadas.</div>';
+    return;
+  }
+  list.innerHTML = blocked.map(n => `
+    <div class="blocked-card-chip">
+      <div style="display:flex;align-items:center;gap:8px">
+        ${icon('card', 18)}
+        <strong>${padId(n)}</strong>
+      </div>
+      <button class="unblock-btn" title="Desbloquear" onclick="unblockCard(${n})">${icon('close', 14)}</button>
+    </div>
+  `).join('');
+}
+
+async function addBlockedCard(slot) {
+  if (!activeEvent) { toast('No hay evento activo', 'error'); return; }
+  const n = parseInt(slot, 10);
+  if (!Number.isFinite(n) || n < 1) { toast('Número inválido', 'error'); return; }
+  const current = getBlockedSlots();
+  if (current.includes(n)) { toast('Esa tarjeta ya está bloqueada', 'warning'); return; }
+  const next = [...current, n].sort((a, b) => a - b);
+  const db = getDb();
+  const { error } = await db.from('event_settings').upsert({
+    event_id: activeEvent.id,
+    door_can_charge: eventSettings.door_can_charge || false,
+    blocked_slots: next,
+  });
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  eventSettings.blocked_slots = next;
+  renderBlockedCards();
+  toast(`Tarjeta ${padId(n)} bloqueada`, 'success');
+}
+
+async function unblockCard(slot) {
+  if (!activeEvent) return;
+  const n = parseInt(slot, 10);
+  const next = getBlockedSlots().filter(x => x !== n);
+  const db = getDb();
+  const { error } = await db.from('event_settings').upsert({
+    event_id: activeEvent.id,
+    door_can_charge: eventSettings.door_can_charge || false,
+    blocked_slots: next,
+  });
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  eventSettings.blocked_slots = next;
+  renderBlockedCards();
+  toast(`Tarjeta ${padId(n)} desbloqueada`, 'success');
+}
+window.unblockCard = unblockCard;
+
+function isSlotBlocked(slot) {
+  return getBlockedSlots().includes(Number(slot));
 }
 
 document.addEventListener('DOMContentLoaded', init);

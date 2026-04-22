@@ -209,7 +209,7 @@
   <!-- ═══════════ SIDEBAR (desktop) ═══════════ -->
   <aside class="sidebar" id="sidebar">
     <header class="sidebar-brand">
-      <div class="brand-dot" style="background:#f59e0b;box-shadow:0 0 18px rgba(245,158,11,.6)"></div>
+      <div class="brand-dot" style="background:#ff453a;box-shadow:0 0 18px rgba(255,69,58,.65)"></div>
       <div class="sidebar-brand-text">
         <h1>Why Not</h1>
         <p id="eventName">Admin</p>
@@ -247,6 +247,10 @@
         <svg width="20" height="20"><use href="#i-calendar"/></svg>
         <span>Evento</span>
       </button>
+      <button class="nav-item" data-tab="tarjetas">
+        <svg width="20" height="20"><use href="#i-card"/></svg>
+        <span>Tarjetas</span>
+      </button>
       <button class="nav-item" data-tab="usuarios">
         <svg width="20" height="20"><use href="#i-user-gear"/></svg>
         <span>Usuarios</span>
@@ -272,10 +276,6 @@
 
     <!-- Top bar (minimal, floating glass) -->
     <header class="glass-topbar">
-      <button class="icon-btn ghost-btn mobile-menu-btn" id="sidebarOpenBtn" aria-label="Abrir menú">
-        <svg width="22" height="22"><use href="#i-menu"/></svg>
-      </button>
-
       <div class="topbar-title" id="topbarTitle">Dashboard</div>
 
       <div class="topbar-actions">
@@ -420,6 +420,7 @@
 
       <!-- ── Gastos ─────────────────────────────────────────────── -->
       <section id="tab-gastos" class="tab-panel">
+        <div id="expensesCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
         <div class="admin-toolbar">
           <button id="addExpenseBtn" class="btn btn-primary btn-sm icon-label-btn">
             <svg width="16" height="16"><use href="#i-plus"/></svg>
@@ -430,7 +431,6 @@
           <table class="admin-table">
             <thead><tr><th>Descripción</th><th>Monto</th><th>Fecha</th><th></th></tr></thead>
             <tbody id="expensesBody"></tbody>
-            <tfoot id="expensesTotalRow"></tfoot>
           </table>
         </div>
       </section>
@@ -469,7 +469,25 @@
           </label>
         </div>
 
-        <div id="tasksList"></div>
+        <div id="tasksList" class="tasks-grid"></div>
+      </section>
+
+      <!-- ── Tarjetas (bloqueadas) ──────────────────────────────── -->
+      <section id="tab-tarjetas" class="tab-panel">
+        <div class="glass-card info-card" style="margin-bottom:14px">
+          Bloqueá tarjetas (números de cuenta de barra) que fueron perdidas o robadas — no podrán asignarse al crear o editar un asistente.
+        </div>
+        <div id="blockedCardsCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+        <div class="admin-toolbar">
+          <form id="blockCardForm" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input id="blockCardInput" type="number" min="1" placeholder="Número de tarjeta" class="admin-input" style="width:180px" required/>
+            <button type="submit" class="btn btn-primary btn-sm icon-label-btn">
+              <svg width="16" height="16"><use href="#i-plus"/></svg>
+              Bloquear
+            </button>
+          </form>
+        </div>
+        <div id="blockedCardsList" class="blocked-cards-grid"></div>
       </section>
 
       <!-- ── Usuarios ───────────────────────────────────────────── -->

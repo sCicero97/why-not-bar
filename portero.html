@@ -79,7 +79,7 @@
   <!-- ═══════════ GLASS TOP BAR ═══════════ -->
   <header class="glass-topbar">
     <div class="topbar-brand">
-      <div class="brand-dot" style="background:var(--purple-ios);box-shadow:0 0 14px rgba(191,90,242,.55)"></div>
+      <div class="brand-dot" style="background:#ff453a;box-shadow:0 0 14px rgba(255,69,58,.65)"></div>
       <div class="topbar-brand-text">
         <h1>Why Not</h1>
         <p id="eventName">Cargando…</p>
@@ -109,16 +109,16 @@
     <!-- ═══════════ STATS ═══════════ -->
     <section class="door-stats">
       <div class="door-stat">
-        <span class="door-stat-label">Total invitados</span>
+        <span class="door-stat-label">Total asistentes</span>
         <strong id="statTotal">0</strong>
-      </div>
-      <div class="door-stat door-stat-green">
-        <span class="door-stat-label">Ingresaron</span>
-        <strong id="statEntered">0</strong>
       </div>
       <div class="door-stat door-stat-yellow">
         <span class="door-stat-label">Pendientes</span>
         <strong id="statPending">0</strong>
+      </div>
+      <div class="door-stat door-stat-green">
+        <span class="door-stat-label">Ingresaron</span>
+        <strong id="statEntered">0</strong>
       </div>
     </section>
 
@@ -135,11 +135,11 @@
         <button class="filter-btn active" data-filter="all">
           <svg width="14" height="14"><use href="#i-people"/></svg> Todos
         </button>
-        <button class="filter-btn" data-filter="inside">
-          <svg width="14" height="14"><use href="#i-check"/></svg> Adentro
-        </button>
         <button class="filter-btn" data-filter="pending">
           <svg width="14" height="14"><use href="#i-clock"/></svg> Pendientes
+        </button>
+        <button class="filter-btn" data-filter="inside">
+          <svg width="14" height="14"><use href="#i-check"/></svg> Adentro
         </button>
         <button class="filter-btn" data-filter="exited">
           <svg width="14" height="14"><use href="#i-door-out"/></svg> Salieron

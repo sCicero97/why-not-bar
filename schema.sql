@@ -109,7 +109,8 @@ create table if not exists task_checks (
 -- ─── Configuración del evento ─────────────────────────────────────────────────
 create table if not exists event_settings (
   event_id        uuid primary key references events(id) on delete cascade,
-  door_can_charge boolean default false
+  door_can_charge boolean default false,
+  blocked_slots   jsonb   default '[]'::jsonb
 );
 
 -- ═══════════════════════════════════════════════════════════════════════════
