@@ -113,6 +113,14 @@ body { padding: 0; }
 .att-unpaid.att-inside {
   background: linear-gradient(180deg, rgba(255, 69, 58, .16), transparent 160%), var(--glass-bg) !important;
 }
+/* Crew — borde y tint rojo (tiene prioridad menor que unpaid) */
+.att-crew {
+  background: linear-gradient(180deg, rgba(255, 69, 58, .10), transparent 150%), var(--glass-bg);
+  border-color: rgba(255, 69, 58, .35);
+}
+.att-crew.att-inside {
+  background: linear-gradient(180deg, rgba(255, 69, 58, .14), transparent 160%), var(--glass-bg);
+}
 
 .att-main {
   display: flex;
@@ -166,6 +174,7 @@ body { padding: 0; }
 .att-tag-paid   { background: var(--tint-green); color: #7ce089; border-color: rgba(48, 209, 88, .30); }
 .att-tag-open   { background: var(--tint-amber); color: #fbbf24; border-color: rgba(255, 159, 10, .30); }
 .att-tag-unpaid { background: var(--tint-red);   color: #ff8a80; border-color: rgba(255, 69, 58, .40); font-size: 11px; }
+.att-tag-crew   { background: rgba(255, 69, 58, .18); color: #ff8a80; border-color: rgba(255, 69, 58, .45); }
 
 /* ─── Action buttons on card ────────────────────────────────────────────────── */
 .att-actions { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }

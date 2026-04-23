@@ -460,6 +460,39 @@ body.admin-body {
 .admin-table tr:hover td { background: rgba(255, 255, 255, .02); }
 .admin-table .row-active td { background: rgba(48, 209, 88, .04); }
 .admin-table .row-closed td { opacity: .5; }
+
+/* Hold-to-close: fila rellenándose progresivamente en 2s */
+.admin-table tr.bar-row-hold { cursor: pointer; position: relative; transition: background .15s ease; }
+.admin-table tr.bar-row-hold td {
+  background-image: linear-gradient(90deg, rgba(48, 209, 88, .38) 0%, rgba(48, 209, 88, .28) 100%);
+  background-size: 0% 100%;
+  background-repeat: no-repeat;
+  background-position: left center;
+  transition: background-size .05s linear;
+  position: relative;
+  /* keep stacking so the fill shows */
+  background-clip: padding-box;
+}
+.admin-table tr.bar-row-holding td {
+  background-size: 100% 100%;
+  transition: background-size 2s linear;
+}
+.admin-table tr.bar-row-hold-done td {
+  background-size: 100% 100%;
+  background-image: linear-gradient(90deg, rgba(48, 209, 88, .6) 0%, rgba(48, 209, 88, .5) 100%);
+}
+.admin-table tr.bar-row-hold::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* Hint on hover (desktop) */
+@media (hover:hover) {
+  .admin-table tr.bar-row-hold:hover td::before {
+    content: '';
+  }
+}
 .att-name-cell { font-weight: 600; cursor: pointer; }
 
 /* Inline editing */

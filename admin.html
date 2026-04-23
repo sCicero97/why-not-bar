@@ -381,7 +381,7 @@
               <tr>
                 <th>Nombre</th>
                 <th>Estado</th>
-                <th>Barra # (Vinculado)</th>
+                <th>Barra #</th>
                 <th>Cédula</th>
                 <th>Email</th>
                 <th>Teléfono</th>
@@ -403,6 +403,7 @@
       <section id="tab-barra" class="tab-panel">
         <div id="adminBarCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
         <div class="admin-toolbar">
+          <input id="barSearch" type="text" class="admin-input" placeholder="Buscar por # o nombre..." style="flex:1;max-width:260px">
           <select id="barFilter" class="admin-select">
             <option value="all">Todas</option>
             <option value="open">Abiertas con saldo</option>

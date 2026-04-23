@@ -84,7 +84,31 @@ async function loadAll() {
     if (!Array.isArray(eventSettings.blocked_slots)) eventSettings.blocked_slots = [];
   }
 
+  // Self-heal: asistentes con bar_account_slot cuya bar_account está sin attendee_id
+  // (bug histórico: crew creado antes de corregir el event_id).
+  await healDanglingBarAccountLinks();
+
   renderAll();
+}
+
+async function healDanglingBarAccountLinks() {
+  if (!activeEvent) return;
+  const toFix = attendees.filter(a => {
+    if (!a.bar_account_slot) return false;
+    const acc = barAccounts.find(b => b.slot === a.bar_account_slot);
+    return acc && !acc.attendee_id;
+  });
+  if (!toFix.length) return;
+  const db = getDb();
+  for (const a of toFix) {
+    await db.from('bar_accounts')
+      .update({ attendee_id: a.id })
+      .eq('event_id', activeEvent.id)
+      .eq('slot', a.bar_account_slot);
+    // Actualizar estado local
+    const acc = barAccounts.find(b => b.slot === a.bar_account_slot);
+    if (acc) { acc.attendee_id = a.id; acc.attendees = { name: a.name }; }
+  }
 }
 
 function setupRealtime() {
@@ -193,7 +217,12 @@ function renderAttendeesTable() {
   }
 
   let list = attendees.filter(a => {
-    if (search && !(`${a.name} ${a.cedula || ''} ${a.email || ''}`).toLowerCase().includes(search)) return false;
+    if (search) {
+      const slot = a.bar_account_slot ? String(a.bar_account_slot) : '';
+      const slotPadded = slot ? String(a.bar_account_slot).padStart(3, '0') : '';
+      const hay = `${a.name} ${a.cedula || ''} ${a.email || ''} ${a.phone || ''} ${slot} ${slotPadded}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
     if (statusF && a.status !== statusF) return false;
     return true;
   });
@@ -279,12 +308,20 @@ function renderAdminBarCounters() {
 // ─── Bar accounts table ───────────────────────────────────────────────────────
 function renderBarTable() {
   const filter = document.getElementById('barFilter')?.value || 'all';
+  const search = document.getElementById('barSearch')?.value?.trim().toLowerCase() || '';
   // Solo mostrar cuentas asignadas a un asistente
   let list = barAccounts.filter(a => {
     if (!a.attendee_id) return false;  // sin asistente → ocultar
-    if (filter === 'open')    return !a.is_closed && a.total > 0;
-    if (filter === 'empty')   return !a.is_closed && a.total === 0;
-    if (filter === 'closed')  return a.is_closed;
+    if (filter === 'open')    { if (!(!a.is_closed && a.total > 0)) return false; }
+    else if (filter === 'empty')   { if (!(!a.is_closed && a.total === 0)) return false; }
+    else if (filter === 'closed')  { if (!a.is_closed) return false; }
+    if (search) {
+      const slot = String(a.slot);
+      const slotPad = slot.padStart(3, '0');
+      const name = (a.attendees?.name || '').toLowerCase();
+      const hay = `${slot} ${slotPad} ${name}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
     return true;
   });
 
@@ -293,8 +330,9 @@ function renderBarTable() {
   tbody.innerHTML = list.map(acc => {
     const closure  = acc.is_closed ? barClosures.find(c => c.slot === acc.slot) : null;
     const photoUrl = closure?.payment_photo_url || null;
+    const holdable = !acc.is_closed && acc.total > 0;
     return `
-    <tr class="${acc.is_closed ? 'row-closed' : acc.total > 0 ? 'row-active' : ''}">
+    <tr class="${acc.is_closed ? 'row-closed' : acc.total > 0 ? 'row-active' : ''}${holdable ? ' bar-row-hold' : ''}" ${holdable ? `data-account-id="${acc.id}" data-slot="${acc.slot}"` : ''}>
       <td><strong>${padId(acc.slot)}</strong></td>
       <td>${acc.attendees?.name || '<span style="color:var(--muted)">—</span>'}</td>
       <td><strong>${formatMoney(acc.total)}</strong></td>
@@ -328,6 +366,53 @@ function renderBarTable() {
       }</td>
     </tr>`;
   }).join('') || '<tr><td colspan="12" class="empty-state">Sin cuentas asignadas.</td></tr>';
+
+  // Wire up hold-to-close on .bar-row-hold rows (2 seg)
+  wireBarRowHold();
+}
+
+// ─── Hold-to-close on bar rows ────────────────────────────────────────────────
+function wireBarRowHold() {
+  const rows = document.querySelectorAll('tr.bar-row-hold');
+  rows.forEach(row => {
+    if (row._holdWired) return;
+    row._holdWired = true;
+
+    let timer = null;
+    let fired = false;
+
+    const start = (ev) => {
+      // Ignore if user is pressing an interactive control (button, link)
+      const tgt = ev.target;
+      if (tgt.closest('button, a, input, select, textarea')) return;
+      if (ev.button && ev.button !== 0) return;
+      fired = false;
+      row.classList.add('bar-row-holding');
+      timer = setTimeout(() => {
+        fired = true;
+        row.classList.remove('bar-row-holding');
+        row.classList.add('bar-row-hold-done');
+        const id = row.dataset.accountId;
+        const slot = parseInt(row.dataset.slot, 10);
+        // small delay to let the visual finish
+        setTimeout(() => {
+          row.classList.remove('bar-row-hold-done');
+          if (id) adminCloseBarAccount(id, slot);
+        }, 180);
+      }, 2000);
+    };
+    const cancel = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      row.classList.remove('bar-row-holding');
+    };
+
+    row.addEventListener('pointerdown', start);
+    row.addEventListener('pointerup', cancel);
+    row.addEventListener('pointerleave', cancel);
+    row.addEventListener('pointercancel', cancel);
+    // Prevent context menu on long-press (mobile)
+    row.addEventListener('contextmenu', (e) => { if (fired) e.preventDefault(); });
+  });
 }
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
@@ -454,20 +539,23 @@ function getNextAvailableBarSlot() {
 // ─── Asegurar que exista una bar_account para un slot ─────────────────────────
 // Si el slot ya existe en bar_accounts, sólo se vincula el attendee_id.
 // Si no existe (ej: el usuario asigna slot 250 cuando sólo hay 120), se crea.
-async function ensureBarAccountSlot(slot, attendeeId = null) {
-  if (!activeEvent || !slot) return;
+async function ensureBarAccountSlot(slot, attendeeId = null, eventIdOverride = null) {
+  const eventId = eventIdOverride || activeEvent?.id;
+  if (!eventId || !slot) return;
   const db = getDb();
-  const existing = barAccounts.find(a => a.slot === slot);
-  if (existing) {
-    await db.from('bar_accounts')
-      .update({ attendee_id: attendeeId })
-      .eq('event_id', activeEvent.id)
-      .eq('slot', slot);
-    return;
-  }
-  // No existe → crear con upsert por (event_id, slot)
+  // Intentar UPDATE primero — si la fila ya existe (ej: init_bar_accounts ya creó el slot),
+  // sólo vinculamos el attendee_id sin tocar los contadores.
+  const { data: updated, error: updErr } = await db.from('bar_accounts')
+    .update({ attendee_id: attendeeId })
+    .eq('event_id', eventId)
+    .eq('slot', slot)
+    .select('id');
+  if (updErr) { console.warn('[ensureBarAccountSlot] update error:', updErr.message); return; }
+  if (updated && updated.length) return; // existía y quedó vinculada
+
+  // No existía → crear
   const { error } = await db.from('bar_accounts').upsert({
-    event_id:    activeEvent.id,
+    event_id:    eventId,
     slot,
     total:       0,
     qty160:      0,
@@ -799,9 +887,10 @@ function openNewEvent() {
     }));
     const { data: insertedCrew, error: crewErr } = await db.from('attendees').insert(crewRows).select();
     if (crewErr) console.warn('Crew default:', crewErr.message);
-    // Vincular bar_accounts a los crew con slot
+    // Vincular bar_accounts a los crew con slot — pasamos newEvent.id explícitamente
+    // porque activeEvent global todavía no apunta al nuevo evento.
     for (const a of (insertedCrew || [])) {
-      if (a.bar_account_slot) await ensureBarAccountSlot(a.bar_account_slot, a.id);
+      if (a.bar_account_slot) await ensureBarAccountSlot(a.bar_account_slot, a.id, newEvent.id);
     }
 
     // Insertar gastos por defecto (en 0)
@@ -820,11 +909,13 @@ function openNewEvent() {
     });
 
     // Event settings default (incluye blocked_slots vacío)
-    await db.from('event_settings').insert({
-      event_id: newEvent.id,
-      door_can_charge: false,
-      blocked_slots: [],
-    });
+    const settingsPayload = { event_id: newEvent.id, door_can_charge: false };
+    if (_blockedSlotsColSupported) settingsPayload.blocked_slots = [];
+    const { error: settingsErr } = await db.from('event_settings').insert(settingsPayload);
+    if (settingsErr && _isMissingBlockedSlotsError(settingsErr)) {
+      _blockedSlotsColSupported = false;
+      await db.from('event_settings').insert({ event_id: newEvent.id, door_can_charge: false });
+    }
 
     toast(`Evento "${newEvent.name}" creado con ${DEFAULT_BAR_ACCOUNTS} cuentas y crew por defecto`, 'success');
     closeModal();
@@ -1384,6 +1475,7 @@ function setupUI() {
   document.getElementById('attSearch').addEventListener('input', renderAttendeesTable);
   document.getElementById('attStatusFilter').addEventListener('change', renderAttendeesTable);
   document.getElementById('barFilter').addEventListener('change', renderBarTable);
+  document.getElementById('barSearch')?.addEventListener('input', renderBarTable);
   document.getElementById('toggleGroupBtn').addEventListener('click', () => {
     groupByStatus = !groupByStatus;
     renderAttendeesTable();
@@ -1694,14 +1786,29 @@ function openEditTask(taskId) {
 window.openEditTask = openEditTask;
 
 // ─── Configuración del portero ─────────────────────────────────────────────────
+let _blockedSlotsColSupported = true;
+
+function _isMissingBlockedSlotsError(err) {
+  if (!err) return false;
+  const m = String(err.message || err || '').toLowerCase();
+  return m.includes('blocked_slots');
+}
+
+function _showMissingBlockedSlotsHint() {
+  toast("Falta la columna 'blocked_slots'. Correlo en Supabase → SQL Editor: alter table event_settings add column if not exists blocked_slots jsonb default '[]'::jsonb;", 'error');
+}
+
 async function saveDoorSettings(canCharge) {
   if (!activeEvent) return;
   const db = getDb();
-  await db.from('event_settings').upsert({
-    event_id: activeEvent.id,
-    door_can_charge: canCharge,
-    blocked_slots: eventSettings.blocked_slots || [],
-  });
+  const payload = { event_id: activeEvent.id, door_can_charge: canCharge };
+  if (_blockedSlotsColSupported) payload.blocked_slots = eventSettings.blocked_slots || [];
+  const { error } = await db.from('event_settings').upsert(payload);
+  if (error && _isMissingBlockedSlotsError(error)) {
+    _blockedSlotsColSupported = false;
+    // Reintentar sin la columna faltante
+    await db.from('event_settings').upsert({ event_id: activeEvent.id, door_can_charge: canCharge });
+  }
   eventSettings.door_can_charge = canCharge;
 }
 
@@ -1756,7 +1863,14 @@ async function addBlockedCard(slot) {
     door_can_charge: eventSettings.door_can_charge || false,
     blocked_slots: next,
   });
-  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  if (error) {
+    if (_isMissingBlockedSlotsError(error)) {
+      _blockedSlotsColSupported = false;
+      _showMissingBlockedSlotsHint();
+      return;
+    }
+    toast('Error: ' + error.message, 'error'); return;
+  }
   eventSettings.blocked_slots = next;
   renderBlockedCards();
   toast(`Tarjeta ${padId(n)} bloqueada`, 'success');
@@ -1772,7 +1886,14 @@ async function unblockCard(slot) {
     door_can_charge: eventSettings.door_can_charge || false,
     blocked_slots: next,
   });
-  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  if (error) {
+    if (_isMissingBlockedSlotsError(error)) {
+      _blockedSlotsColSupported = false;
+      _showMissingBlockedSlotsHint();
+      return;
+    }
+    toast('Error: ' + error.message, 'error'); return;
+  }
   eventSettings.blocked_slots = next;
   renderBlockedCards();
   toast(`Tarjeta ${padId(n)} desbloqueada`, 'success');

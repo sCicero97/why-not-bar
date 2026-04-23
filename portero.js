@@ -146,13 +146,14 @@ function renderList() {
     const hasUnpaidBar = barAcc && !barAcc.is_closed && barAcc.total > 0;
 
     const card = document.createElement('div');
-    card.className = `att-card ${att.entered ? (alreadyOut ? 'att-exited' : 'att-inside') : 'att-pending'} ${hasUnpaidBar ? 'att-unpaid' : ''}`;
+    card.className = `att-card ${att.entered ? (alreadyOut ? 'att-exited' : 'att-inside') : 'att-pending'} ${hasUnpaidBar ? 'att-unpaid' : ''} ${att.status === 'crew' ? 'att-crew' : ''}`;
 
     card.innerHTML = `
       <div class="att-main" data-id="${att.id}">
         <div class="att-info">
           <div class="att-name">
             <span>${att.name}</span>
+            ${att.status === 'crew' ? '<span class="att-tag att-tag-crew">CREW</span>' : ''}
             ${hasUnpaidBar ? `<span class="att-tag att-tag-unpaid"><svg width="11" height="11"><use href="#i-warn"/></svg> Debe ${formatMoney(barAcc.total)}</span>` : ''}
           </div>
           <div class="att-meta">
