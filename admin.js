@@ -416,7 +416,7 @@ function renderBarTable() {
     const photoUrl = closure?.payment_photo_url || null;
     const holdable = !acc.is_closed && acc.total > 0;
 
-    // Si hay más de un cierre (cuenta reabierta y re-cerrada), mostrar todos los métodos
+    // Render de un solo cierre (método + detalle)
     const renderOneMethod = (c) => {
       if (!c) return '—';
       if (c.paid_by_slot) return `<span style="color:var(--amber-ios,#ff9f0a)">Pagado por #${String(c.paid_by_slot).padStart(3,'0')}</span>`;
@@ -424,12 +424,24 @@ function renderBarTable() {
       if (c.payment_method === 'cash')     return `<span class="icon-label-btn" style="gap:6px;display:inline-flex;align-items:center">${icon('cash',14)}Efectivo</span>${c.change_given > 0 ? `<br><span style="font-size:11px;color:var(--muted)">Vuelto: ${formatMoney(c.change_given)}</span>` : ''}`;
       return '—';
     };
-    const paymentCellHtml = slotClosures.length > 1
-      ? slotClosures.map((c, i) => `<div style="font-size:12px;${i>0?'opacity:.55;border-top:1px dashed var(--glass-border);padding-top:4px;margin-top:4px':''}">
-          <span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">${i === 0 ? 'Últ.' : '#'+(slotClosures.length-i)} · ${formatMoney(c.total)}</span><br>
-          ${renderOneMethod(c)}
-        </div>`).join('')
-      : renderOneMethod(closure);
+    // Si hay >1 cierre → carrusel compacto con flechas izq/der (no agranda la fila)
+    let paymentCellHtml;
+    if (slotClosures.length > 1) {
+      const frames = slotClosures.map((c, i) => `
+        <div class="pay-frame${i === 0 ? ' active' : ''}" data-idx="${i}">
+          <div class="pay-frame-meta">${i + 1}/${slotClosures.length} · ${formatMoney(c.total)}</div>
+          <div class="pay-frame-method">${renderOneMethod(c)}</div>
+        </div>`).join('');
+      paymentCellHtml = `<div class="pay-carousel" data-total="${slotClosures.length}">
+        <button class="pay-arrow pay-arrow-prev" type="button" aria-label="Anterior">‹</button>
+        <div class="pay-frames">${frames}</div>
+        <button class="pay-arrow pay-arrow-next" type="button" aria-label="Siguiente">›</button>
+      </div>`;
+    } else {
+      paymentCellHtml = renderOneMethod(closure);
+    }
+    // Foto(s) — si hay más de una, guardamos todas para abrir el visor con flechas
+    const photoUrlsForRow = slotClosures.map(c => c.payment_photo_url).filter(Boolean);
     return `
     <tr class="${acc.is_closed ? 'row-closed' : acc.total > 0 ? 'row-active' : ''}${holdable ? ' bar-row-hold' : ''}" ${holdable ? `data-account-id="${acc.id}" data-slot="${acc.slot}"` : ''}>
       <td><strong>${padId(acc.slot)}</strong></td>
@@ -451,8 +463,8 @@ function renderBarTable() {
           ? `<button class="btn btn-sm" onclick="reopenBarAccount('${acc.id}')">Reabrir</button>`
           : '—'
       }</td>
-      <td>${photoUrl
-        ? `<button class="btn btn-sm icon-label-btn" onclick="viewPhoto('${photoUrl}')">${icon('camera',14)}Ver</button>`
+      <td>${photoUrlsForRow.length
+        ? `<button class="btn btn-sm icon-label-btn" onclick="viewPhotos(${JSON.stringify(photoUrlsForRow).replace(/"/g,'&quot;')})">${icon('camera',14)}Ver${photoUrlsForRow.length > 1 ? ` (${photoUrlsForRow.length})` : ''}</button>`
         : '—'
       }</td>
     </tr>`;
@@ -460,6 +472,25 @@ function renderBarTable() {
 
   // Wire up hold-to-close on .bar-row-hold rows (2 seg)
   wireBarRowHold();
+  // Wire up pay carousel arrows
+  wirePayCarousel();
+}
+
+// Navegación del carrusel de pagos dentro de la celda
+function wirePayCarousel() {
+  document.querySelectorAll('.pay-carousel').forEach(car => {
+    if (car._wired) return;
+    car._wired = true;
+    const frames = car.querySelectorAll('.pay-frame');
+    const total  = frames.length;
+    let idx = 0;
+    const go = (delta) => {
+      idx = (idx + delta + total) % total;
+      frames.forEach(f => f.classList.toggle('active', Number(f.dataset.idx) === idx));
+    };
+    car.querySelector('.pay-arrow-prev').addEventListener('click', (e) => { e.stopPropagation(); go(-1); });
+    car.querySelector('.pay-arrow-next').addEventListener('click', (e) => { e.stopPropagation(); go(1); });
+  });
 }
 
 // ─── Hold-to-close on bar rows (solo touch) ──────────────────────────────────
@@ -552,7 +583,10 @@ function renderExpenses() {
       </div>`).join('');
   }
 
-  tbody.innerHTML = expenses.map(exp => `
+  const sortedExpenses = [...expenses].sort((a, b) =>
+    String(a.description || '').localeCompare(String(b.description || ''), 'es', { sensitivity: 'base' })
+  );
+  tbody.innerHTML = sortedExpenses.map(exp => `
     <tr>
       <td class="editable-cell" data-entity="expense" data-id="${exp.id}" data-field="description" data-type="text">${exp.description}</td>
       <td class="editable-cell" data-entity="expense" data-id="${exp.id}" data-field="amount" data-type="number"><strong>${formatMoney(exp.amount)}</strong></td>
@@ -662,19 +696,14 @@ async function updateExpenseField(id, field, value) {
 }
 
 async function updateUserField(id, field, value) {
-  const db = getDb();
-  // Email se guarda en auth.users, no en profiles; usamos RPC si existe, si no, profiles.
-  // Para simplicidad editamos display_name en profiles; email es informativo.
-  const table = 'profiles';
-  const patch = {};
-  if (field === 'display_name') patch.display_name = value;
-  else if (field === 'email') {
-    // profiles también tiene email (denormalizado)
-    patch.email = value;
-  } else {
-    patch[field] = value;
+  // El email vive en auth.users (no editable desde la tabla profiles) — avisar.
+  if (field === 'email') {
+    toast('El email no se puede editar desde acá. Borrá el usuario y creá uno nuevo.', 'warning');
+    renderUsers();
+    return;
   }
-  const { error } = await db.from(table).update(patch).eq('id', id);
+  const db = getDb();
+  const { error } = await db.from('profiles').update({ [field]: value }).eq('id', id);
   if (error) { toast('Error: ' + error.message, 'error'); renderUsers(); return; }
   if (typeof appUsers !== 'undefined') {
     const i = appUsers.findIndex(u => u.id === id);
@@ -1287,26 +1316,59 @@ function exportToExcel() {
 function showModal(html) {
   document.getElementById('modalBody').innerHTML = html;
   document.getElementById('modalOverlay').classList.remove('hidden');
+  document.body.classList.add('modal-open');
   // Apply form styles
   document.querySelectorAll('#modalBody input, #modalBody select').forEach(el => {
     el.style.cssText = 'width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:11px 14px;border-radius:12px;font-size:15px;display:block;margin-top:4px';
   });
 }
-function closeModal() { document.getElementById('modalOverlay').classList.add('hidden'); }
+function closeModal() {
+  document.getElementById('modalOverlay').classList.add('hidden');
+  document.body.classList.remove('modal-open');
+  // Workaround iOS: restaurar scroll/viewport después del teclado del modal.
+  // A veces la página queda desplazada hacia arriba y la barra superior queda oculta
+  // por la status bar. Forzamos scroll al tope del área principal.
+  try {
+    const scroll = document.querySelector('.main-scroll');
+    if (scroll) scroll.scrollTop = Math.min(scroll.scrollTop, scroll.scrollTop); // no-op
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  } catch (_) {}
+}
 
 // ─── Photo viewer ─────────────────────────────────────────────────────────────
-function viewPhoto(url) {
-  document.getElementById('modalBody').innerHTML = `
-    <div style="text-align:center">
-      <h3 style="margin:0 0 16px;font-size:20px">Comprobante de pago</h3>
-      <img src="${url}" style="max-width:100%;border-radius:14px;max-height:65vh;object-fit:contain;display:block;margin:0 auto"/>
-      <div style="margin-top:18px">
-        <a href="${url}" target="_blank" class="btn btn-sm icon-label-btn" style="display:inline-flex;text-decoration:none">${icon('external',14)}Abrir en nueva pestaña</a>
+function viewPhoto(url) { viewPhotos([url]); }
+window.viewPhoto = viewPhoto;
+
+// Visor con flechas para una o más fotos de comprobantes.
+function viewPhotos(urls) {
+  if (!Array.isArray(urls) || !urls.length) return;
+  let idx = 0;
+  const render = () => {
+    const u = urls[idx];
+    document.getElementById('modalBody').innerHTML = `
+      <div style="text-align:center;position:relative">
+        <h3 style="margin:0 0 16px;font-size:20px">Comprobante de pago ${urls.length > 1 ? `<span style="font-size:13px;color:#8e8e93">${idx + 1}/${urls.length}</span>` : ''}</h3>
+        <div class="photo-viewer">
+          ${urls.length > 1 ? '<button type="button" class="photo-arrow photo-arrow-prev" aria-label="Anterior">‹</button>' : ''}
+          <img src="${u}" style="max-width:100%;border-radius:14px;max-height:65vh;object-fit:contain;display:block;margin:0 auto"/>
+          ${urls.length > 1 ? '<button type="button" class="photo-arrow photo-arrow-next" aria-label="Siguiente">›</button>' : ''}
+        </div>
+        <div style="margin-top:18px">
+          <a href="${u}" target="_blank" class="btn btn-sm icon-label-btn" style="display:inline-flex;text-decoration:none">${icon('external',14)}Abrir en nueva pestaña</a>
+        </div>
       </div>
-    </div>
-  `;
-  document.getElementById('modalOverlay').classList.remove('hidden');
+    `;
+    document.getElementById('modalOverlay').classList.remove('hidden');
+    const prev = document.querySelector('.photo-arrow-prev');
+    const next = document.querySelector('.photo-arrow-next');
+    if (prev) prev.addEventListener('click', () => { idx = (idx - 1 + urls.length) % urls.length; render(); });
+    if (next) next.addEventListener('click', () => { idx = (idx + 1) % urls.length; render(); });
+  };
+  render();
 }
+window.viewPhotos = viewPhotos;
 
 // ─── Gestión de usuarios ──────────────────────────────────────────────────────
 
@@ -1354,7 +1416,7 @@ function renderUsers() {
           <span style="font-weight:600">${u.display_name || '—'}</span>
         </div>
       </td>
-      <td class="editable-cell" data-entity="user" data-id="${u.id}" data-field="email" data-type="email" style="color:#8e8e93;font-size:13px">${u.email}</td>
+      <td style="color:#8e8e93;font-size:13px">${u.email}</td>
       <td>
         <select class="inline-select"
           style="border-color:${ROLE_COLORS[u.role]||'rgba(255,255,255,.1)'};color:${ROLE_COLORS[u.role]||'#f5f5f7'}"
