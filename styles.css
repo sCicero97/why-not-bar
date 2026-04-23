@@ -82,7 +82,7 @@ button {
 }
 .login-logo { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
 .login-logo h1 { margin: 0; font-size: 28px; letter-spacing: -.02em; font-weight: 700; }
-.login-logo .brand-dot { width: 14px; height: 14px; border-radius: 999px; background: var(--amber-ios); box-shadow: 0 0 14px rgba(255, 159, 10, .55); }
+.login-logo .brand-dot { width: 14px; height: 14px; border-radius: 999px; background: #ff453a; box-shadow: 0 0 14px rgba(255, 69, 58, .65); }
 .login-role { color: var(--muted); font-size: 12px; margin: 0 0 28px; text-transform: uppercase; letter-spacing: .10em; font-weight: 600; }
 .login-card input {
   width: 100%;
@@ -117,7 +117,7 @@ button {
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; gap: 12px;
   padding: 10px 16px;
-  padding-top: max(10px, env(safe-area-inset-top));
+  padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
   background: var(--glass-bg);
   backdrop-filter: blur(22px) saturate(170%);
   -webkit-backdrop-filter: blur(22px) saturate(170%);

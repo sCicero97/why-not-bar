@@ -166,9 +166,9 @@ function renderList() {
           </div>` : ''}
         </div>
         <div class="att-actions" onclick="event.stopPropagation()">
-          ${!att.entered && !alreadyOut ? `<button class="att-btn att-btn-enter" onclick="doCheckIn('${att.id}')"><svg width="14" height="14"><use href="#i-check"/></svg> Ingresar</button>` : ''}
-          ${canExit ? `<button class="att-btn att-btn-exit" onclick="doExit('${att.id}')"><svg width="14" height="14"><use href="#i-door-out"/></svg> Salida</button>` : ''}
-          ${canCharge && hasBalance && att.entered && !alreadyOut ? `<button class="att-btn att-btn-close" onclick="openPersonModal('${att.id}')"><svg width="14" height="14"><use href="#i-card"/></svg> Cobrar</button>` : ''}
+          ${att.status !== 'crew' && !att.entered && !alreadyOut ? `<button class="att-btn att-btn-enter" onclick="doCheckIn('${att.id}')"><svg width="14" height="14"><use href="#i-check"/></svg> Ingresar</button>` : ''}
+          ${att.status !== 'crew' && canExit ? `<button class="att-btn att-btn-exit" onclick="doExit('${att.id}')"><svg width="14" height="14"><use href="#i-door-out"/></svg> Salida</button>` : ''}
+          ${att.status !== 'crew' && canCharge && hasBalance && att.entered && !alreadyOut ? `<button class="att-btn att-btn-close" onclick="openPersonModal('${att.id}')"><svg width="14" height="14"><use href="#i-card"/></svg> Cobrar</button>` : ''}
         </div>
       </div>
     `;

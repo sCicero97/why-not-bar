@@ -81,6 +81,64 @@ body.admin-body {
 .sidebar-brand h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
 .sidebar-brand p  { margin: 2px 0 0; font-size: 12px; color: #9a9aa0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* Event picker dropdown under Why Not */
+.event-picker-wrap { position: relative; margin-top: 2px; }
+.event-picker-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: none; color: #9a9aa0;
+  padding: 2px 0; font-size: 12px; cursor: pointer;
+  max-width: 100%;
+}
+.event-picker-btn:hover { color: #f5f5f7; }
+.event-picker-btn > span:first-child {
+  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.event-picker-status {
+  display: inline-block; width: 7px; height: 7px; border-radius: 999px;
+  background: var(--green-ios, #30d158);
+  box-shadow: 0 0 6px rgba(48,209,88,.6);
+  flex-shrink: 0;
+}
+.event-picker-status.inactive {
+  background: #8e8e93;
+  box-shadow: none;
+}
+.event-picker-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  min-width: 220px; max-width: 320px; max-height: 320px; overflow-y: auto;
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(18px) saturate(170%);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  box-shadow: 0 10px 40px rgba(0,0,0,.5);
+  padding: 6px;
+}
+.event-picker-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; text-align: left;
+  background: transparent; border: none; color: #f5f5f7;
+  padding: 8px 10px; border-radius: 10px; cursor: pointer;
+  font-size: 13px;
+}
+.event-picker-item:hover { background: rgba(255,255,255,.06); }
+.event-picker-item.current { background: rgba(10,132,255,.10); }
+.event-picker-item .dot {
+  width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0;
+  background: #8e8e93;
+}
+.event-picker-item.active-event .dot {
+  background: var(--green-ios, #30d158);
+  box-shadow: 0 0 6px rgba(48,209,88,.6);
+}
+.event-picker-item .meta { font-size: 11px; color: #8e8e93; margin-left: auto; white-space: nowrap; }
+
+.topbar-title-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.mobile-only-picker { display: none; }
+@media (max-width: 900px) {
+  .mobile-only-picker { display: block; }
+  .mobile-only-picker .event-picker-btn { padding: 0; }
+}
+
 .sidebar-close-btn {
   display: none;
   background: transparent;
@@ -177,6 +235,22 @@ body.admin-body {
   background: rgba(0, 0, 0, .55);
   z-index: 25;
   backdrop-filter: blur(4px);
+}
+
+/* Backdrop del bottom-sheet (distinto del sidebar, porque éste sí debe verse en mobile) */
+.sheet-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, .45);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 998;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+.sheet-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ═══════════ MAIN ═══════════ */
@@ -461,37 +535,56 @@ body.admin-body {
 .admin-table .row-active td { background: rgba(48, 209, 88, .04); }
 .admin-table .row-closed td { opacity: .5; }
 
-/* Hold-to-close: fila rellenándose progresivamente en 2s */
-.admin-table tr.bar-row-hold { cursor: pointer; position: relative; transition: background .15s ease; }
-.admin-table tr.bar-row-hold td {
-  background-image: linear-gradient(90deg, rgba(48, 209, 88, .38) 0%, rgba(48, 209, 88, .28) 100%);
-  background-size: 0% 100%;
-  background-repeat: no-repeat;
-  background-position: left center;
-  transition: background-size .05s linear;
+/* Hold-to-close: sólo touch. Anillo que se cierra alrededor del dedo. */
+.admin-table tr.bar-row-hold {
   position: relative;
-  /* keep stacking so the fill shows */
-  background-clip: padding-box;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.admin-table tr.bar-row-holding {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 .admin-table tr.bar-row-holding td {
-  background-size: 100% 100%;
-  transition: background-size 2s linear;
+  background: rgba(48, 209, 88, .08);
 }
-.admin-table tr.bar-row-hold-done td {
-  background-size: 100% 100%;
-  background-image: linear-gradient(90deg, rgba(48, 209, 88, .6) 0%, rgba(48, 209, 88, .5) 100%);
-}
-.admin-table tr.bar-row-hold::after {
-  content: '';
-  position: absolute;
-  inset: 0;
+
+/* Anillo que se cierra en 2s alrededor del punto tocado */
+.hold-ring {
+  position: fixed;
+  width: 88px; height: 88px;
+  margin-left: -44px; margin-top: -44px;
+  border-radius: 50%;
   pointer-events: none;
+  z-index: 9999;
+  /* Aro base fino */
+  border: 2px solid rgba(48, 209, 88, .25);
+  background: radial-gradient(closest-side, rgba(48,209,88,.08), transparent 70%);
+  /* Usamos conic-gradient en un pseudo para el arco de progreso */
 }
-/* Hint on hover (desktop) */
-@media (hover:hover) {
-  .admin-table tr.bar-row-hold:hover td::before {
-    content: '';
-  }
+.hold-ring::before {
+  content: '';
+  position: absolute; inset: -2px;
+  border-radius: 50%;
+  background:
+    conic-gradient(from -90deg, rgba(48, 209, 88, .95) 0deg, rgba(48, 209, 88, .95) 0deg, transparent 0deg 360deg);
+  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 4px), black calc(100% - 3px));
+          mask: radial-gradient(closest-side, transparent calc(100% - 4px), black calc(100% - 3px));
+  transition: background 2s linear;
+}
+.hold-ring.hold-ring-active::before {
+  background:
+    conic-gradient(from -90deg, rgba(48, 209, 88, .95) 0deg, rgba(48, 209, 88, .95) 360deg, transparent 360deg);
+}
+.hold-ring.hold-ring-done {
+  border-color: rgba(48, 209, 88, .9);
+  background: radial-gradient(closest-side, rgba(48,209,88,.35), transparent 70%);
+  transform: scale(1.08);
+  transition: transform .18s ease, background .18s ease, border-color .18s ease;
+}
+.hold-ring.hold-ring-done::before {
+  background: conic-gradient(from -90deg, rgba(48, 209, 88, 1) 0deg, rgba(48, 209, 88, 1) 360deg, transparent 360deg);
 }
 .att-name-cell { font-weight: 600; cursor: pointer; }
 
@@ -608,6 +701,22 @@ body.admin-body {
   background: rgba(10, 132, 255, .06);
 }
 
+/* Modal action buttons: cancel a la izquierda, confirm a la derecha (iOS) */
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  flex-direction: row-reverse; /* el primer child queda a la derecha */
+}
+.modal-actions .btn {
+  flex: 1;
+  min-height: 44px;
+  justify-content: center;
+}
+@media (max-width: 500px) {
+  .modal-actions { flex-direction: column-reverse; }
+}
+
 /* ═══════════ BLOCKED CARDS (Tarjetas) ═══════════ */
 .blocked-cards-grid {
   display: grid;
@@ -689,6 +798,35 @@ body.admin-body {
 .task-last-check { color: var(--green-ios); font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
 .task-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .task-actions .btn { flex: 1; min-width: 0; padding: 6px 8px; font-size: 12px; justify-content: center; }
+
+/* Tarea especial (portero puede cobrar) — sólo un checkbox iOS style */
+.task-card.task-special { order: -1; /* siempre primera */ }
+.task-card.task-special .task-footer { margin-top: auto; }
+.task-checkbox { display: inline-flex; align-items: center; cursor: pointer; user-select: none; }
+.task-checkbox input { position: absolute; opacity: 0; pointer-events: none; }
+.task-checkbox .checkmark {
+  width: 44px; height: 26px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid var(--glass-border);
+  position: relative;
+  transition: background .2s, border-color .2s;
+}
+.task-checkbox .checkmark::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #f5f5f7;
+  transition: transform .2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.35);
+}
+.task-checkbox input:checked + .checkmark {
+  background: var(--green-ios, #30d158);
+  border-color: rgba(48,209,88,.6);
+}
+.task-checkbox input:checked + .checkmark::after { transform: translateX(18px); }
 
 @media (max-width: 900px) {
   .tasks-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

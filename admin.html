@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
   <title>Why Not — Admin</title>
   <meta name="theme-color" content="#0b0b0b"/>
   <link rel="manifest" href="./admin-manifest.webmanifest"/>
@@ -212,7 +212,14 @@
       <div class="brand-dot" style="background:#ff453a;box-shadow:0 0 18px rgba(255,69,58,.65)"></div>
       <div class="sidebar-brand-text">
         <h1>Why Not</h1>
-        <p id="eventName">Admin</p>
+        <div class="event-picker-wrap">
+          <button class="event-picker-btn" id="eventPickerBtn" type="button">
+            <span id="eventName">Admin</span>
+            <span class="event-picker-status" id="eventPickerStatus" title="Evento activo"></span>
+            <svg width="13" height="13"><use href="#i-chevron-down"/></svg>
+          </button>
+          <div class="event-picker-menu" id="eventPickerMenu" hidden></div>
+        </div>
       </div>
       <button class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Cerrar menú">
         <svg width="22" height="22"><use href="#i-close"/></svg>
@@ -276,7 +283,17 @@
 
     <!-- Top bar (minimal, floating glass) -->
     <header class="glass-topbar">
-      <div class="topbar-title" id="topbarTitle">Dashboard</div>
+      <div class="topbar-title-wrap">
+        <div class="topbar-title" id="topbarTitle">Dashboard</div>
+        <div class="event-picker-wrap mobile-only-picker">
+          <button class="event-picker-btn" id="eventPickerBtnMobile" type="button">
+            <span id="eventNameMobile">Admin</span>
+            <span class="event-picker-status" id="eventPickerStatusMobile"></span>
+            <svg width="12" height="12"><use href="#i-chevron-down"/></svg>
+          </button>
+          <div class="event-picker-menu" id="eventPickerMenuMobile" hidden></div>
+        </div>
+      </div>
 
       <div class="topbar-actions">
         <button class="icon-btn ghost-btn" id="sneezeBtn" title="Notificar a todos">
@@ -461,23 +478,11 @@
           </button>
         </div>
 
-        <!-- Config portero -->
-        <div class="glass-card config-card">
-          <strong style="font-size:15px">Configuración de portería:</strong>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:15px">
-            <input type="checkbox" id="doorCanChargeToggle" style="width:18px;height:18px;cursor:pointer"/>
-            El portero puede cobrar cuentas de barra
-          </label>
-        </div>
-
         <div id="tasksList" class="tasks-grid"></div>
       </section>
 
       <!-- ── Tarjetas (bloqueadas) ──────────────────────────────── -->
       <section id="tab-tarjetas" class="tab-panel">
-        <div class="glass-card info-card" style="margin-bottom:14px">
-          Bloqueá tarjetas (números de cuenta de barra) que fueron perdidas o robadas — no podrán asignarse al crear o editar un asistente.
-        </div>
         <div id="blockedCardsCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
         <div class="admin-toolbar">
           <form id="blockCardForm" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -502,10 +507,6 @@
             <svg width="16" height="16"><use href="#i-refresh"/></svg>
             Actualizar
           </button>
-        </div>
-
-        <div class="glass-card info-card">
-          Desde acá podés crear usuarios, cambiar su rol y eliminarlos. Los cambios de rol toman efecto en el próximo inicio de sesión.
         </div>
 
         <div class="admin-table-wrap glass-card">

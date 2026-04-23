@@ -604,27 +604,34 @@ function setupNotifChannel(appName, currentUserDisplay) {
 
   if (helpBtn) {
     // SOS desde barra o portería → va solo a los admins
-    helpBtn.addEventListener('click', () => withCooldown(helpBtn, 10, async () => {
-      await requestNotifPermission();
-      const msg = `Necesita ayuda en ${appName}`;
-      _notifChannel.send({ type: 'broadcast', event: 'alert',
-        payload: { emoji: '🆘', msg, from: currentUserDisplay, target: 'admin' } });
-      await sendPushToAll(`🆘 ${currentUserDisplay}`, msg, 'whynot-sos', 'admin');
-      await sendWhatsApp(`🆘 SOS - ${currentUserDisplay} necesita ayuda en ${appName}`);
+    helpBtn.addEventListener('click', () => {
+      // Toast inmediato — no esperar al fetch
       toast('🆘 Señal enviada a los admins', 'warning');
-    }));
+      withCooldown(helpBtn, 10, async () => {
+        await requestNotifPermission();
+        const msg = `Necesita ayuda en ${appName}`;
+        _notifChannel.send({ type: 'broadcast', event: 'alert',
+          payload: { emoji: '🆘', msg, from: currentUserDisplay, target: 'admin' } });
+        await sendPushToAll(`🆘 ${currentUserDisplay}`, msg, 'whynot-sos', 'admin');
+        // Formato: "Nombre: necesita ayuda en <App> 🆘" (o sin "en ..." si es admin)
+        const where = appName && appName !== 'Admin' ? ` en ${appName}` : '';
+        await sendWhatsApp(`${currentUserDisplay}: necesita ayuda${where} 🆘`);
+      });
+    });
   }
   if (sneezeBtn) {
     // Estornudo desde admin → va solo a los admins
-    sneezeBtn.addEventListener('click', () => withCooldown(sneezeBtn, 10, async () => {
-      await requestNotifPermission();
-      const msg = '¡Atención de admin!';
-      _notifChannel.send({ type: 'broadcast', event: 'alert',
-        payload: { emoji: '🤧', msg, from: currentUserDisplay, target: 'admin' } });
-      await sendPushToAll(`🤧 ${currentUserDisplay}`, msg, 'whynot-admin', 'admin');
-      await sendWhatsApp(`🤧 Admin ${currentUserDisplay}: Atención requerida`);
+    sneezeBtn.addEventListener('click', () => {
       toast('🤧 Señal enviada a los admins', 'success');
-    }));
+      withCooldown(sneezeBtn, 10, async () => {
+        await requestNotifPermission();
+        const msg = '¡Atención de admin!';
+        _notifChannel.send({ type: 'broadcast', event: 'alert',
+          payload: { emoji: '🤧', msg, from: currentUserDisplay, target: 'admin' } });
+        await sendPushToAll(`🤧 ${currentUserDisplay}`, msg, 'whynot-admin', 'admin');
+        await sendWhatsApp(`${currentUserDisplay}: Atención requerida 🤧`);
+      });
+    });
   }
 
   console.log(`[Notif] Permiso: ${Notification?.permission ?? 'no disponible'}`);
