@@ -43,6 +43,7 @@ create table if not exists attendees (
   payment_photo_url text,             -- foto de comprobante de pago
   notes             text,
   paid_by_id        uuid references attendees(id),  -- quién pagó por este asistente
+  is_organizer      boolean default false,          -- organizador: sin botón de ingreso/salida
   created_at        timestamptz default now()
 );
 

@@ -984,13 +984,16 @@ function renderAttendeesTable() {
   const counters = document.getElementById('attStatusCounters');
   if (counters) {
     const cfg = [
-      { key: 'paid',       label: 'Pago',       color: '#1ed760', bg: '#0d1f0d', border: '#1a3a1a' },
+      { key: 'paid',       label: 'Pago',        color: '#1ed760', bg: '#0d1f0d', border: '#1a3a1a' },
       { key: 'in_process', label: 'En proceso',  color: '#f59e0b', bg: '#1f1900', border: '#3a2e00' },
       { key: 'invited',    label: 'Invitado',    color: '#3b82f6', bg: '#0d1420', border: '#1a2a3a' },
       { key: 'crew',       label: 'Crew',        color: '#8b5cf6', bg: '#130d1f', border: '#2a1a3a' },
+      { key: '__total',    label: 'Total',       color: '#f5f5f7', bg: '#181818', border: '#2a2a2a' },
     ];
     counters.innerHTML = cfg.map(c => {
-      const n = attendees.filter(a => a.status === c.key).length;
+      const n = c.key === '__total'
+        ? attendees.length
+        : attendees.filter(a => a.status === c.key).length;
       return `<div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
         <span style="font-size:22px;font-weight:bold;color:${c.color}">${n}</span>
         <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
@@ -1957,15 +1960,15 @@ window.openEditExpense = openEditExpense;
 // ─── Events management ────────────────────────────────────────────────────────
 // Defaults al crear un nuevo evento
 const DEFAULT_CREW = [
-  // Sin cuenta en el bar
-  { name: 'Dave',   status: 'crew', bar_account_slot: null },
-  { name: 'Angus',  status: 'crew', bar_account_slot: null },
-  { name: 'Cicero', status: 'crew', bar_account_slot: null },
-  // Con cuenta en el bar
-  { name: 'Daniel Anselmi',   status: 'crew', bar_account_slot: 1 },
-  { name: 'Junion Rupenian',  status: 'crew', bar_account_slot: 2 },
-  { name: 'Lautaro Moreno',   status: 'crew', bar_account_slot: 3 },
-  { name: 'Matias Nario',     status: 'crew', bar_account_slot: 4 },
+  // Organizadores — sin cuenta y sin botones de ingreso/salida en portería
+  { name: 'Dave',   status: 'crew', bar_account_slot: null, is_organizer: true },
+  { name: 'Angus',  status: 'crew', bar_account_slot: null, is_organizer: true },
+  { name: 'Cicero', status: 'crew', bar_account_slot: null, is_organizer: true },
+  // Crew con cuenta en el bar (no son organizadores, tienen botones normales)
+  { name: 'Daniel Anselmi',   status: 'crew', bar_account_slot: 1, is_organizer: false },
+  { name: 'Junion Rupenian',  status: 'crew', bar_account_slot: 2, is_organizer: false },
+  { name: 'Lautaro Moreno',   status: 'crew', bar_account_slot: 3, is_organizer: false },
+  { name: 'Matias Nario',     status: 'crew', bar_account_slot: 4, is_organizer: false },
 ];
 const DEFAULT_EXPENSES = [
   'PH',
@@ -2014,6 +2017,7 @@ function openNewEvent() {
       status: c.status,
       bar_account_slot: c.bar_account_slot,
       entry_amount: 0,
+      is_organizer: !!c.is_organizer,
     }));
     const { data: insertedCrew, error: crewErr } = await db.from('attendees').insert(crewRows).select();
     if (crewErr) console.warn('Crew default:', crewErr.message);
@@ -2123,52 +2127,243 @@ async function importCsv(file) {
 function exportToExcel() {
   if (typeof XLSX === 'undefined') { toast('Librería Excel no disponible', 'error'); return; }
   const wb = XLSX.utils.book_new();
+  wb.Props = {
+    Title: `Why Not — ${currentEvent()?.name || 'Evento'}`,
+    Subject: 'Resumen de evento',
+    Author: 'Why Not',
+    CreatedDate: new Date(),
+  };
 
-  // Summary
-  const barT    = barClosures.reduce((s,c)=>s+Number(c.total),0) + barAccounts.filter(a=>!a.is_closed).reduce((s,a)=>s+Number(a.total),0);
-  const entryT  = attendees.reduce((s,a)=>s+Number(a.entry_amount||0),0);
-  const expT    = expenses.reduce((s,e)=>s+Number(e.amount),0);
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-    ['Why Not — Resumen completo'], ['Evento', activeEvent?.name || ''], ['Fecha', activeEvent?.date || ''],
-    [], ['Total barra', barT], ['Total entradas', entryT], ['Gastos', expT], ['TOTAL NETO', barT+entryT-expT],
-  ]), 'Resumen');
+  // Helpers de estética XLSX
+  const MONEY_FMT = '"$" #,##0.00';
+  const DATE_FMT  = 'dd/mm/yyyy hh:mm';
+  const HEADER_STYLE = {
+    font: { bold: true, color: { rgb: 'FFFFFF' } },
+    fill: { fgColor: { rgb: '1F1F24' } },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    border: {
+      top:    { style: 'thin', color: { rgb: '333333' } },
+      bottom: { style: 'thin', color: { rgb: '333333' } },
+      left:   { style: 'thin', color: { rgb: '333333' } },
+      right:  { style: 'thin', color: { rgb: '333333' } },
+    },
+  };
+  const TITLE_STYLE = {
+    font: { bold: true, sz: 16, color: { rgb: 'FFFFFF' } },
+    fill: { fgColor: { rgb: 'FF453A' } },
+    alignment: { horizontal: 'left', vertical: 'center' },
+  };
+  const SUBTITLE_STYLE = {
+    font: { bold: true, sz: 11, color: { rgb: '8E8E93' } },
+    alignment: { horizontal: 'left' },
+  };
 
-  // Attendees
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-    ['Nombre','Estado','Barra #','Cédula','Email','Teléfono','Entrada $','Total pagado','Ingresó','Salió'],
-    ...attendees.map(a=>[a.name,statusLabel(a.status),a.bar_account_slot,a.cedula,a.email,a.phone,a.entry_amount,a.amount_paid,a.entry_time,a.exit_time]),
-  ]), 'Asistentes');
+  // Construye una hoja prolija: con título, subtítulo, headers estilados, filas reales
+  // y anchos de columna calculados según el contenido más largo.
+  function buildSheet(opts) {
+    const { title, headers, rows, columnFormats = [], footerRow = null } = opts;
+    const aoa = [];
+    aoa.push([title]);
+    aoa.push([`Generado: ${new Date().toLocaleString('es-UY')}`]);
+    aoa.push([]);
+    aoa.push(headers);
+    for (const row of rows) aoa.push(row);
+    if (footerRow) {
+      aoa.push([]);
+      aoa.push(footerRow);
+    }
 
-  // Closures
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-    ['Cuenta','Nombre','Total','#160','#260','#360','Cerrada por','Hora'],
-    ...barClosures.map(c=>[padId(c.slot),c.attendees?.name||'',c.total,c.qty160,c.qty260,c.qty360,c.closed_by,c.closed_at]),
-  ]), 'Cuentas cobradas');
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    // Congelar encabezado
+    ws['!freeze'] = { xSplit: 0, ySplit: 4 };
 
-  // Cuentas abiertas con saldo
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-    ['Cuenta','Nombre vinculada','Total','#160','#260','#360'],
-    ...barAccounts
-      .filter(a => !a.is_closed && a.total > 0)
-      .map(a => [padId(a.slot), a.attendees?.name || '', a.total, a.qty160, a.qty260, a.qty360]),
-  ]), 'Cuentas abiertas');
+    // Merge del título a lo ancho de las columnas
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(0, headers.length - 1) } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: Math.max(0, headers.length - 1) } },
+    ];
 
-  // Todas las cuentas (estado completo)
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-    ['Cuenta','Nombre','Total','#160','#260','#360','Estado'],
-    ...barAccounts.map(a => [
-      padId(a.slot), a.attendees?.name || '', a.total, a.qty160, a.qty260, a.qty360,
-      a.is_closed ? 'Cerrada' : a.total > 0 ? 'Abierta con saldo' : 'Vacía',
-    ]),
-  ]), 'Todas las cuentas');
+    // Anchos según contenido real
+    const colWidths = headers.map((h, ci) => {
+      let maxLen = String(h).length;
+      for (const row of rows) {
+        const cell = row[ci];
+        if (cell == null) continue;
+        const s = (cell instanceof Date) ? cell.toLocaleString('es-UY') : String(cell);
+        if (s.length > maxLen) maxLen = s.length;
+      }
+      // padding + clamp razonable
+      return { wch: Math.min(Math.max(maxLen + 2, 10), 42) };
+    });
+    ws['!cols'] = colWidths;
+    ws['!rows'] = [{ hpt: 28 }, { hpt: 16 }, { hpt: 8 }, { hpt: 22 }];
 
-  // Expenses
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-    ['Descripción','Monto','Fecha'],
-    ...expenses.map(e=>[e.description,e.amount,e.created_at]),
-  ]), 'Gastos');
+    // Aplicar formatos a celdas
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const addr = XLSX.utils.encode_cell({ r: R, c: C });
+        const cell = ws[addr];
+        if (!cell) continue;
 
-  XLSX.writeFile(wb, `whynot-admin-${activeEvent?.date || 'evento'}.xlsx`);
+        if (R === 0) {
+          cell.s = TITLE_STYLE;
+        } else if (R === 1) {
+          cell.s = SUBTITLE_STYLE;
+        } else if (R === 3) {
+          cell.s = HEADER_STYLE;
+        } else if (R > 3) {
+          // Estilo alterno de fila (zebra)
+          const isEven = (R - 4) % 2 === 0;
+          cell.s = cell.s || {};
+          if (isEven) {
+            cell.s.fill = { fgColor: { rgb: 'F8F8FA' } };
+          }
+          // Formatos específicos por columna
+          const fmt = columnFormats[C];
+          if (fmt === 'money' && typeof cell.v === 'number') {
+            cell.z = MONEY_FMT;
+          } else if (fmt === 'date' && cell.v) {
+            cell.z = DATE_FMT;
+            if (typeof cell.v === 'string') cell.v = new Date(cell.v);
+            cell.t = 'd';
+          }
+        }
+      }
+    }
+    return ws;
+  }
+
+  const ev = currentEvent();
+  const barOpen    = barAccounts.filter(a => !a.is_closed);
+  const barClosed  = barClosures;
+  const barT       = barClosed.reduce((s,c)=>s+Number(c.total),0) + barOpen.reduce((s,a)=>s+Number(a.total),0);
+  const entryT     = attendees.reduce((s,a)=>s+Number(a.entry_amount||0),0);
+  const expT       = expenses.reduce((s,e)=>s+Number(e.amount),0);
+  const neto       = barT + entryT - expT;
+
+  // ── Resumen ─────────────────────────────────────────────────────────────────
+  const resumenRows = [
+    ['Evento',           ev?.name || ''],
+    ['Fecha',            ev?.date || ''],
+    ['Asistentes',       attendees.length],
+    ['Ingresaron',       attendees.filter(a => a.entered).length],
+    ['Cuentas abiertas', barOpen.length],
+    ['Cuentas cerradas', barClosed.length],
+    [],
+    ['Total barra',      barT],
+    ['Total entradas',   entryT],
+    ['Gastos',           expT],
+    ['TOTAL NETO',       neto],
+  ];
+  const wsResumen = buildSheet({
+    title: `Why Not — ${ev?.name || 'Evento'}`,
+    headers: ['Concepto', 'Valor'],
+    rows: resumenRows,
+    columnFormats: [null, null],
+  });
+  // Formato de dinero en las filas finales del resumen
+  ['B12','B13','B14','B15'].forEach(addr => {
+    if (wsResumen[addr] && typeof wsResumen[addr].v === 'number') {
+      wsResumen[addr].z = MONEY_FMT;
+    }
+  });
+  XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+
+  // ── Asistentes (sólo reales) ────────────────────────────────────────────────
+  if (attendees.length) {
+    const wsAtt = buildSheet({
+      title: `Asistentes — ${ev?.name || ''}`,
+      headers: ['Nombre','Estado','Barra #','Cédula','Email','Teléfono','Entrada $','Total pagado','Ingresó','Salió'],
+      rows: attendees.map(a => [
+        a.name,
+        statusLabel(a.status),
+        a.bar_account_slot ? padId(a.bar_account_slot) : '',
+        a.cedula || '',
+        a.email || '',
+        a.phone || '',
+        Number(a.entry_amount || 0),
+        Number(a.amount_paid || 0),
+        a.entry_time ? new Date(a.entry_time) : '',
+        a.exit_time ? new Date(a.exit_time) : '',
+      ]),
+      columnFormats: [null, null, null, null, null, null, 'money', 'money', 'date', 'date'],
+    });
+    XLSX.utils.book_append_sheet(wb, wsAtt, 'Asistentes');
+  }
+
+  // ── Cuentas cobradas (sólo reales) ──────────────────────────────────────────
+  if (barClosed.length) {
+    const wsCerr = buildSheet({
+      title: `Cuentas cobradas — ${ev?.name || ''}`,
+      headers: ['Cuenta','Nombre','Total','#160','#260','#360','Método','Cerrada por','Hora'],
+      rows: barClosed.map(c => [
+        padId(c.slot),
+        c.attendees?.name || '',
+        Number(c.total || 0),
+        Number(c.qty160 || 0),
+        Number(c.qty260 || 0),
+        Number(c.qty360 || 0),
+        c.paid_by_slot ? `Pagada por #${padId(c.paid_by_slot)}` : (c.payment_method || ''),
+        c.closed_by || '',
+        c.closed_at ? new Date(c.closed_at) : '',
+      ]),
+      columnFormats: [null, null, 'money', null, null, null, null, null, 'date'],
+      footerRow: ['TOTAL', '', barClosed.reduce((s,c)=>s+Number(c.total||0),0), '', '', '', '', '', ''],
+    });
+    XLSX.utils.book_append_sheet(wb, wsCerr, 'Cuentas cobradas');
+  }
+
+  // ── Cuentas abiertas con saldo (sólo reales) ────────────────────────────────
+  const abiertas = barOpen.filter(a => a.total > 0);
+  if (abiertas.length) {
+    const wsAb = buildSheet({
+      title: `Cuentas abiertas con saldo — ${ev?.name || ''}`,
+      headers: ['Cuenta','Nombre vinculada','Total','#160','#260','#360'],
+      rows: abiertas.map(a => [
+        padId(a.slot),
+        a.attendees?.name || '',
+        Number(a.total || 0),
+        Number(a.qty160 || 0),
+        Number(a.qty260 || 0),
+        Number(a.qty360 || 0),
+      ]),
+      columnFormats: [null, null, 'money'],
+    });
+    XLSX.utils.book_append_sheet(wb, wsAb, 'Cuentas abiertas');
+  }
+
+  // ── Gastos ──────────────────────────────────────────────────────────────────
+  if (expenses.length) {
+    const wsExp = buildSheet({
+      title: `Gastos — ${ev?.name || ''}`,
+      headers: ['Descripción','Monto','Fecha'],
+      rows: [...expenses]
+        .sort((a,b) => String(a.description).localeCompare(String(b.description), 'es'))
+        .map(e => [e.description, Number(e.amount || 0), e.created_at ? new Date(e.created_at) : '']),
+      columnFormats: [null, 'money', 'date'],
+      footerRow: ['TOTAL', expenses.reduce((s,e)=>s+Number(e.amount||0),0), ''],
+    });
+    XLSX.utils.book_append_sheet(wb, wsExp, 'Gastos');
+  }
+
+  // ── Log de tragos (si hay) ─────────────────────────────────────────────────
+  const drinksEv = (allDrinksXE || []).filter(d => d.event_id === ev?.id);
+  if (drinksEv.length) {
+    const wsDrinks = buildSheet({
+      title: `Consumo detallado — ${ev?.name || ''}`,
+      headers: ['Cuenta','Monto','Hora'],
+      rows: drinksEv
+        .slice()
+        .sort((a,b) => new Date(a.created_at) - new Date(b.created_at))
+        .map(d => [padId(d.slot), Number(d.amount || 0), d.created_at ? new Date(d.created_at) : '']),
+      columnFormats: [null, 'money', 'date'],
+    });
+    XLSX.utils.book_append_sheet(wb, wsDrinks, 'Consumo (log)');
+  }
+
+  const safeName = (ev?.name || 'evento').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+  XLSX.writeFile(wb, `whynot-${safeName}-${ev?.date || ''}.xlsx`);
 }
 
 // ─── Modal helper ─────────────────────────────────────────────────────────────
@@ -2567,7 +2762,12 @@ function openMoreSheet() {
     document.body.appendChild(sheet);
   }
   const currentTab = document.querySelector('.tab-panel.active')?.id.replace('tab-', '') || 'dashboard';
-  const items = Object.keys(TAB_TITLES).map(key => `
+  // Las pestañas de Estadísticas (Personas, Eventos-stats) no se muestran en mobile —
+  // se accede sólo desde desktop o escribiendo el hash en la URL.
+  const HIDDEN_ON_MOBILE = ['personas', 'eventos-stats'];
+  const items = Object.keys(TAB_TITLES)
+    .filter(key => !HIDDEN_ON_MOBILE.includes(key))
+    .map(key => `
     <button class="bottom-sheet-item ${key === currentTab ? 'active' : ''}" data-tab="${key}">
       ${icon(TAB_ICONS[key], 22)}
       <span>${TAB_TITLES[key]}</span>

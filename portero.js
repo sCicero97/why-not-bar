@@ -133,13 +133,9 @@ function renderList() {
     return;
   }
 
-  // Organizadores: siempre en el evento, sin botones de Ingresar/Salida.
-  // Cualquier otro (incluso crew) tiene sus botones normales.
-  const ORGANIZER_NAMES = ['dave', 'angus', 'cicero'];
-  const isOrganizer = (att) => {
-    const n = (att.name || '').trim().toLowerCase();
-    return ORGANIZER_NAMES.some(o => n === o || n.startsWith(o + ' '));
-  };
+  // Organizadores: marcados por flag en DB (is_organizer=true).
+  // Nunca tienen botones de Ingresar/Salida.
+  const isOrganizer = (att) => att.is_organizer === true;
 
   for (const att of list) {
     const barAcc = att.bar_account_slot ? barAccounts.find(b => b.slot === att.bar_account_slot) : null;
