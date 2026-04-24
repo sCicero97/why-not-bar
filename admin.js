@@ -1462,6 +1462,8 @@ function openAddAttendee() {
     try {
       const fd  = new FormData(e.target);
       const obj = Object.fromEntries(fd.entries());
+      // Quitar campos trampa (__fake_user, __fake_pass) que usamos para despistar password managers
+      Object.keys(obj).forEach(k => { if (k.startsWith('__')) delete obj[k]; });
       if (!activeEvent) { toast('No hay evento activo', 'error'); return; }
       obj.event_id = currentEvent().id;
       if (!obj.bar_account_slot) delete obj.bar_account_slot; else obj.bar_account_slot = parseInt(obj.bar_account_slot);
@@ -1972,8 +1974,11 @@ function showModal(html) {
   document.getElementById('modalBody').innerHTML = html;
   document.getElementById('modalOverlay').classList.remove('hidden');
   document.body.classList.add('modal-open');
-  // Apply form styles
+  // Apply form styles — saltar inputs ocultos (trampas para password managers)
   document.querySelectorAll('#modalBody input, #modalBody select').forEach(el => {
+    if (el.getAttribute('aria-hidden') === 'true') return;
+    if ((el.style.display || '').toLowerCase() === 'none') return;
+    if (el.type === 'hidden') return;
     el.style.cssText = 'width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:11px 14px;border-radius:12px;font-size:15px;display:block;margin-top:4px';
   });
 }
