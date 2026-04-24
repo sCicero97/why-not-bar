@@ -332,11 +332,19 @@ function renderEventsStats() {
   const totExp      = statsByEv.reduce((s, x) => s + x.expensesTotal, 0);
   const totProfit   = totEntry + totBar - totExp;
 
-  // Evento seleccionado para los gráficos
-  if (!selectedEventStatsId || !sorted.some(e => e.id === selectedEventStatsId)) {
+  // Evento seleccionado para los gráficos. 'ALL' = sumar todos los eventos.
+  const validIds = new Set(sorted.map(e => e.id));
+  if (selectedEventStatsId !== 'ALL' && !validIds.has(selectedEventStatsId)) {
     selectedEventStatsId = sorted[0]?.id;
   }
-  const selected = statsByEv.find(s => s.event.id === selectedEventStatsId) || statsByEv[0];
+  const isAll = selectedEventStatsId === 'ALL';
+  // Stats agregados (usados cuando isAll)
+  const aggregated = isAll ? {
+    event: { id: 'ALL', name: 'Todos los eventos', date: '' },
+    attendees: allAttendeesXE,
+    closures:  allClosuresXE,
+  } : null;
+  const selected = isAll ? aggregated : (statsByEv.find(s => s.event.id === selectedEventStatsId) || statsByEv[0]);
 
   const globalCounters = [
     { label: 'Eventos', value: events.length,      color: '#f5f5f7', bg: '#181818', border: '#2a2a2a' },
@@ -389,18 +397,19 @@ function renderEventsStats() {
       </div>
     </div>`;
 
-  // Gráficos para el evento seleccionado (rango 22-06)
+  // Gráficos para el evento seleccionado (rango 22-06).
+  // En modo "Todos los eventos" (isAll), presenceBuckets ya suma todos los asistentes.
   const permanence     = presenceBuckets(selected.attendees);
-  // Consumo: si tenemos log de tragos (bar_drinks) usamos eso. Si no, fallback closed_at.
-  const drinksThisEv   = (allDrinksXE || []).filter(d => d.event_id === selected.event.id);
-  const hasDrinksLog   = drinksThisEv.length > 0;
+  // Consumo: log de tragos (bar_drinks). En modo ALL usa todo el log.
+  const drinksScope    = isAll ? (allDrinksXE || []) : (allDrinksXE || []).filter(d => d.event_id === selected.event.id);
+  const hasDrinksLog   = drinksScope.length > 0;
   const consumptionBuckets = hasDrinksLog
-    ? nightHourBuckets(drinksThisEv.map(d => d.created_at))
+    ? nightHourBuckets(drinksScope.map(d => d.created_at))
     : null;
   const consumptionAmountBuckets = hasDrinksLog
     ? (() => {
         const b = new Array(NIGHT_HOURS.length).fill(0);
-        for (const d of drinksThisEv) {
+        for (const d of drinksScope) {
           const i = nightHourIdx(d.created_at);
           if (i >= 0) b[i] += Number(d.amount || 0);
         }
@@ -411,9 +420,12 @@ function renderEventsStats() {
   const eventSelector = `
     <div class="admin-toolbar" style="margin-bottom:10px">
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
-        <span>Gráficos del evento:</span>
+        <span>Gráficos:</span>
         <select class="admin-select" id="eventStatsSelect">
-          ${sorted.map(e => `<option value="${e.id}" ${e.id === selected.event.id ? 'selected' : ''}>${e.name} · ${e.date || ''}</option>`).join('')}
+          <option value="ALL" ${isAll ? 'selected' : ''}>✨ Todos los eventos (suma)</option>
+          <optgroup label="Por evento">
+            ${sorted.map(e => `<option value="${e.id}" ${!isAll && e.id === selected.event.id ? 'selected' : ''}>${e.name} · ${e.date || ''}</option>`).join('')}
+          </optgroup>
         </select>
       </label>
     </div>`;
@@ -456,12 +468,21 @@ function renderEventsStats() {
     ${eventSelector}
 
     <div class="stats-charts-grid">
-      ${nightBarChartSvg(permanence, { title: 'Gente adentro por hora (permanencia)', color: '#30d158', unit: 'pers.' })}
+      ${nightBarChartSvg(permanence, {
+        title: isAll ? 'Gente adentro por hora (todos los eventos)' : 'Gente adentro por hora (permanencia)',
+        color: '#30d158', unit: 'pers.'
+      })}
       ${hasDrinksLog
-        ? nightBarChartSvg(consumptionBuckets, { title: 'Tragos servidos por hora', color: '#bf5af2', unit: 'tragos' })
+        ? nightBarChartSvg(consumptionBuckets, {
+            title: isAll ? 'Tragos servidos por hora (todos los eventos)' : 'Tragos servidos por hora',
+            color: '#bf5af2', unit: 'tragos'
+          })
         : '<div class="stats-chart"><div class="stats-chart-title">Tragos servidos por hora</div><div class="empty-state" style="padding:30px">Disponible desde que se active el log de consumo (correr la migración <code>migration_bar_drinks.sql</code>).</div></div>'}
       ${hasDrinksLog
-        ? nightBarChartSvg(consumptionAmountBuckets, { title: 'Ingreso de barra por hora ($)', color: '#f59e0b', formatter: (v) => formatMoney(v) })
+        ? nightBarChartSvg(consumptionAmountBuckets, {
+            title: isAll ? 'Ingreso de barra por hora ($) — todos los eventos' : 'Ingreso de barra por hora ($)',
+            color: '#f59e0b', formatter: (v) => formatMoney(v)
+          })
         : ''}
     </div>
   `;
@@ -1340,8 +1361,11 @@ function renderEvents() {
       }</td>
       <td>
         <div class="row-actions">
-          <button class="btn btn-sm btn-danger" onclick="deleteEvent('${ev.id}')" title="Eliminar">${icon('trash',15)}</button>
+          <button class="btn btn-sm" onclick="resetEventData('${ev.id}')" title="Reset total del evento (mantiene asistentes)" style="border-color:rgba(255,159,10,.35);color:#ffbf4a">
+            ${icon('refresh',15)} Reset
+          </button>
           ${!ev.is_active ? `<button class="btn btn-sm btn-success" onclick="activateEvent('${ev.id}')">Activar</button>` : ''}
+          <button class="btn btn-sm btn-danger" onclick="deleteEvent('${ev.id}')" title="Eliminar">${icon('trash',15)}</button>
         </div>
       </td>
     </tr>`).join('') || '<tr><td colspan="4" class="empty-state">Sin eventos. Creá uno.</td></tr>';
@@ -1754,24 +1778,30 @@ async function reopenBarAccount(accId) {
   else { toast('Cuenta reabierta', 'success'); await loadAll(); }
 }
 
-// ─── Reset completo de la barra del evento activo ────────────────────────────
-// Deja todas las cuentas en 0, reabiertas, y borra el historial de cierres.
-// NO toca asistentes, gastos ni tareas.
-async function resetActiveEventBar() {
-  const ev = currentEvent();
-  if (!ev) { toast('No hay evento en foco', 'error'); return; }
+// ─── Reset total de un evento ────────────────────────────────────────────────
+// Deja el evento como "nuevo" manteniendo los asistentes y lo que pagaron de entrada.
+// LIMPIA:
+//   • bar_accounts → total=0, qty160/260/360=0, is_closed=false
+//   • bar_closures → DELETE (borra fotos, métodos, vuelto, todo)
+//   • bar_drinks  → DELETE (log de consumo)
+//   • attendees   → entered=false, entry_time=null, exit_time=null,
+//                   payment_photo_url=null, amount_paid=0
+// MANTIENE:
+//   • asistentes: name, cedula, email, phone, notes, entry_amount, status, bar_account_slot
+//   • gastos, tareas, configuración, tarjetas bloqueadas
+async function resetEventData(eventId) {
+  const ev = events.find(e => e.id === eventId) || (currentEvent()?.id === eventId ? currentEvent() : null);
+  if (!ev) { toast('Evento no encontrado', 'error'); return; }
 
   const confirm1 = confirm(
-    `¿Resetear TODA la barra del evento "${ev.name}"?\n\n` +
-    `• Todas las cuentas vuelven a 0\n` +
-    `• Se reabren las cuentas cerradas\n` +
-    `• Se borra el historial de cierres\n\n` +
-    `No toca asistentes, gastos ni tareas.`
+    `¿RESET TOTAL del evento "${ev.name}"?\n\n` +
+    `Se borra TODO lo consumido en la barra y las entradas de portería.\n\n` +
+    `Se mantienen los asistentes, sus datos y su entry_amount.\n\n` +
+    `No se puede deshacer.`
   );
   if (!confirm1) return;
 
-  // Doble confirmación escrita para evitar disparos por accidente
-  const word = prompt(`Para confirmar, escribí RESET (en mayúsculas):`);
+  const word = prompt('Para confirmar, escribí RESET (en mayúsculas):');
   if ((word || '').trim() !== 'RESET') {
     toast('Cancelado', 'warning');
     return;
@@ -1779,28 +1809,41 @@ async function resetActiveEventBar() {
 
   const db = getDb();
 
-  // 1. Borrar todos los cierres de este evento
+  // 1. Borrar log de tragos (si la tabla existe)
+  try {
+    await db.from('bar_drinks').delete().eq('event_id', ev.id);
+  } catch (_) { /* si no existe la tabla, ignorar */ }
+
+  // 2. Borrar cierres históricos (incluye fotos, métodos, vuelto)
   const { error: delErr } = await db.from('bar_closures')
     .delete()
     .eq('event_id', ev.id);
   if (delErr) { toast('Error al borrar cierres: ' + delErr.message, 'error'); return; }
 
-  // 2. Resetear todas las cuentas de este evento
+  // 3. Resetear todas las cuentas de barra
   const { error: updErr } = await db.from('bar_accounts')
     .update({ total: 0, qty160: 0, qty260: 0, qty360: 0, is_closed: false })
     .eq('event_id', ev.id);
   if (updErr) { toast('Error al resetear cuentas: ' + updErr.message, 'error'); return; }
 
-  // 3. Limpiar la foto de pago y reset amount_paid en asistentes del evento
-  await db.from('attendees')
-    .update({ payment_photo_url: null, amount_paid: 0 })
+  // 4. Resetear asistentes: nadie ingresó, nadie salió, ninguna foto de pago.
+  //    entry_amount queda intacto. amount_paid vuelve a 0.
+  const { error: attErr } = await db.from('attendees')
+    .update({
+      entered:           false,
+      entry_time:        null,
+      exit_time:         null,
+      payment_photo_url: null,
+      amount_paid:       0,
+    })
     .eq('event_id', ev.id);
+  if (attErr) { toast('Error al resetear asistentes: ' + attErr.message, 'error'); return; }
 
-  toast('Barra reseteada', 'success');
+  toast(`Evento "${ev.name}" reseteado`, 'success');
   await loadAll();
   renderAll();
 }
-window.resetActiveEventBar = resetActiveEventBar;
+window.resetEventData = resetEventData;
 
 // ─── Admin close bar account ──────────────────────────────────────────────────
 // Replica el flujo de la barra (app.js): método + opcional "pagar por otros".
@@ -2657,7 +2700,6 @@ function setupUI() {
   document.getElementById('attStatusFilter').addEventListener('change', renderAttendeesTable);
   document.getElementById('barFilter').addEventListener('change', renderBarTable);
   document.getElementById('barSearch')?.addEventListener('input', renderBarTable);
-  document.getElementById('resetBarBtn')?.addEventListener('click', resetActiveEventBar);
   document.getElementById('personasSearch')?.addEventListener('input', renderPersonas);
   document.getElementById('blacklistSearch')?.addEventListener('input', renderBlacklist);
   document.getElementById('toggleGroupBtn').addEventListener('click', () => {
