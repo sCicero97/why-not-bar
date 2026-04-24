@@ -700,6 +700,14 @@ body.modal-open { overflow: hidden; position: relative; }
   gap: 12px;
   margin-top: 14px;
 }
+.interactive-chart svg { cursor: default; }
+.interactive-chart .night-bar rect {
+  transition: fill-opacity .15s, filter .15s;
+}
+.interactive-chart .night-bar:hover rect {
+  fill-opacity: 1 !important;
+  filter: drop-shadow(0 2px 8px rgba(255,255,255,.18));
+}
 
 /* Black list chips y razones */
 .bl-chip {

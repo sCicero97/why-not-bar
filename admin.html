@@ -203,6 +203,20 @@
     <symbol id="i-hash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
       <path d="M5 9h14M5 15h14M10 4l-2 16M16 4l-2 16"/>
     </symbol>
+    <!-- Stats: personas con tendencia -->
+    <symbol id="i-stats-people" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="9" cy="7" r="3"/>
+      <path d="M3 20v-1a5 5 0 0 1 5-5h2a5 5 0 0 1 3 1"/>
+      <path d="M14 13l3-3 2 2 4-4"/>
+      <path d="M20 8h3v3"/>
+    </symbol>
+    <!-- Stats: barras (chart) -->
+    <symbol id="i-stats-bars" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 3v18h18"/>
+      <rect x="7"  y="13" width="2.5" height="5" rx=".5"/>
+      <rect x="12" y="9"  width="2.5" height="9" rx=".5"/>
+      <rect x="17" y="5"  width="2.5" height="13" rx=".5"/>
+    </symbol>
   </defs>
 </svg>
 
@@ -251,16 +265,6 @@
         <span>Tareas</span>
       </button>
 
-      <div class="sidebar-section">Estadísticas</div>
-      <button class="nav-item" data-tab="personas">
-        <svg width="20" height="20"><use href="#i-people"/></svg>
-        <span>Personas</span>
-      </button>
-      <button class="nav-item" data-tab="eventos-stats">
-        <svg width="20" height="20"><use href="#i-calendar"/></svg>
-        <span>Eventos</span>
-      </button>
-
       <div class="sidebar-section">Gestión</div>
       <button class="nav-item" data-tab="evento">
         <svg width="20" height="20"><use href="#i-calendar"/></svg>
@@ -274,6 +278,18 @@
         <svg width="20" height="20"><use href="#i-warn"/></svg>
         <span>Black list</span>
       </button>
+
+      <div class="sidebar-section">Estadísticas</div>
+      <button class="nav-item" data-tab="personas">
+        <svg width="20" height="20"><use href="#i-stats-people"/></svg>
+        <span>Personas</span>
+      </button>
+      <button class="nav-item" data-tab="eventos-stats">
+        <svg width="20" height="20"><use href="#i-stats-bars"/></svg>
+        <span>Eventos</span>
+      </button>
+
+      <div class="sidebar-section">Admin</div>
       <button class="nav-item" data-tab="usuarios">
         <svg width="20" height="20"><use href="#i-user-gear"/></svg>
         <span>Usuarios</span>
@@ -443,6 +459,10 @@
             <option value="empty">Abiertas vacías</option>
             <option value="closed">Cerradas</option>
           </select>
+          <button id="resetBarBtn" class="btn btn-sm btn-danger icon-label-btn" type="button" title="Reset completo de la barra">
+            <svg width="16" height="16"><use href="#i-refresh"/></svg>
+            Reset barra
+          </button>
         </div>
         <div class="admin-table-wrap glass-card">
           <table class="admin-table">

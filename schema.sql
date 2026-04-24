@@ -76,6 +76,20 @@ create table if not exists bar_closures (
   closed_at         timestamptz default now()
 );
 
+-- ─── Log de tragos servidos (uno por trago) ─────────────────────────────────
+create table if not exists bar_drinks (
+  id          uuid primary key default gen_random_uuid(),
+  event_id    uuid not null references events(id) on delete cascade,
+  account_id  uuid references bar_accounts(id) on delete set null,
+  slot        integer not null,
+  attendee_id uuid references attendees(id) on delete set null,
+  amount      numeric(10,2) not null,
+  served_by   text,
+  created_at  timestamptz default now()
+);
+create index if not exists bar_drinks_event_idx   on bar_drinks (event_id, created_at);
+create index if not exists bar_drinks_account_idx on bar_drinks (account_id, created_at);
+
 -- ─── Gastos de la noche ───────────────────────────────────────────────────────
 create table if not exists expenses (
   id          uuid primary key default gen_random_uuid(),

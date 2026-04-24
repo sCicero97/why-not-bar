@@ -30,6 +30,7 @@ let blacklist      = [];   // entradas de la black list (cross-event)
 let allAttendeesXE = [];   // asistentes de todos los eventos (para Estadísticas)
 let allClosuresXE  = [];   // cierres de cuenta de todos los eventos
 let allExpensesXE  = [];   // gastos de todos los eventos
+let allDrinksXE    = [];   // log de tragos (bar_drinks) de todos los eventos
 let selectedEventStatsId = null; // evento seleccionado en la pestaña Estadísticas → Eventos
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -84,6 +85,8 @@ async function loadAll() {
     // Cierres y gastos cross-event para stats
     db.from('bar_closures').select('id,event_id,slot,total,qty160,qty260,qty360,payment_method,closed_at,closed_by'),
     db.from('expenses').select('id,event_id,amount,description,created_at'),
+    // Log de tragos (para stats de consumo por hora) — opcional, puede fallar si no hay migración
+    db.from('bar_drinks').select('event_id,slot,amount,created_at'),
   ];
   if (eventId) {
     queries.push(
@@ -105,13 +108,16 @@ async function loadAll() {
   if (results[3]?.data) allAttendeesXE = results[3].data;
   if (results[4]?.data) allClosuresXE = results[4].data;
   if (results[5]?.data) allExpensesXE = results[5].data;
-  if (results[6]?.data) attendees = results[6].data;
-  if (results[7]?.data) barAccounts = results[7].data;
-  if (results[8]?.data) barClosures = results[8].data;
-  if (results[9]?.data) expenses = results[9].data;
-  if (results[10]?.data) tasks = results[10].data;
-  if (results[11]?.data) {
-    eventSettings = results[11].data || { door_can_charge: false, blocked_slots: [] };
+  // bar_drinks puede no existir si no se corrió la migración todavía
+  if (results[6] && !results[6].error && results[6].data) allDrinksXE = results[6].data;
+  else if (results[6]?.error) { allDrinksXE = []; }
+  if (results[7]?.data) attendees = results[7].data;
+  if (results[8]?.data) barAccounts = results[8].data;
+  if (results[9]?.data) barClosures = results[9].data;
+  if (results[10]?.data) expenses = results[10].data;
+  if (results[11]?.data) tasks = results[11].data;
+  if (results[12]?.data) {
+    eventSettings = results[12].data || { door_can_charge: false, blocked_slots: [] };
     if (!Array.isArray(eventSettings.blocked_slots)) eventSettings.blocked_slots = [];
   }
 
@@ -219,41 +225,92 @@ function computeEventStats(ev) {
   };
 }
 
-// Buckets de hora (00-23) para un array de timestamps.
-function hourBuckets(timestamps) {
-  const buckets = new Array(24).fill(0);
-  for (const t of timestamps) {
-    if (!t) continue;
-    const h = new Date(t).getHours();
-    if (h >= 0 && h < 24) buckets[h]++;
-  }
-  return buckets;
+// Rango del evento: 22:00 → 06:00 (9 buckets de 1 hora cada uno)
+const NIGHT_HOURS = [22, 23, 0, 1, 2, 3, 4, 5, 6];
+
+// Dado un timestamp, devuelve el índice dentro de NIGHT_HOURS (0..8) o -1.
+function nightHourIdx(ts) {
+  if (!ts) return -1;
+  const h = new Date(ts).getHours();
+  return NIGHT_HOURS.indexOf(h);
 }
 
-// Genera un bar chart SVG simple a partir de 24 valores (una barra por hora).
-function barChartSvg(values, opts = {}) {
-  const { title = '', color = '#30d158', unit = '' } = opts;
+// Buckets de una hora para un array de timestamps, sólo rango 22→06.
+function nightHourBuckets(timestamps) {
+  const b = new Array(NIGHT_HOURS.length).fill(0);
+  for (const t of timestamps) {
+    const i = nightHourIdx(t);
+    if (i >= 0) b[i]++;
+  }
+  return b;
+}
+
+// Permanencia: para cada bucket, cuántas personas están adentro.
+// Una persona está adentro en bucket i si entró en bucket ≤ i y salió en bucket > i (o no salió).
+function presenceBuckets(attendees) {
+  const b = new Array(NIGHT_HOURS.length).fill(0);
+  for (const a of attendees) {
+    if (!a.entered || !a.entry_time) continue;
+    const enterIdx = nightHourIdx(a.entry_time);
+    let exitIdx = a.exit_time ? nightHourIdx(a.exit_time) : NIGHT_HOURS.length - 1;
+    if (enterIdx < 0) continue; // fuera del rango 22-06
+    if (exitIdx < 0) exitIdx = NIGHT_HOURS.length - 1;
+    for (let i = enterIdx; i <= exitIdx; i++) b[i]++;
+  }
+  return b;
+}
+
+// Hora legible para un bucket (ej 22h, 23h, 00h...)
+function bucketLabel(i) { return String(NIGHT_HOURS[i]).padStart(2, '0') + 'h'; }
+
+// Genera un bar chart SVG simple para el rango de la noche (22-06).
+// Interactivo: tooltip nativo + hover brillante. Labels grandes.
+function nightBarChartSvg(values, opts = {}) {
+  const { title = '', color = '#30d158', unit = '', formatter = null } = opts;
   const max = Math.max(1, ...values);
-  const w = 720, h = 180, pad = 28, barW = (w - pad * 2) / 24;
+  const n = values.length;
+  const w = 720, h = 260, padX = 36, padTop = 30, padBottom = 52;
+  const barW = (w - padX * 2) / n;
+  const chartH = h - padTop - padBottom;
+
   const bars = values.map((v, i) => {
-    const bh = Math.round(((h - pad * 2) * v) / max);
-    const x = pad + i * barW + 2;
-    const y = h - pad - bh;
-    return `<rect x="${x.toFixed(1)}" y="${y}" width="${(barW - 4).toFixed(1)}" height="${bh}" rx="3" fill="${color}" fill-opacity="${v ? 0.85 : 0.15}"/>` +
-           (v ? `<text x="${(x + (barW - 4) / 2).toFixed(1)}" y="${y - 4}" fill="#c8c8cc" font-size="10" text-anchor="middle">${v}</text>` : '');
+    const bh = Math.round((chartH * v) / max);
+    const x = padX + i * barW + 4;
+    const y = h - padBottom - bh;
+    const bw = barW - 8;
+    const lbl = formatter ? formatter(v) : String(v);
+    return `
+      <g class="night-bar" data-idx="${i}">
+        <rect x="${x.toFixed(1)}" y="${y}" width="${bw.toFixed(1)}" height="${bh}" rx="4"
+              fill="${color}" fill-opacity="${v ? 0.85 : 0.18}"
+              stroke="${color}" stroke-opacity="${v ? 0.5 : 0.12}">
+          <title>${bucketLabel(i)} · ${lbl}${unit ? ' ' + unit : ''}</title>
+        </rect>
+        ${v ? `<text x="${(x + bw / 2).toFixed(1)}" y="${y - 6}" fill="#f5f5f7" font-size="13" font-weight="600" text-anchor="middle">${lbl}</text>` : ''}
+      </g>`;
   }).join('');
-  const labels = [0, 6, 12, 18, 23].map(i => {
-    const x = pad + i * barW + barW / 2;
-    return `<text x="${x.toFixed(1)}" y="${h - 6}" fill="#8e8e93" font-size="10" text-anchor="middle">${String(i).padStart(2,'0')}h</text>`;
+
+  // Labels de hora (todos visibles — 9 buckets cabe)
+  const labels = values.map((_, i) => {
+    const x = padX + i * barW + barW / 2;
+    return `<text x="${x.toFixed(1)}" y="${h - 20}" fill="#c8c8cc" font-size="14" font-weight="600" text-anchor="middle">${bucketLabel(i)}</text>`;
   }).join('');
+
+  // Grid horizontal sutil (3 líneas)
+  const gridLines = [0.33, 0.66, 1].map(frac => {
+    const y = h - padBottom - chartH * frac;
+    return `<line x1="${padX}" y1="${y}" x2="${w - padX}" y2="${y}" stroke="rgba(255,255,255,.06)" stroke-dasharray="2 4"/>`;
+  }).join('');
+
   return `
-    <div class="stats-chart">
+    <div class="stats-chart interactive-chart">
       <div class="stats-chart-title">${title}</div>
       <svg viewBox="0 0 ${w} ${h}" width="100%" preserveAspectRatio="xMidYMid meet">
+        ${gridLines}
         ${bars}
         ${labels}
       </svg>
-      <div class="stats-chart-sub">Máximo: ${max}${unit ? ' ' + unit : ''}</div>
+      <div class="stats-chart-sub">Máximo: ${formatter ? formatter(max) : max}${unit ? ' ' + unit : ''}</div>
     </div>`;
 }
 
@@ -290,26 +347,40 @@ function renderEventsStats() {
     { label: 'Ganancia neta',    value: formatMoney(totProfit), color: totProfit >= 0 ? '#1ed760' : '#ff453a', bg: '#181818', border: '#2a2a2a' },
   ];
 
-  // Barras del gráfico comparativo (ganancia por evento)
+  // Barras del gráfico comparativo (ganancia por evento) — sólo nombre, espaciado amplio
   const maxProfit = Math.max(1, ...statsByEv.map(s => Math.abs(s.profit)));
-  const compareBarW = 28;
-  const compareW = Math.max(300, statsByEv.length * (compareBarW + 18) + 40);
-  const compareH = 220;
+  const compareSlot = 120;          // ancho por evento (espaciado amplio para que no choquen)
+  const compareBarW = 44;
+  const compareW = Math.max(360, statsByEv.length * compareSlot + 40);
+  const compareH = 240;
   const compareBars = statsByEv.map((s, i) => {
-    const bh = Math.round(((compareH - 60) * Math.abs(s.profit)) / maxProfit);
-    const x = 24 + i * (compareBarW + 18);
-    const y = compareH - 40 - bh;
+    const bh = Math.round(((compareH - 80) * Math.abs(s.profit)) / maxProfit);
+    const xCenter = 20 + i * compareSlot + compareSlot / 2;
+    const x = xCenter - compareBarW / 2;
+    const y = compareH - 52 - bh;
     const color = s.profit >= 0 ? '#1ed760' : '#ff453a';
+    // Nombre del evento centrado debajo, con salto de línea si > 12 chars
+    const name = s.event.name || '';
+    const words = name.split(' ');
+    let line1 = name, line2 = '';
+    if (name.length > 14) {
+      // Partir por palabra más cerca del medio
+      let split = Math.ceil(words.length / 2);
+      line1 = words.slice(0, split).join(' ');
+      line2 = words.slice(split).join(' ');
+    }
     return `
       <g>
-        <rect x="${x}" y="${y}" width="${compareBarW}" height="${bh}" rx="4" fill="${color}" fill-opacity=".85"/>
-        <text x="${x + compareBarW/2}" y="${y - 6}" fill="#c8c8cc" font-size="10" text-anchor="middle">${formatMoney(s.profit)}</text>
-        <text x="${x + compareBarW/2}" y="${compareH - 22}" fill="#8e8e93" font-size="10" text-anchor="middle">${(s.event.name || '').slice(0, 12)}</text>
-        <text x="${x + compareBarW/2}" y="${compareH - 8}" fill="#636366" font-size="9" text-anchor="middle">${s.event.date || ''}</text>
+        <rect x="${x}" y="${y}" width="${compareBarW}" height="${bh}" rx="5" fill="${color}" fill-opacity=".85">
+          <title>${name} · ${formatMoney(s.profit)}</title>
+        </rect>
+        <text x="${xCenter}" y="${y - 8}" fill="#f5f5f7" font-size="13" font-weight="600" text-anchor="middle">${formatMoney(s.profit)}</text>
+        <text x="${xCenter}" y="${compareH - 22}" fill="#c8c8cc" font-size="13" font-weight="600" text-anchor="middle">${line1}</text>
+        ${line2 ? `<text x="${xCenter}" y="${compareH - 6}" fill="#c8c8cc" font-size="13" font-weight="600" text-anchor="middle">${line2}</text>` : ''}
       </g>`;
   }).join('');
   const compareChart = `
-    <div class="stats-chart">
+    <div class="stats-chart interactive-chart">
       <div class="stats-chart-title">Ganancia neta por evento</div>
       <div style="overflow-x:auto;width:100%">
         <svg viewBox="0 0 ${compareW} ${compareH}" width="${compareW}" height="${compareH}" preserveAspectRatio="xMinYMid meet">
@@ -318,10 +389,24 @@ function renderEventsStats() {
       </div>
     </div>`;
 
-  // Gráficos de horas pico para el evento seleccionado
-  const entryBuckets    = hourBuckets(selected.attendees.filter(a => a.entered).map(a => a.entry_time));
-  const exitBuckets     = hourBuckets(selected.attendees.filter(a => a.exit_time).map(a => a.exit_time));
-  const closureBuckets  = hourBuckets(selected.closures.map(c => c.closed_at));
+  // Gráficos para el evento seleccionado (rango 22-06)
+  const permanence     = presenceBuckets(selected.attendees);
+  // Consumo: si tenemos log de tragos (bar_drinks) usamos eso. Si no, fallback closed_at.
+  const drinksThisEv   = (allDrinksXE || []).filter(d => d.event_id === selected.event.id);
+  const hasDrinksLog   = drinksThisEv.length > 0;
+  const consumptionBuckets = hasDrinksLog
+    ? nightHourBuckets(drinksThisEv.map(d => d.created_at))
+    : null;
+  const consumptionAmountBuckets = hasDrinksLog
+    ? (() => {
+        const b = new Array(NIGHT_HOURS.length).fill(0);
+        for (const d of drinksThisEv) {
+          const i = nightHourIdx(d.created_at);
+          if (i >= 0) b[i] += Number(d.amount || 0);
+        }
+        return b;
+      })()
+    : null;
 
   const eventSelector = `
     <div class="admin-toolbar" style="margin-bottom:10px">
@@ -371,9 +456,13 @@ function renderEventsStats() {
     ${eventSelector}
 
     <div class="stats-charts-grid">
-      ${barChartSvg(entryBuckets,   { title: 'Ingresos por hora',       color: '#30d158' })}
-      ${barChartSvg(exitBuckets,    { title: 'Salidas por hora',        color: '#ff9f0a' })}
-      ${barChartSvg(closureBuckets, { title: 'Cierres de cuenta por hora', color: '#bf5af2' })}
+      ${nightBarChartSvg(permanence, { title: 'Gente adentro por hora (permanencia)', color: '#30d158', unit: 'pers.' })}
+      ${hasDrinksLog
+        ? nightBarChartSvg(consumptionBuckets, { title: 'Tragos servidos por hora', color: '#bf5af2', unit: 'tragos' })
+        : '<div class="stats-chart"><div class="stats-chart-title">Tragos servidos por hora</div><div class="empty-state" style="padding:30px">Disponible desde que se active el log de consumo (correr la migración <code>migration_bar_drinks.sql</code>).</div></div>'}
+      ${hasDrinksLog
+        ? nightBarChartSvg(consumptionAmountBuckets, { title: 'Ingreso de barra por hora ($)', color: '#f59e0b', formatter: (v) => formatMoney(v) })
+        : ''}
     </div>
   `;
 
@@ -628,38 +717,77 @@ function openBlacklistModal(prefill = {}) {
       </div>
     </form>
   `);
-  document.getElementById('blForm').addEventListener('submit', async (e) => {
+  const blForm = document.getElementById('blForm');
+  const blSubmit = blForm.querySelector('button[type=submit]');
+  blForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const fd = new FormData(e.target);
-    const reasons = fd.getAll('reasons');
-    if (!reasons.length) { toast('Elegí al menos un motivo', 'error'); return; }
-    const payload = {
-      name:    fd.get('name').trim(),
-      cedula:  fd.get('cedula').trim() || null,
-      email:   fd.get('email').trim() || null,
-      phone:   fd.get('phone').trim() || null,
-      reasons,
-      notes:   fd.get('notes').trim() || null,
-    };
-    const db = getDb();
-    const { data, error } = await db.from('blacklist').insert(payload).select().single();
-    if (error) { toast('Error: ' + error.message, 'error'); return; }
-    blacklist.unshift(data);
-    closeModal();
-    toast('Agregado a la black list', 'success');
-    renderBlacklist();
-    renderPersonas();
+    if (blSubmit.disabled) return;
+    blSubmit.disabled = true;
+    try {
+      const fd = new FormData(e.target);
+      const reasons = fd.getAll('reasons');
+      if (!reasons.length) { toast('Elegí al menos un motivo', 'error'); return; }
+      const payload = {
+        name:    fd.get('name').trim(),
+        cedula:  fd.get('cedula').trim() || null,
+        email:   fd.get('email').trim() || null,
+        phone:   fd.get('phone').trim() || null,
+        reasons,
+        notes:   fd.get('notes').trim() || null,
+      };
+      const db = getDb();
+
+      // Si ya existe una entrada BL para esta persona → actualizar en lugar de insertar (merge de motivos).
+      const existing = findBlacklistMatch(payload)[0];
+      if (existing) {
+        const mergedReasons = Array.from(new Set([...(existing.reasons || []), ...reasons]));
+        const { data, error } = await db.from('blacklist')
+          .update({ ...payload, reasons: mergedReasons })
+          .eq('id', existing.id)
+          .select().single();
+        if (error) { toast('Error: ' + error.message, 'error'); return; }
+        blacklist = blacklist.map(b => b.id === existing.id ? data : b);
+        closeModal();
+        toast('Entrada de black list actualizada', 'success');
+      } else {
+        const { data, error } = await db.from('blacklist').insert(payload).select().single();
+        if (error) { toast('Error: ' + error.message, 'error'); return; }
+        blacklist.unshift(data);
+        closeModal();
+        toast('Agregado a la black list', 'success');
+      }
+      renderBlacklist();
+      renderPersonas();
+    } finally {
+      blSubmit.disabled = false;
+    }
   });
 }
 window.openBlacklistModal = openBlacklistModal;
 
+// Borrar una entrada puntual de la black list.
+// Si hay más entradas para la misma persona, ofrece borrarlas todas de una.
 async function removeFromBlacklist(id) {
-  if (!confirm('¿Quitar esta persona de la black list?')) return;
+  const entry = blacklist.find(b => b.id === id);
+  if (!entry) return;
+  const duplicates = findBlacklistMatch(entry).filter(b => b.id !== id);
+  let idsToDelete = [id];
+  if (duplicates.length) {
+    const dropAll = confirm(
+      `Hay ${duplicates.length + 1} entradas en la black list para "${entry.name}".\n\n` +
+      `• OK → borrar TODAS (${duplicates.length + 1}).\n` +
+      `• Cancelar → borrar sólo esta.`
+    );
+    if (dropAll) idsToDelete = [id, ...duplicates.map(d => d.id)];
+  } else {
+    if (!confirm(`¿Quitar a "${entry.name}" de la black list?`)) return;
+  }
+
   const db = getDb();
-  const { error } = await db.from('blacklist').delete().eq('id', id);
+  const { error } = await db.from('blacklist').delete().in('id', idsToDelete);
   if (error) { toast('Error: ' + error.message, 'error'); return; }
-  blacklist = blacklist.filter(b => b.id !== id);
-  toast('Quitado de la black list', 'success');
+  blacklist = blacklist.filter(b => !idsToDelete.includes(b.id));
+  toast(idsToDelete.length > 1 ? `${idsToDelete.length} entradas eliminadas` : 'Quitado de la black list', 'success');
   renderBlacklist();
   renderPersonas();
 }
@@ -1626,6 +1754,54 @@ async function reopenBarAccount(accId) {
   else { toast('Cuenta reabierta', 'success'); await loadAll(); }
 }
 
+// ─── Reset completo de la barra del evento activo ────────────────────────────
+// Deja todas las cuentas en 0, reabiertas, y borra el historial de cierres.
+// NO toca asistentes, gastos ni tareas.
+async function resetActiveEventBar() {
+  const ev = currentEvent();
+  if (!ev) { toast('No hay evento en foco', 'error'); return; }
+
+  const confirm1 = confirm(
+    `¿Resetear TODA la barra del evento "${ev.name}"?\n\n` +
+    `• Todas las cuentas vuelven a 0\n` +
+    `• Se reabren las cuentas cerradas\n` +
+    `• Se borra el historial de cierres\n\n` +
+    `No toca asistentes, gastos ni tareas.`
+  );
+  if (!confirm1) return;
+
+  // Doble confirmación escrita para evitar disparos por accidente
+  const word = prompt(`Para confirmar, escribí RESET (en mayúsculas):`);
+  if ((word || '').trim() !== 'RESET') {
+    toast('Cancelado', 'warning');
+    return;
+  }
+
+  const db = getDb();
+
+  // 1. Borrar todos los cierres de este evento
+  const { error: delErr } = await db.from('bar_closures')
+    .delete()
+    .eq('event_id', ev.id);
+  if (delErr) { toast('Error al borrar cierres: ' + delErr.message, 'error'); return; }
+
+  // 2. Resetear todas las cuentas de este evento
+  const { error: updErr } = await db.from('bar_accounts')
+    .update({ total: 0, qty160: 0, qty260: 0, qty360: 0, is_closed: false })
+    .eq('event_id', ev.id);
+  if (updErr) { toast('Error al resetear cuentas: ' + updErr.message, 'error'); return; }
+
+  // 3. Limpiar la foto de pago y reset amount_paid en asistentes del evento
+  await db.from('attendees')
+    .update({ payment_photo_url: null, amount_paid: 0 })
+    .eq('event_id', ev.id);
+
+  toast('Barra reseteada', 'success');
+  await loadAll();
+  renderAll();
+}
+window.resetActiveEventBar = resetActiveEventBar;
+
 // ─── Admin close bar account ──────────────────────────────────────────────────
 // Replica el flujo de la barra (app.js): método + opcional "pagar por otros".
 async function adminCloseBarAccount(barAccountId, slot) {
@@ -2290,11 +2466,11 @@ const TAB_TITLES = {
   barra: 'Barra',
   gastos: 'Gastos',
   tareas: 'Tareas',
-  personas: 'Personas',
-  'eventos-stats': 'Eventos (Stats)',
   evento: 'Evento',
   tarjetas: 'Tarjetas',
   blacklist: 'Black list',
+  personas: 'Personas',
+  'eventos-stats': 'Eventos (Stats)',
   usuarios: 'Usuarios',
 };
 const TAB_ICONS = {
@@ -2303,11 +2479,11 @@ const TAB_ICONS = {
   barra: 'glass',
   gastos: 'receipt',
   tareas: 'tasks',
-  personas: 'people',
-  'eventos-stats': 'dashboard',
   evento: 'calendar',
   tarjetas: 'card',
   blacklist: 'warn',
+  personas: 'stats-people',
+  'eventos-stats': 'stats-bars',
   usuarios: 'user-gear',
 };
 // Tabs visibles en la tab-bar inferior (mobile). El resto va en "Más".
@@ -2481,6 +2657,7 @@ function setupUI() {
   document.getElementById('attStatusFilter').addEventListener('change', renderAttendeesTable);
   document.getElementById('barFilter').addEventListener('change', renderBarTable);
   document.getElementById('barSearch')?.addEventListener('input', renderBarTable);
+  document.getElementById('resetBarBtn')?.addEventListener('click', resetActiveEventBar);
   document.getElementById('personasSearch')?.addEventListener('input', renderPersonas);
   document.getElementById('blacklistSearch')?.addEventListener('input', renderBlacklist);
   document.getElementById('toggleGroupBtn').addEventListener('click', () => {
