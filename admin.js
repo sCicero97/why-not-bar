@@ -1362,7 +1362,7 @@ function renderEvents() {
       <td>
         <div class="row-actions">
           <button class="btn btn-sm" onclick="resetEventData('${ev.id}')" title="Reset total del evento (mantiene asistentes)" style="border-color:rgba(255,159,10,.35);color:#ffbf4a">
-            ${icon('refresh',15)} Reset
+            Reset
           </button>
           ${!ev.is_active ? `<button class="btn btn-sm btn-success" onclick="activateEvent('${ev.id}')">Activar</button>` : ''}
           <button class="btn btn-sm btn-danger" onclick="deleteEvent('${ev.id}')" title="Eliminar">${icon('trash',15)}</button>
@@ -1807,37 +1807,20 @@ async function resetEventData(eventId) {
     return;
   }
 
+  // Usamos un RPC security definer para que pueda borrar bar_closures aunque
+  // no haya política DELETE directa, y además todo corre atómico.
   const db = getDb();
-
-  // 1. Borrar log de tragos (si la tabla existe)
-  try {
-    await db.from('bar_drinks').delete().eq('event_id', ev.id);
-  } catch (_) { /* si no existe la tabla, ignorar */ }
-
-  // 2. Borrar cierres históricos (incluye fotos, métodos, vuelto)
-  const { error: delErr } = await db.from('bar_closures')
-    .delete()
-    .eq('event_id', ev.id);
-  if (delErr) { toast('Error al borrar cierres: ' + delErr.message, 'error'); return; }
-
-  // 3. Resetear todas las cuentas de barra
-  const { error: updErr } = await db.from('bar_accounts')
-    .update({ total: 0, qty160: 0, qty260: 0, qty360: 0, is_closed: false })
-    .eq('event_id', ev.id);
-  if (updErr) { toast('Error al resetear cuentas: ' + updErr.message, 'error'); return; }
-
-  // 4. Resetear asistentes: nadie ingresó, nadie salió, ninguna foto de pago.
-  //    entry_amount queda intacto. amount_paid vuelve a 0.
-  const { error: attErr } = await db.from('attendees')
-    .update({
-      entered:           false,
-      entry_time:        null,
-      exit_time:         null,
-      payment_photo_url: null,
-      amount_paid:       0,
-    })
-    .eq('event_id', ev.id);
-  if (attErr) { toast('Error al resetear asistentes: ' + attErr.message, 'error'); return; }
+  const { data, error } = await db.rpc('reset_event', { p_event_id: ev.id });
+  if (error) {
+    // Fallback: si el RPC no existe todavía (migración no corrida), avisamos.
+    if ((error.message || '').toLowerCase().includes('function') || (error.message || '').toLowerCase().includes('not found')) {
+      toast('Falta correr la migración migration_reset_event.sql en Supabase', 'error');
+    } else {
+      toast('Error: ' + error.message, 'error');
+    }
+    return;
+  }
+  if (!data?.ok) { toast(data?.error || 'Error al resetear', 'error'); return; }
 
   toast(`Evento "${ev.name}" reseteado`, 'success');
   await loadAll();

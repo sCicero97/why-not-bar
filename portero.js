@@ -133,12 +133,21 @@ function renderList() {
     return;
   }
 
+  // Organizadores: siempre en el evento, sin botones de Ingresar/Salida.
+  // Cualquier otro (incluso crew) tiene sus botones normales.
+  const ORGANIZER_NAMES = ['dave', 'angus', 'cicero'];
+  const isOrganizer = (att) => {
+    const n = (att.name || '').trim().toLowerCase();
+    return ORGANIZER_NAMES.some(o => n === o || n.startsWith(o + ' '));
+  };
+
   for (const att of list) {
     const barAcc = att.bar_account_slot ? barAccounts.find(b => b.slot === att.bar_account_slot) : null;
     const canCharge   = eventSettings.door_can_charge;
     const hasBalance  = barAcc && !barAcc.is_closed && barAcc.total > 0;
     const barClosed   = barAcc?.is_closed;
-    // If portero can't charge, they can let people exit even with open balance
+    const organizer   = isOrganizer(att);
+    // Si portero no puede cobrar → puede dejar salir con saldo abierto.
     const canExit     = att.entered && !att.exit_time && (!hasBalance || !canCharge);
     const alreadyOut  = !!att.exit_time;
 
@@ -166,9 +175,9 @@ function renderList() {
           </div>` : ''}
         </div>
         <div class="att-actions" onclick="event.stopPropagation()">
-          ${att.status !== 'crew' && !att.entered && !alreadyOut ? `<button class="att-btn att-btn-enter" onclick="doCheckIn('${att.id}')"><svg width="14" height="14"><use href="#i-check"/></svg> Ingresar</button>` : ''}
-          ${att.status !== 'crew' && canExit ? `<button class="att-btn att-btn-exit" onclick="doExit('${att.id}')"><svg width="14" height="14"><use href="#i-door-out"/></svg> Salida</button>` : ''}
-          ${att.status !== 'crew' && canCharge && hasBalance && att.entered && !alreadyOut ? `<button class="att-btn att-btn-close" onclick="openPersonModal('${att.id}')"><svg width="14" height="14"><use href="#i-card"/></svg> Cobrar</button>` : ''}
+          ${!organizer && !att.entered && !alreadyOut ? `<button class="att-btn att-btn-enter" onclick="doCheckIn('${att.id}')"><svg width="14" height="14"><use href="#i-check"/></svg> Ingresar</button>` : ''}
+          ${!organizer && canExit ? `<button class="att-btn att-btn-exit" onclick="doExit('${att.id}')"><svg width="14" height="14"><use href="#i-door-out"/></svg> Salida</button>` : ''}
+          ${!organizer && canCharge && hasBalance && att.entered && !alreadyOut ? `<button class="att-btn att-btn-close" onclick="openPersonModal('${att.id}')"><svg width="14" height="14"><use href="#i-card"/></svg> Cobrar</button>` : ''}
         </div>
       </div>
     `;
