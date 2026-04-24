@@ -85,14 +85,37 @@ module.exports = async (req, res) => {
     return res.json({ ok: true, user: { id: newUser.id, email: newUser.email } });
   }
 
-  // ── PATCH: cambiar contraseña ────────────────────────────────────────────────
+  // ── PATCH: cambiar contraseña, email o display_name ─────────────────────────
   if (req.method === 'PATCH') {
-    const { userId, password } = req.body || {};
-    if (!userId || !password) return res.status(400).json({ error: 'userId y password requeridos' });
-    if (password.length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    const { userId, password, email, display_name } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'userId requerido' });
 
-    const { error } = await adminDb.auth.admin.updateUserById(userId, { password });
-    if (error) return res.status(500).json({ error: error.message });
+    // Actualizar password si viene
+    if (password) {
+      if (password.length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+      const { error } = await adminDb.auth.admin.updateUserById(userId, { password });
+      if (error) return res.status(500).json({ error: error.message });
+    }
+
+    // Actualizar email si viene
+    if (email) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: 'Email inválido' });
+      }
+      const { error } = await adminDb.auth.admin.updateUserById(userId, {
+        email,
+        email_confirm: true,
+      });
+      if (error) return res.status(500).json({ error: error.message });
+    }
+
+    // Actualizar display_name en profiles si viene
+    if (display_name !== undefined) {
+      const { error } = await adminDb.from('profiles')
+        .update({ display_name }).eq('id', userId);
+      if (error) return res.status(500).json({ error: error.message });
+    }
+
     return res.json({ ok: true });
   }
 

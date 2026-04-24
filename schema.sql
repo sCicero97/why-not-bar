@@ -52,7 +52,7 @@ create table if not exists bar_accounts (
   event_id    uuid not null references events(id) on delete cascade,
   slot        integer not null,
   is_closed   boolean default false,  -- una vez cerrada, NUNCA vuelve a abrirse
-  attendee_id uuid references attendees(id),
+  attendee_id uuid references attendees(id) on delete set null,
   total       numeric(10,2) default 0,
   qty160      integer default 0,
   qty260      integer default 0,
@@ -66,7 +66,7 @@ create table if not exists bar_closures (
   id                uuid primary key default gen_random_uuid(),
   event_id          uuid not null references events(id) on delete cascade,
   slot              integer not null,
-  attendee_id       uuid references attendees(id),
+  attendee_id       uuid references attendees(id) on delete set null,
   total             numeric(10,2) default 0,
   qty160            integer default 0,
   qty260            integer default 0,

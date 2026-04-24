@@ -28,6 +28,9 @@ let reminderTimers = {};
 let appUsers       = [];   // usuarios del sistema (cargados on-demand)
 let blacklist      = [];   // entradas de la black list (cross-event)
 let allAttendeesXE = [];   // asistentes de todos los eventos (para Estadísticas)
+let allClosuresXE  = [];   // cierres de cuenta de todos los eventos
+let allExpensesXE  = [];   // gastos de todos los eventos
+let selectedEventStatsId = null; // evento seleccionado en la pestaña Estadísticas → Eventos
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
@@ -77,7 +80,10 @@ async function loadAll() {
     db.from('profiles').select('id,display_name,role'),
     db.from('blacklist').select('*').order('created_at', { ascending: false }),
     // Asistentes de todos los eventos (para stats de Personas)
-    db.from('attendees').select('id,event_id,name,cedula,email,phone,entry_amount,amount_paid,bar_account_slot,created_at'),
+    db.from('attendees').select('id,event_id,name,cedula,email,phone,entry_amount,amount_paid,bar_account_slot,entered,entry_time,exit_time,created_at'),
+    // Cierres y gastos cross-event para stats
+    db.from('bar_closures').select('id,event_id,slot,total,qty160,qty260,qty360,payment_method,closed_at,closed_by'),
+    db.from('expenses').select('id,event_id,amount,description,created_at'),
   ];
   if (eventId) {
     queries.push(
@@ -97,13 +103,15 @@ async function loadAll() {
   if (results[2] && !results[2].error && results[2].data) blacklist = results[2].data;
   else if (results[2]?.error) { blacklist = []; console.warn('[blacklist]', results[2].error.message); }
   if (results[3]?.data) allAttendeesXE = results[3].data;
-  if (results[4]?.data) attendees = results[4].data;
-  if (results[5]?.data) barAccounts = results[5].data;
-  if (results[6]?.data) barClosures = results[6].data;
-  if (results[7]?.data) expenses = results[7].data;
-  if (results[8]?.data) tasks = results[8].data;
-  if (results[9]?.data) {
-    eventSettings = results[9].data || { door_can_charge: false, blocked_slots: [] };
+  if (results[4]?.data) allClosuresXE = results[4].data;
+  if (results[5]?.data) allExpensesXE = results[5].data;
+  if (results[6]?.data) attendees = results[6].data;
+  if (results[7]?.data) barAccounts = results[7].data;
+  if (results[8]?.data) barClosures = results[8].data;
+  if (results[9]?.data) expenses = results[9].data;
+  if (results[10]?.data) tasks = results[10].data;
+  if (results[11]?.data) {
+    eventSettings = results[11].data || { door_can_charge: false, blocked_slots: [] };
     if (!Array.isArray(eventSettings.blocked_slots)) eventSettings.blocked_slots = [];
   }
 
@@ -183,6 +191,198 @@ function renderAll() {
   renderEventPicker();
   renderPersonas();
   renderBlacklist();
+  renderEventsStats();
+}
+
+// ─── Estadísticas → Eventos ──────────────────────────────────────────────────
+function computeEventStats(ev) {
+  const eid = ev.id;
+  const atts = allAttendeesXE.filter(a => a.event_id === eid);
+  const clos = allClosuresXE.filter(c => c.event_id === eid);
+  const exps = allExpensesXE.filter(e => e.event_id === eid);
+  const accesses = atts.filter(a => a.entered).length;
+  const entryIncome = atts.reduce((s, a) => s + Number(a.entry_amount || 0), 0);
+  const barIncome = clos.reduce((s, c) => s + Number(c.total || 0), 0);
+  const expensesTotal = exps.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const q160 = clos.reduce((s, c) => s + Number(c.qty160 || 0), 0);
+  const q260 = clos.reduce((s, c) => s + Number(c.qty260 || 0), 0);
+  const q360 = clos.reduce((s, c) => s + Number(c.qty360 || 0), 0);
+  return {
+    event: ev,
+    accesses,
+    registered: atts.length,
+    entryIncome, barIncome,
+    expensesTotal,
+    profit: entryIncome + barIncome - expensesTotal,
+    q160, q260, q360,
+    attendees: atts, closures: clos, expenses: exps,
+  };
+}
+
+// Buckets de hora (00-23) para un array de timestamps.
+function hourBuckets(timestamps) {
+  const buckets = new Array(24).fill(0);
+  for (const t of timestamps) {
+    if (!t) continue;
+    const h = new Date(t).getHours();
+    if (h >= 0 && h < 24) buckets[h]++;
+  }
+  return buckets;
+}
+
+// Genera un bar chart SVG simple a partir de 24 valores (una barra por hora).
+function barChartSvg(values, opts = {}) {
+  const { title = '', color = '#30d158', unit = '' } = opts;
+  const max = Math.max(1, ...values);
+  const w = 720, h = 180, pad = 28, barW = (w - pad * 2) / 24;
+  const bars = values.map((v, i) => {
+    const bh = Math.round(((h - pad * 2) * v) / max);
+    const x = pad + i * barW + 2;
+    const y = h - pad - bh;
+    return `<rect x="${x.toFixed(1)}" y="${y}" width="${(barW - 4).toFixed(1)}" height="${bh}" rx="3" fill="${color}" fill-opacity="${v ? 0.85 : 0.15}"/>` +
+           (v ? `<text x="${(x + (barW - 4) / 2).toFixed(1)}" y="${y - 4}" fill="#c8c8cc" font-size="10" text-anchor="middle">${v}</text>` : '');
+  }).join('');
+  const labels = [0, 6, 12, 18, 23].map(i => {
+    const x = pad + i * barW + barW / 2;
+    return `<text x="${x.toFixed(1)}" y="${h - 6}" fill="#8e8e93" font-size="10" text-anchor="middle">${String(i).padStart(2,'0')}h</text>`;
+  }).join('');
+  return `
+    <div class="stats-chart">
+      <div class="stats-chart-title">${title}</div>
+      <svg viewBox="0 0 ${w} ${h}" width="100%" preserveAspectRatio="xMidYMid meet">
+        ${bars}
+        ${labels}
+      </svg>
+      <div class="stats-chart-sub">Máximo: ${max}${unit ? ' ' + unit : ''}</div>
+    </div>`;
+}
+
+function renderEventsStats() {
+  const root = document.getElementById('eventsStatsBody');
+  if (!root) return;
+  if (!events.length) {
+    root.innerHTML = '<div class="empty-state">Sin eventos todavía.</div>';
+    return;
+  }
+
+  const sorted = [...events].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const statsByEv = sorted.map(computeEventStats);
+
+  // Totales agregados
+  const totAccesses = statsByEv.reduce((s, x) => s + x.accesses, 0);
+  const totEntry    = statsByEv.reduce((s, x) => s + x.entryIncome, 0);
+  const totBar      = statsByEv.reduce((s, x) => s + x.barIncome, 0);
+  const totExp      = statsByEv.reduce((s, x) => s + x.expensesTotal, 0);
+  const totProfit   = totEntry + totBar - totExp;
+
+  // Evento seleccionado para los gráficos
+  if (!selectedEventStatsId || !sorted.some(e => e.id === selectedEventStatsId)) {
+    selectedEventStatsId = sorted[0]?.id;
+  }
+  const selected = statsByEv.find(s => s.event.id === selectedEventStatsId) || statsByEv[0];
+
+  const globalCounters = [
+    { label: 'Eventos', value: events.length,      color: '#f5f5f7', bg: '#181818', border: '#2a2a2a' },
+    { label: 'Accesos totales', value: totAccesses, color: '#1ed760', bg: '#0d1f0d', border: '#1a3a1a' },
+    { label: 'Ingreso entradas', value: formatMoney(totEntry), color: '#3b82f6', bg: '#0d1420', border: '#1a2a3a' },
+    { label: 'Ingreso barra',   value: formatMoney(totBar), color: '#f59e0b', bg: '#1f1900', border: '#3a2e00' },
+    { label: 'Gastos totales',   value: formatMoney(totExp), color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
+    { label: 'Ganancia neta',    value: formatMoney(totProfit), color: totProfit >= 0 ? '#1ed760' : '#ff453a', bg: '#181818', border: '#2a2a2a' },
+  ];
+
+  // Barras del gráfico comparativo (ganancia por evento)
+  const maxProfit = Math.max(1, ...statsByEv.map(s => Math.abs(s.profit)));
+  const compareBarW = 28;
+  const compareW = Math.max(300, statsByEv.length * (compareBarW + 18) + 40);
+  const compareH = 220;
+  const compareBars = statsByEv.map((s, i) => {
+    const bh = Math.round(((compareH - 60) * Math.abs(s.profit)) / maxProfit);
+    const x = 24 + i * (compareBarW + 18);
+    const y = compareH - 40 - bh;
+    const color = s.profit >= 0 ? '#1ed760' : '#ff453a';
+    return `
+      <g>
+        <rect x="${x}" y="${y}" width="${compareBarW}" height="${bh}" rx="4" fill="${color}" fill-opacity=".85"/>
+        <text x="${x + compareBarW/2}" y="${y - 6}" fill="#c8c8cc" font-size="10" text-anchor="middle">${formatMoney(s.profit)}</text>
+        <text x="${x + compareBarW/2}" y="${compareH - 22}" fill="#8e8e93" font-size="10" text-anchor="middle">${(s.event.name || '').slice(0, 12)}</text>
+        <text x="${x + compareBarW/2}" y="${compareH - 8}" fill="#636366" font-size="9" text-anchor="middle">${s.event.date || ''}</text>
+      </g>`;
+  }).join('');
+  const compareChart = `
+    <div class="stats-chart">
+      <div class="stats-chart-title">Ganancia neta por evento</div>
+      <div style="overflow-x:auto;width:100%">
+        <svg viewBox="0 0 ${compareW} ${compareH}" width="${compareW}" height="${compareH}" preserveAspectRatio="xMinYMid meet">
+          ${compareBars}
+        </svg>
+      </div>
+    </div>`;
+
+  // Gráficos de horas pico para el evento seleccionado
+  const entryBuckets    = hourBuckets(selected.attendees.filter(a => a.entered).map(a => a.entry_time));
+  const exitBuckets     = hourBuckets(selected.attendees.filter(a => a.exit_time).map(a => a.exit_time));
+  const closureBuckets  = hourBuckets(selected.closures.map(c => c.closed_at));
+
+  const eventSelector = `
+    <div class="admin-toolbar" style="margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+        <span>Gráficos del evento:</span>
+        <select class="admin-select" id="eventStatsSelect">
+          ${sorted.map(e => `<option value="${e.id}" ${e.id === selected.event.id ? 'selected' : ''}>${e.name} · ${e.date || ''}</option>`).join('')}
+        </select>
+      </label>
+    </div>`;
+
+  const perEventTableRows = statsByEv.map(s => `
+    <tr>
+      <td><strong>${s.event.name}</strong>${s.event.is_active ? ' <span class="bl-chip" style="background:rgba(48,209,88,.18);color:#7ce089;border-color:rgba(48,209,88,.45)">ACTIVO</span>' : ''}</td>
+      <td style="font-size:12.5px;color:var(--muted)">${s.event.date || '—'}</td>
+      <td><strong>${s.accesses}</strong><span style="font-size:11px;color:var(--muted)"> / ${s.registered}</span></td>
+      <td>${formatMoney(s.entryIncome)}</td>
+      <td>${formatMoney(s.barIncome)}</td>
+      <td>${formatMoney(s.expensesTotal)}</td>
+      <td><strong style="color:${s.profit >= 0 ? '#1ed760' : '#ff453a'}">${formatMoney(s.profit)}</strong></td>
+      <td style="font-size:12.5px;color:var(--muted)">${s.q160} / ${s.q260} / ${s.q360}</td>
+    </tr>`).join('');
+
+  root.innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      ${globalCounters.map(c => `
+        <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
+          <span style="font-size:22px;font-weight:bold;color:${c.color}">${c.value}</span>
+          <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+        </div>
+      `).join('')}
+    </div>
+
+    ${compareChart}
+
+    <div class="admin-table-wrap glass-card" style="margin-top:14px">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Evento</th><th>Fecha</th><th>Accesos</th><th>Entradas $</th><th>Barra $</th><th>Gastos $</th><th>Ganancia</th><th>160/260/360</th>
+          </tr>
+        </thead>
+        <tbody>${perEventTableRows}</tbody>
+      </table>
+    </div>
+
+    ${eventSelector}
+
+    <div class="stats-charts-grid">
+      ${barChartSvg(entryBuckets,   { title: 'Ingresos por hora',       color: '#30d158' })}
+      ${barChartSvg(exitBuckets,    { title: 'Salidas por hora',        color: '#ff9f0a' })}
+      ${barChartSvg(closureBuckets, { title: 'Cierres de cuenta por hora', color: '#bf5af2' })}
+    </div>
+  `;
+
+  // Wire selector
+  const sel = document.getElementById('eventStatsSelect');
+  if (sel) sel.addEventListener('change', (e) => {
+    selectedEventStatsId = e.target.value;
+    renderEventsStats();
+  });
 }
 
 // ─── Personas (estadísticas cross-event) ──────────────────────────────────────
@@ -273,13 +473,65 @@ function renderPersonas() {
       <td style="font-size:12.5px;color:var(--muted)">${p.lastAt ? p.lastAt.toLocaleDateString('es-UY') : '—'}</td>
       <td><strong>${formatMoney(p.totalSpent)}</strong></td>
       <td>
-        <button class="btn btn-sm btn-danger icon-label-btn" onclick='openBlacklistModal(${JSON.stringify({ name: p.name, cedula: p.cedula, email: p.email, phone: p.phone }).replace(/'/g,"&#39;")})' title="Agregar a black list">
-          ${icon('warn', 14)}BL
-        </button>
+        <div class="row-actions">
+          <button class="btn btn-sm" onclick="openEditPersona('${p.key.replace(/'/g, "\\'")}')" title="Editar información" aria-label="Editar" style="padding:6px 10px">
+            ${icon('edit', 16)}
+          </button>
+          <button class="btn btn-sm btn-danger" onclick='openBlacklistModal(${JSON.stringify({ name: p.name, cedula: p.cedula, email: p.email, phone: p.phone }).replace(/'/g,"&#39;")})' title="Agregar a black list" aria-label="Agregar a black list" style="padding:6px 10px">
+            ${icon('warn', 16)}
+          </button>
+        </div>
       </td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" class="empty-state">Sin personas registradas.</td></tr>';
 }
+
+// Editar info de una persona (propaga a todos los asistentes con esa key)
+function openEditPersona(key) {
+  const personas = aggregatePersonas();
+  const p = personas.find(x => x.key === key);
+  if (!p) { toast('Persona no encontrada', 'error'); return; }
+  showModal(`
+    <h3 style="margin:0 0 6px">Editar persona</h3>
+    <p style="margin:0 0 18px;color:var(--muted);font-size:13px">Los cambios se aplican a los ${p.events.size} evento${p.events.size !== 1 ? 's' : ''} donde aparece.</p>
+    <form id="editPersonaForm" autocomplete="off">
+      <div class="form-grid">
+        <div class="form-group"><label>Nombre *</label><input name="name" value="${(p.name||'').replace(/"/g,'&quot;')}" required/></div>
+        <div class="form-group"><label>Cédula</label><input name="cedula" value="${(p.cedula||'').replace(/"/g,'&quot;')}"/></div>
+        <div class="form-group"><label>Email</label><input name="email" type="email" value="${(p.email||'').replace(/"/g,'&quot;')}"/></div>
+        <div class="form-group"><label>Teléfono</label><input name="phone" value="${(p.phone||'').replace(/"/g,'&quot;')}"/></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('editPersonaForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const patch = {
+      name:   fd.get('name').trim(),
+      cedula: fd.get('cedula').trim() || null,
+      email:  fd.get('email').trim() || null,
+      phone:  fd.get('phone').trim() || null,
+    };
+    const ids = allAttendeesXE
+      .filter(a => personKey(a) === p.key)
+      .map(a => a.id);
+    if (!ids.length) { toast('No se encontraron asistentes', 'error'); return; }
+    const db = getDb();
+    const { error } = await db.from('attendees').update(patch).in('id', ids);
+    if (error) { toast('Error: ' + error.message, 'error'); return; }
+    // Actualizar estado local
+    allAttendeesXE = allAttendeesXE.map(a => ids.includes(a.id) ? { ...a, ...patch } : a);
+    attendees = attendees.map(a => ids.includes(a.id) ? { ...a, ...patch } : a);
+    closeModal();
+    toast('Información actualizada', 'success');
+    renderAll();
+  });
+}
+window.openEditPersona = openEditPersona;
 
 // ─── Black list ───────────────────────────────────────────────────────────────
 function findBlacklistMatch(person) {
@@ -349,16 +601,17 @@ function renderBlacklist() {
 function openBlacklistModal(prefill = {}) {
   const p = typeof prefill === 'string' ? JSON.parse(prefill) : prefill;
   showModal(`
-    <h3 style="margin:0 0 18px">Agregar a la black list</h3>
-    <form id="blForm">
-      <div class="form-grid">
+    <h3 style="margin:0 0 6px">Agregar a la black list</h3>
+    <p style="margin:0 0 18px;color:var(--muted);font-size:13px">Esta información sirve como recordatorio al crear futuros asistentes.</p>
+    <form id="blForm" autocomplete="off">
+      <div class="form-grid form-grid-2">
         <div class="form-group"><label>Nombre *</label><input name="name" value="${(p.name||'').replace(/"/g,'&quot;')}" required/></div>
         <div class="form-group"><label>Cédula</label><input name="cedula" value="${(p.cedula||'').replace(/"/g,'&quot;')}"/></div>
         <div class="form-group"><label>Email</label><input name="email" type="email" value="${(p.email||'').replace(/"/g,'&quot;')}"/></div>
         <div class="form-group"><label>Teléfono</label><input name="phone" value="${(p.phone||'').replace(/"/g,'&quot;')}"/></div>
       </div>
-      <div class="form-group" style="margin-top:12px">
-        <label>Motivo *</label>
+      <div class="form-group" style="margin-top:14px">
+        <label style="margin-bottom:6px">Motivo *</label>
         <div class="bl-reasons-grid">
           ${Object.entries(BL_REASONS).map(([k, v]) => `
             <label class="bl-reason-pick">
@@ -411,6 +664,63 @@ async function removeFromBlacklist(id) {
   renderPersonas();
 }
 window.removeFromBlacklist = removeFromBlacklist;
+
+// Sugerencias de asistentes (cross-event) al escribir un nombre en el modal "Agregar asistente".
+// Enter o click sobre una sugerencia rellena cédula/email/teléfono/notas automáticamente.
+function setupAttendeeNameSuggest() {
+  const input = document.getElementById('attNameInput');
+  const list  = document.getElementById('attNameSuggest');
+  if (!input || !list) return;
+
+  const personas = aggregatePersonas();
+  let active = -1;
+  let current = [];
+
+  const hide = () => { list.hidden = true; list.innerHTML = ''; active = -1; current = []; };
+  const fill = (p) => {
+    input.value = p.name || '';
+    const setVal = (sel, val) => { const el = document.querySelector(sel); if (el && !el.value) el.value = val || ''; };
+    setVal('#attForm [name=cedula]', p.cedula);
+    setVal('#attForm [name=email]',  p.email);
+    setVal('#attForm [name=phone]',  p.phone);
+    hide();
+  };
+
+  const render = () => {
+    list.innerHTML = current.map((p, i) => `
+      <div class="autocomplete-item${i === active ? ' active' : ''}" data-idx="${i}">
+        <div class="autocomplete-name">${p.name}</div>
+        <div class="autocomplete-meta">${[p.cedula, p.email, p.phone].filter(Boolean).join(' · ') || '—'} · ${p.events.size} evento${p.events.size !== 1 ? 's' : ''}</div>
+      </div>`).join('');
+    list.hidden = current.length === 0;
+    list.querySelectorAll('.autocomplete-item').forEach(it => {
+      it.addEventListener('mousedown', (ev) => {
+        ev.preventDefault(); // evitar blur del input
+        fill(current[Number(it.dataset.idx)]);
+      });
+    });
+  };
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    if (q.length < 2) { hide(); return; }
+    current = personas.filter(p => (p.name || '').toLowerCase().includes(q)).slice(0, 6);
+    active = -1;
+    render();
+  });
+
+  input.addEventListener('keydown', (ev) => {
+    if (list.hidden) return;
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); active = (active + 1) % current.length; render(); }
+    else if (ev.key === 'ArrowUp') { ev.preventDefault(); active = (active - 1 + current.length) % current.length; render(); }
+    else if (ev.key === 'Enter') {
+      if (active >= 0 && current[active]) { ev.preventDefault(); fill(current[active]); }
+      else if (current.length === 1)      { ev.preventDefault(); fill(current[0]); }
+    } else if (ev.key === 'Escape') { hide(); }
+  });
+
+  input.addEventListener('blur', () => { setTimeout(hide, 120); });
+}
 
 // Chequea si un asistente a crear/editar coincide con la blacklist; si sí, muestra warning.
 // Devuelve una promesa: true = continuar, false = cancelar.
@@ -614,29 +924,11 @@ function renderAdminBarCounters() {
   const closedTot = barClosures.reduce((s,c) => s + Number(c.total||0), 0);
   const grandTot = openTot + closedTot;
 
-  const isMobile = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
-
-  if (isMobile) {
-    // Formato compacto mobile: "$260 (1) Abiertas", "$160 (1) Cerradas", "$420 Total"
-    const cfg = [
-      { money: formatMoney(openTot),   count: open,   label: 'Abiertas', color: '#1ed760', bg: '#0d1f0d', border: '#1a3a1a' },
-      { money: formatMoney(closedTot), count: closed, label: 'Cerradas', color: '#3b82f6', bg: '#0d1420', border: '#1a2a3a' },
-      { money: formatMoney(grandTot),  count: null,   label: 'Total',    color: '#f5f5f7', bg: '#181818', border: '#2a2a2a' },
-    ];
-    el.innerHTML = cfg.map(c => `
-      <div style="background:${c.bg};border:1px solid ${c.border};border-radius:10px;padding:8px 12px;display:flex;gap:6px;align-items:baseline;flex:1 1 0;min-width:0">
-        <span style="font-size:16px;font-weight:700;color:${c.color};white-space:nowrap">${c.money}${c.count !== null ? ` <span style="font-size:12px;color:${c.color};opacity:.75;font-weight:600">(${c.count})</span>` : ''}</span>
-        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
-      </div>`).join('');
-    return;
-  }
-
+  // Estética idéntica a los contadores de Asistentes
   const cfg = [
-    { label: 'Abiertas',      value: open,                color: '#1ed760', bg: '#0d1f0d', border: '#1a3a1a' },
-    { label: 'Cerradas',      value: closed,              color: '#3b82f6', bg: '#0d1420', border: '#1a2a3a' },
-    { label: 'Total abierto', value: formatMoney(openTot),   color: '#f59e0b', bg: '#1f1900', border: '#3a2e00' },
-    { label: 'Total cerrado', value: formatMoney(closedTot), color: '#8b5cf6', bg: '#130d1f', border: '#2a1a3a' },
-    { label: 'Total general', value: formatMoney(grandTot),  color: '#f5f5f7', bg: '#181818', border: '#2a2a2a' },
+    { label: 'Abiertas',      value: `${formatMoney(openTot)} (${open})`,     color: '#1ed760', bg: '#0d1f0d', border: '#1a3a1a' },
+    { label: 'Cerradas',      value: `${formatMoney(closedTot)} (${closed})`, color: '#3b82f6', bg: '#0d1420', border: '#1a2a3a' },
+    { label: 'Total general', value: formatMoney(grandTot),                   color: '#f5f5f7', bg: '#181818', border: '#2a2a2a' },
   ];
   el.innerHTML = cfg.map(c => `
     <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
@@ -689,7 +981,9 @@ function renderBarTable() {
       if (c.payment_method === 'cash')     return `<span class="icon-label-btn" style="gap:6px;display:inline-flex;align-items:center">${icon('cash',14)}Efectivo</span>${c.change_given > 0 ? `<br><span style="font-size:11px;color:var(--muted)">Vuelto: ${formatMoney(c.change_given)}</span>` : ''}`;
       return '—';
     };
-    // Si hay >1 cierre → carrusel compacto con flechas izq/der (no agranda la fila)
+    // Si hay >1 cierre:
+    //   • Desktop → carrusel compacto con flechas izq/der (no agranda la fila)
+    //   • Mobile → etiqueta compacta "N pagos" (click abre un listado)
     let paymentCellHtml;
     if (slotClosures.length > 1) {
       const frames = slotClosures.map((c, i) => `
@@ -697,11 +991,23 @@ function renderBarTable() {
           <div class="pay-frame-meta">${i + 1}/${slotClosures.length} · ${formatMoney(c.total)}</div>
           <div class="pay-frame-method">${renderOneMethod(c)}</div>
         </div>`).join('');
-      paymentCellHtml = `<div class="pay-carousel" data-total="${slotClosures.length}">
-        <button class="pay-arrow pay-arrow-prev" type="button" aria-label="Anterior">‹</button>
-        <div class="pay-frames">${frames}</div>
-        <button class="pay-arrow pay-arrow-next" type="button" aria-label="Siguiente">›</button>
-      </div>`;
+      const closuresPayload = JSON.stringify(slotClosures.map(c => ({
+        total: c.total,
+        payment_method: c.payment_method,
+        paid_by_slot: c.paid_by_slot,
+        change_given: c.change_given,
+        closed_at: c.closed_at,
+        closed_by: c.closed_by,
+      }))).replace(/"/g, '&quot;');
+      paymentCellHtml = `
+        <div class="pay-carousel desktop-only" data-total="${slotClosures.length}">
+          <button class="pay-arrow pay-arrow-prev" type="button" aria-label="Anterior">‹</button>
+          <div class="pay-frames">${frames}</div>
+          <button class="pay-arrow pay-arrow-next" type="button" aria-label="Siguiente">›</button>
+        </div>
+        <button class="pay-count-chip mobile-only" type="button" onclick="openPaymentsList(${closuresPayload})">
+          ${slotClosures.length} pagos ›
+        </button>`;
     } else {
       paymentCellHtml = renderOneMethod(closure);
     }
@@ -740,6 +1046,34 @@ function renderBarTable() {
   // Wire up pay carousel arrows
   wirePayCarousel();
 }
+
+// Popup con listado de pagos (mobile / cuenta reabierta múltiples veces)
+function openPaymentsList(closures) {
+  const items = closures.map((c, i) => {
+    let method = '—';
+    if (c.paid_by_slot) method = `<span style="color:var(--amber-ios,#ff9f0a)">Pagado por #${String(c.paid_by_slot).padStart(3,'0')}</span>`;
+    else if (c.payment_method === 'transfer') method = `<span style="display:inline-flex;gap:6px;align-items:center">${icon('bank',14)}Transferencia</span>`;
+    else if (c.payment_method === 'cash')     method = `<span style="display:inline-flex;gap:6px;align-items:center">${icon('cash',14)}Efectivo</span>${c.change_given > 0 ? ` · Vuelto ${formatMoney(c.change_given)}` : ''}`;
+    const hhmm = c.closed_at ? new Date(c.closed_at).toLocaleString('es-UY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+    return `<div class="pay-list-item">
+      <div class="pay-list-head">
+        <span class="pay-list-idx">#${i + 1}</span>
+        <strong>${formatMoney(c.total)}</strong>
+        <span style="margin-left:auto;color:var(--muted);font-size:12px">${hhmm}</span>
+      </div>
+      <div class="pay-list-method">${method}</div>
+      ${c.closed_by ? `<div class="pay-list-by">Cerrada por ${c.closed_by}</div>` : ''}
+    </div>`;
+  }).join('');
+  showModal(`
+    <h3 style="margin:0 0 14px">${closures.length} pagos en esta cuenta</h3>
+    <div class="pay-list">${items}</div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" onclick="closeModal()">Cerrar</button>
+    </div>
+  `);
+}
+window.openPaymentsList = openPaymentsList;
 
 // Navegación del carrusel de pagos dentro de la celda
 function wirePayCarousel() {
@@ -961,12 +1295,29 @@ async function updateExpenseField(id, field, value) {
 }
 
 async function updateUserField(id, field, value) {
-  // El email vive en auth.users (no editable desde la tabla profiles) — avisar.
+  // Email → via API admin (auth.users). Display_name → via profiles.
   if (field === 'email') {
-    toast('El email no se puede editar desde acá. Borrá el usuario y creá uno nuevo.', 'warning');
-    renderUsers();
+    const token = await getAuthToken();
+    if (!token) { toast('Sin sesión', 'error'); renderUsers(); return; }
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId: id, email: value }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) { toast(data.error || 'Error al actualizar email', 'error'); renderUsers(); return; }
+      const i = appUsers.findIndex(u => u.id === id);
+      if (i >= 0) appUsers[i].email = value;
+      toast('Email actualizado', 'success');
+      renderUsers();
+    } catch (e) {
+      toast('Error: ' + e.message, 'error');
+      renderUsers();
+    }
     return;
   }
+  // display_name y otros campos → profiles
   const db = getDb();
   const { error } = await db.from('profiles').update({ [field]: value }).eq('id', id);
   if (error) { toast('Error: ' + error.message, 'error'); renderUsers(); return; }
@@ -1062,7 +1413,11 @@ function openAddAttendee() {
     <h3 style="margin:0 0 18px">Agregar asistente</h3>
     <form id="attForm" autocomplete="off">
       <div class="form-grid">
-        <div class="form-group"><label>Nombre *</label><input name="name" required/></div>
+        <div class="form-group" style="position:relative">
+          <label>Nombre *</label>
+          <input name="name" required autocomplete="off" autocorrect="off" spellcheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" id="attNameInput"/>
+          <div id="attNameSuggest" class="autocomplete-popup" hidden></div>
+        </div>
         <div class="form-group"><label>Estado</label>
           <select name="status">
             <option value="invited">Invitado</option><option value="crew">Crew</option>
@@ -1070,18 +1425,25 @@ function openAddAttendee() {
           </select>
         </div>
         <div class="form-group"><label>Cuenta barra #</label><input name="bar_account_slot" type="number" value="${nextSlot}" min="1" placeholder="Nº de barra (se crea automáticamente)"/></div>
-        <div class="form-group"><label>Cédula</label><input name="cedula"/></div>
-        <div class="form-group"><label>Email</label><input name="email" type="email"/></div>
-        <div class="form-group"><label>Teléfono</label><input name="phone"/></div>
+        <div class="form-group"><label>Cédula</label><input name="cedula" autocomplete="off"/></div>
+        <div class="form-group"><label>Email</label><input name="email" type="email" autocomplete="off"/></div>
+        <div class="form-group"><label>Teléfono</label><input name="phone" autocomplete="off"/></div>
         <div class="form-group"><label>Pago entrada $</label><input name="entry_amount" type="number" min="0" value="700"/></div>
-        <div class="form-group"><label>Notas</label><input name="notes"/></div>
+        <div class="form-group"><label>Notas</label><input name="notes" autocomplete="off"/></div>
       </div>
+      <!-- Inputs trampa ocultos para despistar a los gestores de contraseñas (Safari/Chrome) -->
+      <input type="text" name="__fake_user" autocomplete="username" style="display:none" tabindex="-1" aria-hidden="true"/>
+      <input type="password" name="__fake_pass" autocomplete="new-password" style="display:none" tabindex="-1" aria-hidden="true"/>
       <div style="display:flex;gap:10px;margin-top:16px">
         <button type="submit" class="btn btn-primary" style="flex:1">Guardar</button>
         <button type="button" class="btn" onclick="closeModal()" style="flex:1">Cancelar</button>
       </div>
     </form>
   `);
+
+  // Sugerencias desde Personas (cross-event) al escribir el nombre.
+  setupAttendeeNameSuggest();
+
   // Precio automático según estado
   document.querySelector('#attForm [name=status]').addEventListener('change', function () {
     const amountInput = document.querySelector('#attForm [name=entry_amount]');
@@ -1221,17 +1583,36 @@ async function deleteAttendee(id) {
   const db  = getDb();
   const att = attendees.find(a => a.id === id);
 
-  // Primero desvincular la cuenta de barra (evita error de FK)
+  // 1. Desvincular la cuenta de barra (attendee_id → null)
   if (att?.bar_account_slot) {
-    await db.from('bar_accounts')
+    const { error: accErr } = await db.from('bar_accounts')
       .update({ attendee_id: null })
       .eq('event_id', currentEvent().id)
       .eq('slot', att.bar_account_slot);
+    if (accErr) { toast('Error al desvincular cuenta: ' + accErr.message, 'error'); return; }
   }
 
+  // 2. Desvincular cierres históricos (bar_closures.attendee_id → null).
+  //    Sin esto el DELETE falla por la FK bar_closures_attendee_id_fkey.
+  const { error: closErr } = await db.from('bar_closures')
+    .update({ attendee_id: null })
+    .eq('attendee_id', id);
+  if (closErr) { toast('Error al desvincular cierres: ' + closErr.message, 'error'); return; }
+
+  // 3. Eliminar el asistente
   const { error } = await db.from('attendees').delete().eq('id', id);
-  if (error) toast('Error: ' + error.message, 'error');
-  else { attendees = attendees.filter(a => a.id !== id); renderAttendeesTable(); }
+  if (error) {
+    // Si alguna otra FK falla (p. ej. tablas futuras que referencien attendees)
+    toast('No se puede eliminar: ' + error.message, 'error');
+    return;
+  }
+
+  attendees = attendees.filter(a => a.id !== id);
+  // Actualizar estado local de closures (atribuciones que quedaron huérfanas)
+  barClosures = barClosures.map(c => c.attendee_id === id ? { ...c, attendee_id: null, attendees: null } : c);
+  allClosuresXE = allClosuresXE.map(c => c.attendee_id === id ? { ...c, attendee_id: null } : c);
+  toast('Asistente eliminado', 'success');
+  renderAll();
 }
 
 // ─── Reopen bar account ──────────────────────────────────────────────────────
@@ -1690,7 +2071,7 @@ function renderUsers() {
           <span style="font-weight:600">${u.display_name || '—'}</span>
         </div>
       </td>
-      <td style="color:#8e8e93;font-size:13px">${u.email}</td>
+      <td class="editable-cell" data-entity="user" data-id="${u.id}" data-field="email" data-type="email" style="color:#8e8e93;font-size:13px">${u.email}</td>
       <td>
         <select class="inline-select"
           style="border-color:${ROLE_COLORS[u.role]||'rgba(255,255,255,.1)'};color:${ROLE_COLORS[u.role]||'#f5f5f7'}"
@@ -1905,6 +2286,7 @@ const TAB_TITLES = {
   gastos: 'Gastos',
   tareas: 'Tareas',
   personas: 'Personas',
+  'eventos-stats': 'Eventos (Stats)',
   evento: 'Evento',
   tarjetas: 'Tarjetas',
   blacklist: 'Black list',
@@ -1917,6 +2299,7 @@ const TAB_ICONS = {
   gastos: 'receipt',
   tareas: 'tasks',
   personas: 'people',
+  'eventos-stats': 'dashboard',
   evento: 'calendar',
   tarjetas: 'card',
   blacklist: 'warn',
@@ -1983,20 +2366,25 @@ function openMoreSheet() {
       <span>${TAB_TITLES[key]}</span>
     </button>
   `).join('');
+  // El botón "Salir" aparece como un item más dentro del grid
+  const logoutItem = `
+    <button class="bottom-sheet-item" id="moreLogoutBtn" data-action="logout">
+      ${icon('logout', 22)}
+      <span>Salir</span>
+    </button>`;
   sheet.innerHTML = `
     <div class="bottom-sheet-handle"></div>
-    <div class="bottom-sheet-grid">${items}</div>
-    <button class="bottom-sheet-logout" id="moreLogoutBtn">
-      ${icon('logout', 18)}
-      <span>Cerrar sesión</span>
-    </button>
+    <div class="bottom-sheet-grid">${items}${logoutItem}</div>
   `;
   sheet.querySelectorAll('.bottom-sheet-item').forEach(it => {
-    it.addEventListener('click', () => activateTab(it.dataset.tab));
-  });
-  sheet.querySelector('#moreLogoutBtn')?.addEventListener('click', () => {
-    closeMoreSheet();
-    if (typeof signOut === 'function') signOut();
+    if (it.dataset.action === 'logout') {
+      it.addEventListener('click', () => {
+        closeMoreSheet();
+        if (typeof signOut === 'function') signOut();
+      });
+    } else if (it.dataset.tab) {
+      it.addEventListener('click', () => activateTab(it.dataset.tab));
+    }
   });
   // Backdrop click — clase propia para no chocar con el hide del sidebar en mobile
   if (!document.getElementById('sheetBackdrop')) {
