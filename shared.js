@@ -49,7 +49,7 @@ let _currentUser = null;
 // Redirige al app correspondiente según el rol del usuario
 function redirectToRoleApp(role) {
   const routes = {
-    bar:   '/',
+    bar:   '/barra.html',
     door:  '/portero.html',
     admin: '/admin.html',
   };
@@ -58,14 +58,14 @@ function redirectToRoleApp(role) {
 
   // Evitar redirección infinita si ya estamos en la página correcta
   const path = window.location.pathname;
-  const onBar   = path === '/' || path.endsWith('/index.html');
+  const onBar   = path.endsWith('/barra.html');
   const onDoor  = path.endsWith('/portero.html');
   const onAdmin = path.endsWith('/admin.html');
 
   if (
-    (target === '/'              && onBar)  ||
-    (target === '/portero.html'  && onDoor) ||
-    (target === '/admin.html'    && onAdmin)
+    (target === '/barra.html'   && onBar)  ||
+    (target === '/portero.html' && onDoor) ||
+    (target === '/admin.html'   && onAdmin)
   ) {
     window.location.reload();
   } else {

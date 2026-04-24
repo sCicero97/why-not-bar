@@ -4,7 +4,6 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
   <title>Why Not — Admin</title>
-  <meta name="theme-color" content="#0b0b0b"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="Why Not Admin"/>
@@ -252,6 +251,12 @@
         <span>Tareas</span>
       </button>
 
+      <div class="sidebar-section">Estadísticas</div>
+      <button class="nav-item" data-tab="personas">
+        <svg width="20" height="20"><use href="#i-people"/></svg>
+        <span>Personas</span>
+      </button>
+
       <div class="sidebar-section">Gestión</div>
       <button class="nav-item" data-tab="evento">
         <svg width="20" height="20"><use href="#i-calendar"/></svg>
@@ -260,6 +265,10 @@
       <button class="nav-item" data-tab="tarjetas">
         <svg width="20" height="20"><use href="#i-card"/></svg>
         <span>Tarjetas</span>
+      </button>
+      <button class="nav-item" data-tab="blacklist">
+        <svg width="20" height="20"><use href="#i-warn"/></svg>
+        <span>Black list</span>
       </button>
       <button class="nav-item" data-tab="usuarios">
         <svg width="20" height="20"><use href="#i-user-gear"/></svg>
@@ -482,6 +491,54 @@
         </div>
 
         <div id="tasksList" class="tasks-grid"></div>
+      </section>
+
+      <!-- ── Personas (estadísticas cross-event) ─────────────────── -->
+      <section id="tab-personas" class="tab-panel">
+        <div class="admin-toolbar">
+          <input id="personasSearch" type="text" class="admin-input" placeholder="Buscar nombre, cédula, email..." style="flex:1;max-width:340px"/>
+        </div>
+        <div id="personasCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+        <div class="admin-table-wrap glass-card">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Cédula</th>
+                <th>Contacto</th>
+                <th>Eventos</th>
+                <th>Última</th>
+                <th>Gastado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="personasBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── Black list ─────────────────────────────────────────── -->
+      <section id="tab-blacklist" class="tab-panel">
+        <div id="blacklistCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+        <div class="admin-toolbar">
+          <input id="blacklistSearch" type="text" class="admin-input" placeholder="Buscar en la black list..." style="flex:1;max-width:340px"/>
+        </div>
+        <div class="admin-table-wrap glass-card">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Cédula</th>
+                <th>Email / Teléfono</th>
+                <th>Motivo</th>
+                <th>Notas</th>
+                <th>Agregado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="blacklistBody"></tbody>
+          </table>
+        </div>
       </section>
 
       <!-- ── Tarjetas (bloqueadas) ──────────────────────────────── -->

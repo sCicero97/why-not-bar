@@ -26,6 +26,8 @@ let eventSettings  = { door_can_charge: false, blocked_slots: [] };
 let profiles       = [];
 let reminderTimers = {};
 let appUsers       = [];   // usuarios del sistema (cargados on-demand)
+let blacklist      = [];   // entradas de la black list (cross-event)
+let allAttendeesXE = [];   // asistentes de todos los eventos (para Estadísticas)
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
@@ -73,6 +75,9 @@ async function loadAll() {
   const queries = [
     db.from('events').select('*').order('date', { ascending: false }),
     db.from('profiles').select('id,display_name,role'),
+    db.from('blacklist').select('*').order('created_at', { ascending: false }),
+    // Asistentes de todos los eventos (para stats de Personas)
+    db.from('attendees').select('id,event_id,name,cedula,email,phone,entry_amount,amount_paid,bar_account_slot,created_at'),
   ];
   if (eventId) {
     queries.push(
@@ -88,13 +93,17 @@ async function loadAll() {
   const results = await Promise.all(queries);
   if (results[0].data) events = results[0].data;
   if (results[1].data) profiles = results[1].data;
-  if (results[2]?.data) attendees = results[2].data;
-  if (results[3]?.data) barAccounts = results[3].data;
-  if (results[4]?.data) barClosures = results[4].data;
-  if (results[5]?.data) expenses = results[5].data;
-  if (results[6]?.data) tasks = results[6].data;
-  if (results[7]?.data) {
-    eventSettings = results[7].data || { door_can_charge: false, blocked_slots: [] };
+  // blacklist puede fallar si la tabla no existe todavía (pre-migración) — manejar
+  if (results[2] && !results[2].error && results[2].data) blacklist = results[2].data;
+  else if (results[2]?.error) { blacklist = []; console.warn('[blacklist]', results[2].error.message); }
+  if (results[3]?.data) allAttendeesXE = results[3].data;
+  if (results[4]?.data) attendees = results[4].data;
+  if (results[5]?.data) barAccounts = results[5].data;
+  if (results[6]?.data) barClosures = results[6].data;
+  if (results[7]?.data) expenses = results[7].data;
+  if (results[8]?.data) tasks = results[8].data;
+  if (results[9]?.data) {
+    eventSettings = results[9].data || { door_can_charge: false, blocked_slots: [] };
     if (!Array.isArray(eventSettings.blocked_slots)) eventSettings.blocked_slots = [];
   }
 
@@ -172,6 +181,245 @@ function renderAll() {
   renderTasks();
   renderBlockedCards();
   renderEventPicker();
+  renderPersonas();
+  renderBlacklist();
+}
+
+// ─── Personas (estadísticas cross-event) ──────────────────────────────────────
+// Agrupa por cédula (si existe) o por nombre normalizado.
+const BL_REASONS = {
+  no_devolvio_tarjeta: 'No devolvió tarjeta',
+  no_pago_bar:         'No pagó en el bar',
+  entrada_bloqueada:   'Su entrada fue bloqueada',
+};
+
+function personKey(att) {
+  if (att.cedula && att.cedula.trim()) return 'ced:' + att.cedula.trim().toLowerCase();
+  return 'name:' + (att.name || '').trim().toLowerCase();
+}
+
+function aggregatePersonas() {
+  const byKey = new Map();
+  for (const att of allAttendeesXE) {
+    const k = personKey(att);
+    if (!byKey.has(k)) {
+      byKey.set(k, {
+        key: k,
+        name: att.name,
+        cedula: att.cedula || null,
+        email: att.email || null,
+        phone: att.phone || null,
+        events: new Set(),
+        lastAt: null,
+        totalSpent: 0,
+      });
+    }
+    const p = byKey.get(k);
+    // Preferir valores no vacíos en el match
+    if (att.cedula) p.cedula = att.cedula;
+    if (att.email)  p.email  = att.email;
+    if (att.phone)  p.phone  = att.phone;
+    if (att.event_id) p.events.add(att.event_id);
+    const when = att.created_at ? new Date(att.created_at) : null;
+    if (when && (!p.lastAt || when > p.lastAt)) p.lastAt = when;
+    p.totalSpent += Number(att.amount_paid || 0);
+  }
+  return Array.from(byKey.values()).sort((a, b) => (b.events.size - a.events.size) || String(a.name).localeCompare(b.name, 'es'));
+}
+
+function renderPersonas() {
+  const tbody = document.getElementById('personasBody');
+  if (!tbody) return;
+  const search = (document.getElementById('personasSearch')?.value || '').toLowerCase().trim();
+  let list = aggregatePersonas();
+  if (search) {
+    list = list.filter(p => (
+      (p.name || '').toLowerCase().includes(search) ||
+      (p.cedula || '').toLowerCase().includes(search) ||
+      (p.email  || '').toLowerCase().includes(search) ||
+      (p.phone  || '').toLowerCase().includes(search)
+    ));
+  }
+
+  const counters = document.getElementById('personasCounters');
+  if (counters) {
+    const cfg = [
+      { label: 'Personas únicas', value: list.length, color: '#3b82f6', bg: '#0d1420', border: '#1a2a3a' },
+      { label: 'En black list',   value: blacklist.length, color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
+    ];
+    counters.innerHTML = cfg.map(c => `
+      <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
+        <span style="font-size:22px;font-weight:bold;color:${c.color}">${c.value}</span>
+        <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+      </div>`).join('');
+  }
+
+  const byEvent = Object.fromEntries(events.map(e => [e.id, e]));
+  tbody.innerHTML = list.map(p => {
+    const dates = Array.from(p.events).map(id => byEvent[id]?.date || '').filter(Boolean).sort().reverse();
+    const isBlacklisted = findBlacklistMatch(p)?.length > 0;
+    return `<tr>
+      <td><strong>${p.name || '—'}</strong>${isBlacklisted ? ' <span class="bl-chip">BL</span>' : ''}</td>
+      <td style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:12.5px">${p.cedula || '—'}</td>
+      <td style="font-size:12.5px;color:var(--muted)">
+        ${p.email ? `<div>${p.email}</div>` : ''}
+        ${p.phone ? `<div>${p.phone}</div>` : ''}
+        ${!p.email && !p.phone ? '—' : ''}
+      </td>
+      <td>
+        <strong>${p.events.size}</strong>
+        ${dates.length ? `<div style="font-size:11px;color:var(--muted)">${dates.slice(0, 3).join(' · ')}${dates.length > 3 ? ` +${dates.length - 3}` : ''}</div>` : ''}
+      </td>
+      <td style="font-size:12.5px;color:var(--muted)">${p.lastAt ? p.lastAt.toLocaleDateString('es-UY') : '—'}</td>
+      <td><strong>${formatMoney(p.totalSpent)}</strong></td>
+      <td>
+        <button class="btn btn-sm btn-danger icon-label-btn" onclick='openBlacklistModal(${JSON.stringify({ name: p.name, cedula: p.cedula, email: p.email, phone: p.phone }).replace(/'/g,"&#39;")})' title="Agregar a black list">
+          ${icon('warn', 14)}BL
+        </button>
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" class="empty-state">Sin personas registradas.</td></tr>';
+}
+
+// ─── Black list ───────────────────────────────────────────────────────────────
+function findBlacklistMatch(person) {
+  // Busca entradas en la blacklist que coincidan con cualquiera de los datos.
+  const n = (person.name || '').toLowerCase().trim();
+  const c = (person.cedula || '').toLowerCase().trim();
+  const e = (person.email || '').toLowerCase().trim();
+  const p = (person.phone || '').toLowerCase().trim();
+  return blacklist.filter(bl => {
+    if (c && (bl.cedula || '').toLowerCase().trim() === c) return true;
+    if (e && (bl.email  || '').toLowerCase().trim() === e) return true;
+    if (p && (bl.phone  || '').toLowerCase().trim() === p) return true;
+    if (n && (bl.name   || '').toLowerCase().trim() === n) return true;
+    return false;
+  });
+}
+
+function renderBlacklist() {
+  const tbody = document.getElementById('blacklistBody');
+  if (!tbody) return;
+  const search = (document.getElementById('blacklistSearch')?.value || '').toLowerCase().trim();
+
+  let list = [...blacklist];
+  if (search) {
+    list = list.filter(b => (
+      (b.name || '').toLowerCase().includes(search) ||
+      (b.cedula || '').toLowerCase().includes(search) ||
+      (b.email || '').toLowerCase().includes(search) ||
+      (b.phone || '').toLowerCase().includes(search) ||
+      (b.notes || '').toLowerCase().includes(search)
+    ));
+  }
+
+  const counters = document.getElementById('blacklistCounters');
+  if (counters) {
+    const cfg = [
+      { label: 'En black list', value: blacklist.length, color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
+    ];
+    counters.innerHTML = cfg.map(c => `
+      <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
+        <span style="font-size:22px;font-weight:bold;color:${c.color}">${c.value}</span>
+        <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+      </div>`).join('');
+  }
+
+  tbody.innerHTML = list.map(b => `
+    <tr>
+      <td><strong>${b.name || '—'}</strong></td>
+      <td style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:12.5px">${b.cedula || '—'}</td>
+      <td style="font-size:12.5px;color:var(--muted)">
+        ${b.email ? `<div>${b.email}</div>` : ''}
+        ${b.phone ? `<div>${b.phone}</div>` : ''}
+        ${!b.email && !b.phone ? '—' : ''}
+      </td>
+      <td>
+        ${(b.reasons || []).map(r => `<span class="bl-reason">${BL_REASONS[r] || r}</span>`).join(' ') || '—'}
+      </td>
+      <td style="font-size:12.5px;color:var(--muted)">${b.notes || ''}</td>
+      <td style="font-size:12px;color:var(--muted)">${b.created_at ? new Date(b.created_at).toLocaleDateString('es-UY') : ''}</td>
+      <td>
+        <button class="btn btn-sm btn-danger" onclick="removeFromBlacklist('${b.id}')" title="Quitar de la lista">${icon('trash', 14)}</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="7" class="empty-state">La black list está vacía.</td></tr>';
+}
+
+function openBlacklistModal(prefill = {}) {
+  const p = typeof prefill === 'string' ? JSON.parse(prefill) : prefill;
+  showModal(`
+    <h3 style="margin:0 0 18px">Agregar a la black list</h3>
+    <form id="blForm">
+      <div class="form-grid">
+        <div class="form-group"><label>Nombre *</label><input name="name" value="${(p.name||'').replace(/"/g,'&quot;')}" required/></div>
+        <div class="form-group"><label>Cédula</label><input name="cedula" value="${(p.cedula||'').replace(/"/g,'&quot;')}"/></div>
+        <div class="form-group"><label>Email</label><input name="email" type="email" value="${(p.email||'').replace(/"/g,'&quot;')}"/></div>
+        <div class="form-group"><label>Teléfono</label><input name="phone" value="${(p.phone||'').replace(/"/g,'&quot;')}"/></div>
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Motivo *</label>
+        <div class="bl-reasons-grid">
+          ${Object.entries(BL_REASONS).map(([k, v]) => `
+            <label class="bl-reason-pick">
+              <input type="checkbox" name="reasons" value="${k}"/>
+              <span>${v}</span>
+            </label>
+          `).join('')}
+        </div>
+      </div>
+      <div class="form-group"><label>Notas</label><input name="notes" placeholder="(opcional)"/></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
+        <button type="submit" class="btn btn-danger">Agregar a black list</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('blForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const reasons = fd.getAll('reasons');
+    if (!reasons.length) { toast('Elegí al menos un motivo', 'error'); return; }
+    const payload = {
+      name:    fd.get('name').trim(),
+      cedula:  fd.get('cedula').trim() || null,
+      email:   fd.get('email').trim() || null,
+      phone:   fd.get('phone').trim() || null,
+      reasons,
+      notes:   fd.get('notes').trim() || null,
+    };
+    const db = getDb();
+    const { data, error } = await db.from('blacklist').insert(payload).select().single();
+    if (error) { toast('Error: ' + error.message, 'error'); return; }
+    blacklist.unshift(data);
+    closeModal();
+    toast('Agregado a la black list', 'success');
+    renderBlacklist();
+    renderPersonas();
+  });
+}
+window.openBlacklistModal = openBlacklistModal;
+
+async function removeFromBlacklist(id) {
+  if (!confirm('¿Quitar esta persona de la black list?')) return;
+  const db = getDb();
+  const { error } = await db.from('blacklist').delete().eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  blacklist = blacklist.filter(b => b.id !== id);
+  toast('Quitado de la black list', 'success');
+  renderBlacklist();
+  renderPersonas();
+}
+window.removeFromBlacklist = removeFromBlacklist;
+
+// Chequea si un asistente a crear/editar coincide con la blacklist; si sí, muestra warning.
+// Devuelve una promesa: true = continuar, false = cancelar.
+async function confirmIfBlacklisted(person) {
+  const matches = findBlacklistMatch(person);
+  if (!matches.length) return true;
+  const reasons = Array.from(new Set(matches.flatMap(m => m.reasons || [])));
+  const msg = `⚠️ Esta persona está en la black list.\n\nMotivos previos:\n${reasons.map(r => '· ' + (BL_REASONS[r] || r)).join('\n')}\n\n¿Querés agregarlo al evento igualmente?`;
+  return window.confirm(msg);
 }
 
 // ─── Event picker dropdown ────────────────────────────────────────────────────
@@ -365,6 +613,23 @@ function renderAdminBarCounters() {
   const openTot  = assigned.filter(a => !a.is_closed).reduce((s,a) => s + Number(a.total||0), 0);
   const closedTot = barClosures.reduce((s,c) => s + Number(c.total||0), 0);
   const grandTot = openTot + closedTot;
+
+  const isMobile = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
+
+  if (isMobile) {
+    // Formato compacto mobile: "$260 (1) Abiertas", "$160 (1) Cerradas", "$420 Total"
+    const cfg = [
+      { money: formatMoney(openTot),   count: open,   label: 'Abiertas', color: '#1ed760', bg: '#0d1f0d', border: '#1a3a1a' },
+      { money: formatMoney(closedTot), count: closed, label: 'Cerradas', color: '#3b82f6', bg: '#0d1420', border: '#1a2a3a' },
+      { money: formatMoney(grandTot),  count: null,   label: 'Total',    color: '#f5f5f7', bg: '#181818', border: '#2a2a2a' },
+    ];
+    el.innerHTML = cfg.map(c => `
+      <div style="background:${c.bg};border:1px solid ${c.border};border-radius:10px;padding:8px 12px;display:flex;gap:6px;align-items:baseline;flex:1 1 0;min-width:0">
+        <span style="font-size:16px;font-weight:700;color:${c.color};white-space:nowrap">${c.money}${c.count !== null ? ` <span style="font-size:12px;color:${c.color};opacity:.75;font-weight:600">(${c.count})</span>` : ''}</span>
+        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+      </div>`).join('');
+    return;
+  }
 
   const cfg = [
     { label: 'Abiertas',      value: open,                color: '#1ed760', bg: '#0d1f0d', border: '#1a3a1a' },
@@ -851,6 +1116,9 @@ function openAddAttendee() {
           return;
         }
       }
+      // Chequeo contra blacklist — recordatorio, permite continuar si el admin confirma
+      const ok = await confirmIfBlacklisted({ name: obj.name, cedula: obj.cedula, email: obj.email, phone: obj.phone });
+      if (!ok) return;
       const db = getDb();
       const { data: newAtt, error } = await db.from('attendees').insert(obj).select().single();
       if (error) toast('Error: ' + error.message, 'error');
@@ -914,6 +1182,12 @@ function openEditAttendee(id) {
         toast(`La tarjeta ${padId(obj.bar_account_slot)} ya está asignada a ${dup.name}`, 'error');
         return;
       }
+    }
+    // Chequeo blacklist si cambió algún identificador
+    const changedIdentity = (obj.name !== att.name) || (obj.cedula !== att.cedula) || (obj.email !== att.email) || (obj.phone !== att.phone);
+    if (changedIdentity) {
+      const ok = await confirmIfBlacklisted({ name: obj.name, cedula: obj.cedula, email: obj.email, phone: obj.phone });
+      if (!ok) return;
     }
     const db = getDb();
 
@@ -1629,9 +1903,11 @@ const TAB_TITLES = {
   asistentes: 'Asistentes',
   barra: 'Barra',
   gastos: 'Gastos',
-  evento: 'Evento',
   tareas: 'Tareas',
+  personas: 'Personas',
+  evento: 'Evento',
   tarjetas: 'Tarjetas',
+  blacklist: 'Black list',
   usuarios: 'Usuarios',
 };
 const TAB_ICONS = {
@@ -1639,9 +1915,11 @@ const TAB_ICONS = {
   asistentes: 'people',
   barra: 'glass',
   gastos: 'receipt',
-  evento: 'calendar',
   tareas: 'tasks',
+  personas: 'people',
+  evento: 'calendar',
   tarjetas: 'card',
+  blacklist: 'warn',
   usuarios: 'user-gear',
 };
 // Tabs visibles en la tab-bar inferior (mobile). El resto va en "Más".
@@ -1708,9 +1986,17 @@ function openMoreSheet() {
   sheet.innerHTML = `
     <div class="bottom-sheet-handle"></div>
     <div class="bottom-sheet-grid">${items}</div>
+    <button class="bottom-sheet-logout" id="moreLogoutBtn">
+      ${icon('logout', 18)}
+      <span>Cerrar sesión</span>
+    </button>
   `;
   sheet.querySelectorAll('.bottom-sheet-item').forEach(it => {
     it.addEventListener('click', () => activateTab(it.dataset.tab));
+  });
+  sheet.querySelector('#moreLogoutBtn')?.addEventListener('click', () => {
+    closeMoreSheet();
+    if (typeof signOut === 'function') signOut();
   });
   // Backdrop click — clase propia para no chocar con el hide del sidebar en mobile
   if (!document.getElementById('sheetBackdrop')) {
@@ -1802,6 +2088,8 @@ function setupUI() {
   document.getElementById('attStatusFilter').addEventListener('change', renderAttendeesTable);
   document.getElementById('barFilter').addEventListener('change', renderBarTable);
   document.getElementById('barSearch')?.addEventListener('input', renderBarTable);
+  document.getElementById('personasSearch')?.addEventListener('input', renderPersonas);
+  document.getElementById('blacklistSearch')?.addEventListener('input', renderBlacklist);
   document.getElementById('toggleGroupBtn').addEventListener('click', () => {
     groupByStatus = !groupByStatus;
     renderAttendeesTable();
@@ -1823,9 +2111,13 @@ function renderTasks() {
     <div class="task-card task-special ${canCharge ? 'task-active' : 'task-inactive'}">
       <div class="task-header">
         <div class="task-title">
-          <span class="task-dot" style="background:${canCharge ? 'var(--green-ios,#30d158)' : '#8e8e93'}"></span>
-          <strong>El portero puede cobrar cuentas de barra</strong>
+          <strong>El portero puede cobrar</strong>
         </div>
+      </div>
+      <div class="task-meta">
+        <span style="font-size:13px;color:var(--muted)">
+          ${canCharge ? 'Activado: el portero puede cerrar cuentas de barra al salir.' : 'Desactivado: sólo la barra puede cobrar cuentas.'}
+        </span>
       </div>
       <div class="task-footer" style="justify-content:flex-end">
         <label class="task-checkbox" title="Activar/desactivar">

@@ -3,166 +3,58 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
-  <title>Why Not — Barra</title>
-  <meta name="theme-color" content="#08080a"/>
+  <title>Why Not</title>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="Why Not"/>
-  <link rel="manifest" href="./manifest.webmanifest"/>
   <link rel="icon" href="./Logo.png" type="image/png"/>
   <link rel="apple-touch-icon" href="./Logo.png"/>
   <link rel="stylesheet" href="./styles.css"/>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
-<!-- ═══════════ SVG ICON SPRITE ═══════════ -->
+<!-- SVG sprite mínimo para el login -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
-    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>
-    </symbol>
-    <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M6 6l12 12M6 18L18 6"/>
-    </symbol>
-    <symbol id="i-sos" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 3l9.5 17H2.5L12 3z"/><path d="M12 10v4"/>
-      <circle cx="12" cy="17" r=".8" fill="currentColor" stroke="none"/>
-    </symbol>
     <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
       <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h11"/>
-    </symbol>
-    <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M6 9l6 6 6-6"/>
-    </symbol>
-    <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M4 7h3l1.5-2h7L17 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/>
-      <circle cx="12" cy="13" r="3.5"/>
-    </symbol>
-    <symbol id="i-glass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M4 5h16l-7 8v7"/><path d="M8 20h10"/><path d="M6 9h12"/>
-    </symbol>
-    <symbol id="i-wallet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="3" y="6" width="18" height="14" rx="3"/>
-      <path d="M3 10h18"/><circle cx="17" cy="15" r="1.2" fill="currentColor" stroke="none"/>
-    </symbol>
-    <symbol id="i-hash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M5 9h14M5 15h14M10 4l-2 16M16 4l-2 16"/>
-    </symbol>
-    <symbol id="i-sum" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M5 5h14l-7 7 7 7H5l7-7z"/>
     </symbol>
   </defs>
 </svg>
 
-<div id="app" class="app-shell" style="display:none">
+<div id="app" style="display:none"></div>
+<div id="loginRoot"></div>
 
-  <!-- ═══════════ GLASS TOP BAR ═══════════ -->
-  <header class="glass-topbar">
-    <div class="topbar-brand">
-      <div class="brand-dot" style="background:#ff453a;box-shadow:0 0 14px rgba(255,69,58,.65)"></div>
-      <div class="topbar-brand-text">
-        <h1>Why Not</h1>
-        <p id="eventName">Cargando evento…</p>
-      </div>
-    </div>
-    <div class="topbar-actions">
-      <button class="icon-btn danger-btn ghost-btn" id="helpBtn" title="Pedir ayuda en barra" aria-label="SOS">
-        <svg width="20" height="20"><use href="#i-sos"/></svg>
-      </button>
-      <div class="user-dropdown">
-        <button class="user-dropdown-btn" id="userDropdownBtn">
-          <span id="userChip"></span>
-          <svg width="14" height="14"><use href="#i-chevron-down"/></svg>
-        </button>
-        <div class="user-dropdown-menu" id="userDropdownMenu">
-          <button id="logoutBtn">
-            <svg width="15" height="15" style="vertical-align:-2px;margin-right:6px"><use href="#i-logout"/></svg>
-            Cerrar sesión
-          </button>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <main>
-
-    <!-- ═══════════ SUMMARY ═══════════ -->
-    <section class="summary-grid">
-      <div class="summary-card tint-blue">
-        <span class="summary-label"><svg width="12" height="12"><use href="#i-wallet"/></svg>Abiertas</span>
-        <strong id="openTotal">$ 0</strong>
-      </div>
-      <div class="summary-card tint-green">
-        <span class="summary-label"><svg width="12" height="12"><use href="#i-wallet"/></svg>Cerradas</span>
-        <strong id="paidTotal">$ 0</strong>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label"><svg width="12" height="12"><use href="#i-hash"/></svg>Tragos 160</span>
-        <strong id="all160">0</strong>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label"><svg width="12" height="12"><use href="#i-hash"/></svg>Tragos 260</span>
-        <strong id="all260">0</strong>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label"><svg width="12" height="12"><use href="#i-hash"/></svg>Tragos 360</span>
-        <strong id="all360">0</strong>
-      </div>
-      <div class="summary-card tint-amber">
-        <span class="summary-label"><svg width="12" height="12"><use href="#i-sum"/></svg>Total general</span>
-        <strong id="grandTotal">$ 0</strong>
-      </div>
-    </section>
-
-    <!-- ═══════════ TABS ═══════════ -->
-    <nav class="tabs">
-      <button class="tab-btn active" data-tab="cuentas">Cuentas abiertas</button>
-      <button class="tab-btn" data-tab="pagas">Cuentas cerradas</button>
-    </nav>
-
-    <!-- ═══════════ CUENTAS ABIERTAS ═══════════ -->
-    <section id="tab-cuentas" class="tab-panel active">
-      <div class="panel-header">
-        <h2>Cuentas</h2>
-        <div class="panel-tools">
-          <div class="search-field">
-            <svg width="16" height="16"><use href="#i-search"/></svg>
-            <input id="searchInput" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Buscar ID…" autocomplete="off"/>
-          </div>
-          <button id="clearSearchBtn" class="clear-search-btn" aria-label="Limpiar búsqueda">
-            <svg width="16" height="16"><use href="#i-close"/></svg>
-          </button>
-        </div>
-      </div>
-
-      <p class="hold-hint">
-        Mantené <strong>0,5 s</strong> → agregar trago &nbsp;·&nbsp;
-        <strong>2 s</strong> → quitar trago &nbsp;·&nbsp;
-        Click en <strong>Cerrar</strong> → cobrar
-      </p>
-
-      <div id="accountsList" class="accounts-list"></div>
-    </section>
-
-    <!-- ═══════════ CUENTAS CERRADAS ═══════════ -->
-    <section id="tab-pagas" class="tab-panel">
-      <div class="panel-header"><h2>Cuentas cerradas</h2></div>
-      <div class="paid-table-wrap">
-        <table class="paid-table">
-          <thead>
-            <tr><th>ID</th><th>Nombre</th><th>Total</th><th>#160</th><th>#260</th><th>#360</th><th>Cobrada por</th><th>Hora</th><th>Foto</th></tr>
-          </thead>
-          <tbody id="paidTableBody"></tbody>
-        </table>
-      </div>
-    </section>
-
-  </main>
+<div id="bootLoading" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#9a9aa0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+  Cargando…
 </div>
 
 <script src="./shared.js"></script>
-<script src="./app.js"></script>
+<script>
+  // Router universal: si hay sesión, redirige según rol. Si no, muestra login.
+  (async () => {
+    try {
+      const db = getDb();
+      const { data: { session } } = await db.auth.getSession();
+      if (!session) {
+        // Sin sesión → mostrar login. Al autenticar, redirectToRoleApp maneja el salto.
+        document.getElementById('bootLoading').remove();
+        showLoginModal(['admin', 'bar', 'door']);
+        return;
+      }
+      const { data: profile } = await db
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+      const role = profile?.role || 'bar';
+      redirectToRoleApp(role);
+    } catch (e) {
+      console.error('Bootstrap error:', e);
+      document.getElementById('bootLoading').textContent = 'Error al iniciar. Recargá la página.';
+    }
+  })();
+</script>
 </body>
 </html>

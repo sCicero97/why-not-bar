@@ -674,6 +674,48 @@ body.admin-body {
 
 /* Evitar scroll del body mientras el modal está abierto (iOS keyboard workaround) */
 body.modal-open { overflow: hidden; position: relative; }
+
+/* Black list chips y razones */
+.bl-chip {
+  display: inline-block;
+  background: rgba(255, 69, 58, .18);
+  color: #ff8a80;
+  border: 1px solid rgba(255, 69, 58, .45);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  letter-spacing: .05em;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.bl-reason {
+  display: inline-block;
+  background: rgba(255, 69, 58, .10);
+  color: #ff8a80;
+  border: 1px solid rgba(255, 69, 58, .30);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin: 2px 2px 2px 0;
+}
+.bl-reasons-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+.bl-reason-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.bl-reason-pick:hover { background: rgba(255, 255, 255, .04); }
+.bl-reason-pick input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: #ff453a; }
 .admin-modal-box {
   border-radius: var(--radius-xl);
   padding: 28px;
@@ -731,8 +773,11 @@ body.modal-open { overflow: hidden; position: relative; }
 
 /* Carrusel compacto de pagos dentro de celda Pago */
 .pay-carousel {
-  display: inline-flex; align-items: center; gap: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   width: 100%;
+  flex-wrap: nowrap;
 }
 .pay-carousel .pay-arrow {
   background: rgba(255,255,255,.06);
@@ -743,21 +788,23 @@ body.modal-open { overflow: hidden; position: relative; }
   cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 16px; line-height: 1; padding: 0;
-  flex-shrink: 0;
+  flex: 0 0 22px;
 }
 .pay-carousel .pay-arrow:hover { background: rgba(255,255,255,.12); }
 .pay-carousel .pay-frames {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
-  position: relative;
-  min-height: 36px;
+  display: grid;
+  align-items: center;
+  min-height: 34px;
 }
 .pay-carousel .pay-frame {
-  position: absolute; inset: 0;
+  grid-area: 1 / 1;
   display: none;
   flex-direction: column;
   gap: 2px;
   font-size: 12px;
+  min-width: 0;
 }
 .pay-carousel .pay-frame.active { display: flex; }
 .pay-carousel .pay-frame-meta {
@@ -765,6 +812,11 @@ body.modal-open { overflow: hidden; position: relative; }
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: .05em;
+}
+.pay-carousel .pay-frame-method {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Photo viewer con flechas */
@@ -935,8 +987,8 @@ body.modal-open { overflow: hidden; position: relative; }
   backdrop-filter: blur(28px) saturate(180%);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   border-top: 1px solid var(--glass-border);
-  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
-  height: calc(var(--bottombar-h) + env(safe-area-inset-bottom, 0px));
+  padding: 6px 4px calc(14px + env(safe-area-inset-bottom, 0px));
+  height: calc(var(--bottombar-h) + env(safe-area-inset-bottom, 0px) + 8px);
 }
 .bottom-tab {
   flex: 1;
@@ -995,10 +1047,30 @@ body.modal-open { overflow: hidden; position: relative; }
   .glass-topbar {
     padding: 8px 14px;
     padding-top: max(calc(env(safe-area-inset-top, 0px) + 12px), 48px);
+    /* El fondo glass no cubre la zona de la status bar (queda transparente) */
+    background: transparent !important;
+    border-bottom: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    position: relative;
+  }
+  .glass-topbar::before {
+    content: '';
+    position: absolute;
+    top: env(safe-area-inset-top, 0px);
+    left: 0; right: 0; bottom: 0;
+    background: var(--glass-bg);
+    border-bottom: 1px solid var(--glass-border);
+    backdrop-filter: blur(22px) saturate(170%);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    z-index: -1;
+    pointer-events: none;
   }
   .topbar-title { font-size: 16px; }
   .icon-btn-label { display: none; }
   .icon-btn.accent-btn { width: 40px; height: 40px; padding: 0; }
+  /* Excel sólo en desktop (>900px) */
+  #exportBtn { display: none !important; }
 
   .main-scroll { padding: 16px 16px 100px; }
 
@@ -1107,3 +1179,17 @@ body.modal-open { overflow: hidden; position: relative; }
   border-color: rgba(10, 132, 255, .45);
   color: #fff;
 }
+.bottom-sheet-logout {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(255, 69, 58, .35);
+  background: rgba(255, 69, 58, .10);
+  color: #ff8a80;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.bottom-sheet-logout:hover { background: rgba(255, 69, 58, .18); }

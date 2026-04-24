@@ -113,6 +113,23 @@ create table if not exists event_settings (
   blocked_slots   jsonb   default '[]'::jsonb
 );
 
+-- ─── Black list (personas a vigilar, cross-event) ────────────────────────────
+create table if not exists blacklist (
+  id          uuid primary key default gen_random_uuid(),
+  name        text,
+  cedula      text,
+  email       text,
+  phone       text,
+  reasons     text[] default '{}',
+  notes       text,
+  added_by    uuid references profiles(id),
+  created_at  timestamptz default now()
+);
+create index if not exists blacklist_cedula_idx on blacklist (cedula);
+create index if not exists blacklist_email_idx  on blacklist (email);
+create index if not exists blacklist_phone_idx  on blacklist (phone);
+create index if not exists blacklist_name_idx   on blacklist (lower(name));
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Row Level Security
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -170,6 +187,9 @@ create policy "Staff inserts task_checks" on task_checks for insert to authentic
 
 -- event_settings
 alter table event_settings enable row level security;
+alter table blacklist enable row level security;
+create policy if not exists "Staff reads blacklist" on blacklist for select to authenticated using (true);
+create policy if not exists "Admin manages blacklist" on blacklist for all to authenticated using (get_user_role() = 'admin') with check (get_user_role() = 'admin');
 create policy "Staff reads event_settings" on event_settings for select to authenticated using (true);
 create policy "Admin manages event_settings" on event_settings for all to authenticated using (get_user_role()='admin');
 
