@@ -211,6 +211,10 @@ button {
     backdrop-filter: blur(22px) saturate(170%);
     -webkit-backdrop-filter: blur(22px) saturate(170%);
     position: sticky;
+    /* Menos aire entre la status bar del teléfono y el contenido del topbar */
+    padding: 6px 14px 8px;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 4px);
+    margin-bottom: 10px;
   }
   .glass-topbar::before { content: none; }
 }
