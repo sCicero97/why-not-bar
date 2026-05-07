@@ -26,7 +26,7 @@ let eventSettings  = { door_can_charge: false, blocked_slots: [] };
 let profiles       = [];
 let reminderTimers = {};
 let appUsers       = [];   // usuarios del sistema (cargados on-demand)
-let blacklist      = [];   // entradas de la black list (cross-event)
+let blacklist      = [];   // entradas de la blacklist (cross-event)
 let allAttendeesXE = [];   // asistentes de todos los eventos (para Estadísticas)
 let allClosuresXE  = [];   // cierres de cuenta de todos los eventos
 let allExpensesXE  = [];   // gastos de todos los eventos
@@ -576,7 +576,7 @@ function renderPersonas() {
   if (counters) {
     const cfg = [
       { label: 'Personas únicas', value: list.length, color: '#3b82f6', bg: '#0d1420', border: '#1a2a3a' },
-      { label: 'En black list',   value: blacklist.length, color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
+      { label: 'En blacklist',   value: blacklist.length, color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
     ];
     counters.innerHTML = cfg.map(c => `
       <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
@@ -608,7 +608,7 @@ function renderPersonas() {
           <button class="btn btn-sm" onclick="openEditPersona('${p.key.replace(/'/g, "\\'")}')" title="Editar información" aria-label="Editar" style="padding:6px 10px">
             ${icon('edit', 16)}
           </button>
-          <button class="btn btn-sm btn-danger" onclick='openBlacklistModal(${JSON.stringify({ name: p.name, cedula: p.cedula, email: p.email, phone: p.phone }).replace(/'/g,"&#39;")})' title="Agregar a black list" aria-label="Agregar a black list" style="padding:6px 10px">
+          <button class="btn btn-sm btn-danger" onclick='openBlacklistModal(${JSON.stringify({ name: p.name, cedula: p.cedula, email: p.email, phone: p.phone }).replace(/'/g,"&#39;")})' title="Agregar a blacklist" aria-label="Agregar a blacklist" style="padding:6px 10px">
             ${icon('warn', 16)}
           </button>
         </div>
@@ -664,7 +664,7 @@ function openEditPersona(key) {
 }
 window.openEditPersona = openEditPersona;
 
-// ─── Black list ───────────────────────────────────────────────────────────────
+// ─── Blacklist ───────────────────────────────────────────────────────────────
 function findBlacklistMatch(person) {
   // Busca entradas en la blacklist que coincidan con cualquiera de los datos.
   const n = (person.name || '').toLowerCase().trim();
@@ -699,7 +699,7 @@ function renderBlacklist() {
   const counters = document.getElementById('blacklistCounters');
   if (counters) {
     const cfg = [
-      { label: 'En black list', value: blacklist.length, color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
+      { label: 'En blacklist', value: blacklist.length, color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
     ];
     counters.innerHTML = cfg.map(c => `
       <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
@@ -726,13 +726,13 @@ function renderBlacklist() {
         <button class="btn btn-sm btn-danger" onclick="removeFromBlacklist('${b.id}')" title="Quitar de la lista">${icon('trash', 14)}</button>
       </td>
     </tr>
-  `).join('') || '<tr><td colspan="7" class="empty-state">La black list está vacía.</td></tr>';
+  `).join('') || '<tr><td colspan="7" class="empty-state">La blacklist está vacía.</td></tr>';
 }
 
 function openBlacklistModal(prefill = {}) {
   const p = typeof prefill === 'string' ? JSON.parse(prefill) : prefill;
   showModal(`
-    <h3 style="margin:0 0 6px">Agregar a la black list</h3>
+    <h3 style="margin:0 0 6px">Agregar a la blacklist</h3>
     <p style="margin:0 0 18px;color:var(--muted);font-size:13px">Esta información sirve como recordatorio al crear futuros asistentes.</p>
     <form id="blForm" autocomplete="off">
       <div class="form-grid form-grid-2">
@@ -755,7 +755,7 @@ function openBlacklistModal(prefill = {}) {
       <div class="form-group"><label>Notas</label><input name="notes" placeholder="(opcional)"/></div>
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
-        <button type="submit" class="btn btn-danger">Agregar a black list</button>
+        <button type="submit" class="btn btn-danger">Agregar a blacklist</button>
       </div>
     </form>
   `);
@@ -790,13 +790,13 @@ function openBlacklistModal(prefill = {}) {
         if (error) { toast('Error: ' + error.message, 'error'); return; }
         blacklist = blacklist.map(b => b.id === existing.id ? data : b);
         closeModal();
-        toast('Entrada de black list actualizada', 'success');
+        toast('Entrada de blacklist actualizada', 'success');
       } else {
         const { data, error } = await db.from('blacklist').insert(payload).select().single();
         if (error) { toast('Error: ' + error.message, 'error'); return; }
         blacklist.unshift(data);
         closeModal();
-        toast('Agregado a la black list', 'success');
+        toast('Agregado a la blacklist', 'success');
       }
       renderBlacklist();
       renderPersonas();
@@ -807,7 +807,7 @@ function openBlacklistModal(prefill = {}) {
 }
 window.openBlacklistModal = openBlacklistModal;
 
-// Borrar una entrada puntual de la black list.
+// Borrar una entrada puntual de la blacklist.
 // Si hay más entradas para la misma persona, ofrece borrarlas todas de una.
 async function removeFromBlacklist(id) {
   const entry = blacklist.find(b => b.id === id);
@@ -816,20 +816,20 @@ async function removeFromBlacklist(id) {
   let idsToDelete = [id];
   if (duplicates.length) {
     const dropAll = confirm(
-      `Hay ${duplicates.length + 1} entradas en la black list para "${entry.name}".\n\n` +
+      `Hay ${duplicates.length + 1} entradas en la blacklist para "${entry.name}".\n\n` +
       `• OK → borrar TODAS (${duplicates.length + 1}).\n` +
       `• Cancelar → borrar sólo esta.`
     );
     if (dropAll) idsToDelete = [id, ...duplicates.map(d => d.id)];
   } else {
-    if (!confirm(`¿Quitar a "${entry.name}" de la black list?`)) return;
+    if (!confirm(`¿Quitar a "${entry.name}" de la blacklist?`)) return;
   }
 
   const db = getDb();
   const { error } = await db.from('blacklist').delete().in('id', idsToDelete);
   if (error) { toast('Error: ' + error.message, 'error'); return; }
   blacklist = blacklist.filter(b => !idsToDelete.includes(b.id));
-  toast(idsToDelete.length > 1 ? `${idsToDelete.length} entradas eliminadas` : 'Quitado de la black list', 'success');
+  toast(idsToDelete.length > 1 ? `${idsToDelete.length} entradas eliminadas` : 'Quitado de la blacklist', 'success');
   renderBlacklist();
   renderPersonas();
 }
@@ -898,7 +898,7 @@ async function confirmIfBlacklisted(person) {
   const matches = findBlacklistMatch(person);
   if (!matches.length) return true;
   const reasons = Array.from(new Set(matches.flatMap(m => m.reasons || [])));
-  const msg = `⚠️ Esta persona está en la black list.\n\nMotivos previos:\n${reasons.map(r => '· ' + (BL_REASONS[r] || r)).join('\n')}\n\n¿Querés agregarlo al evento igualmente?`;
+  const msg = `⚠️ Esta persona está en la blacklist.\n\nMotivos previos:\n${reasons.map(r => '· ' + (BL_REASONS[r] || r)).join('\n')}\n\n¿Querés agregarlo al evento igualmente?`;
   return window.confirm(msg);
 }
 
@@ -978,6 +978,37 @@ function renderDashboard() {
   setText('d-entryTotal',  formatMoney(entryTotal));
   setText('d-expenses',    formatMoney(expTotal));
   setText('d-netTotal',    formatMoney(netTotal));
+
+  // ── Caja ────────────────────────────────────────────────────────────────────
+  // Caja esperada = caja inicial + cash neto recibido en barra (recibido - vuelto) - todos los gastos
+  // (asumimos por ahora que todos los gastos salen de la caja).
+  const ev = currentEvent();
+  const opening = Number(ev?.opening_cash || 0);
+  const closing = ev?.closing_cash != null ? Number(ev.closing_cash) : null;
+  const cashIn  = barClosures
+    .filter(c => c.payment_method === 'cash')
+    .reduce((s, c) => s + (Number(c.cash_received || c.total || 0) - Number(c.change_given || 0)), 0);
+  const expected = opening + cashIn - expTotal;
+  setText('d-openingCash',  formatMoney(opening));
+  setText('d-cashExpected', formatMoney(expected));
+  const sub = document.getElementById('d-cashExpectedSub');
+  if (sub) sub.textContent = `${formatMoney(opening)} inicial + ${formatMoney(cashIn)} barra cash − ${formatMoney(expTotal)} gastos`;
+  setText('d-closingCash', closing != null ? formatMoney(closing) : '—');
+  const diffEl = document.getElementById('d-cashDiff');
+  const diffCard = document.getElementById('d-cashDiffCard');
+  if (closing != null) {
+    const diff = closing - expected;
+    if (diffEl) diffEl.textContent = (diff >= 0 ? '+' : '') + formatMoney(diff);
+    if (diffCard) {
+      diffCard.classList.remove('tint-green', 'tint-red', 'tint-amber');
+      if (Math.abs(diff) < 0.01) diffCard.classList.add('tint-green');
+      else if (diff < 0) diffCard.classList.add('tint-red');
+      else diffCard.classList.add('tint-amber');
+    }
+  } else {
+    if (diffEl) diffEl.textContent = '—';
+  }
+
   setText('d-attendees',   attendees.length);
   // Ingresaron: número + porcentaje (excluye organizadores que no marcan ingreso)
   const trackable = attendees.filter(a => !a.is_organizer);
@@ -1429,6 +1460,8 @@ function renderEvents() {
           <span class="checkmark"></span>
         </label>
       </td>
+      <td class="editable-cell" data-entity="event" data-id="${ev.id}" data-field="opening_cash" data-type="number" title="Click para editar">${formatMoney(Number(ev.opening_cash || 0))}</td>
+      <td class="editable-cell" data-entity="event" data-id="${ev.id}" data-field="closing_cash" data-type="number" title="Click para registrar el cierre de caja">${ev.closing_cash != null ? formatMoney(Number(ev.closing_cash)) : '<span style="color:var(--muted)">—</span>'}</td>
       <td>
         <div class="row-actions">
           <button class="btn btn-sm" onclick="resetEventData('${ev.id}')" title="Reset total del evento (mantiene asistentes)" style="border-color:rgba(255,159,10,.35);color:#ffbf4a">
@@ -1439,7 +1472,7 @@ function renderEvents() {
         </div>
       </td>
     </tr>`;
-  }).join('') || '<tr><td colspan="5" class="empty-state">Sin eventos. Creá uno.</td></tr>';
+  }).join('') || '<tr><td colspan="7" class="empty-state">Sin eventos. Creá uno.</td></tr>';
 }
 
 // Cambia door_can_charge para un evento específico desde la pestaña Eventos.
@@ -1576,18 +1609,26 @@ async function updateEventField(id, field, value) {
     renderEvents();
     return;
   }
+  // Caja: number o null si está vacío (caja final puede quedar sin registrar)
+  let dbValue = value;
+  if (field === 'opening_cash' || field === 'closing_cash') {
+    dbValue = (value === '' || value == null) ? (field === 'closing_cash' ? null : 0) : Number(value);
+  }
   const db = getDb();
-  const { error } = await db.from('events').update({ [field]: value }).eq('id', id);
+  const { error } = await db.from('events').update({ [field]: dbValue }).eq('id', id);
   if (error) { toast('Error: ' + error.message, 'error'); renderEvents(); return; }
   const i = events.findIndex(e => e.id === id);
-  if (i >= 0) events[i][field] = value;
-  // Si renombramos el evento activo o el que estamos viendo, refrescar también el picker / título
-  if (activeEvent?.id === id)  activeEvent[field]  = value;
-  if (viewingEvent?.id === id) viewingEvent[field] = value;
+  if (i >= 0) events[i][field] = dbValue;
+  // Si el cambio afecta al evento activo/visible, sincronizar referencias
+  if (activeEvent?.id === id)  activeEvent[field]  = dbValue;
+  if (viewingEvent?.id === id) viewingEvent[field] = dbValue;
   toast('Evento actualizado', 'success');
-  // Actualizamos sólo lo necesario, no el dashboard entero (evita destruir otros editores activos)
   renderEvents();
   renderEventPicker();
+  // Si cambió caja del evento en foco, actualizar dashboard
+  if ((field === 'opening_cash' || field === 'closing_cash') && currentEvent()?.id === id) {
+    renderDashboard();
+  }
 }
 
 async function updateUserField(id, field, value) {
@@ -2125,23 +2166,16 @@ function openNewEvent() {
   showModal(`
     <h3 style="margin:0 0 18px">Nuevo evento</h3>
     <form id="eventForm" autocomplete="off">
-      <div class="form-group">
-        <label>Nombre del evento *</label>
-        <input name="name" required autofocus
-               autocomplete="off" autocorrect="off" spellcheck="false"
-               data-1p-ignore="true" data-lpignore="true" data-form-type="other"/>
+      <div class="form-grid form-grid-stacked">
+        <div class="form-group">
+          <label>Nombre del evento *</label>
+          <input name="name" required autofocus/>
+        </div>
+        <div class="form-group">
+          <label>Fecha *</label>
+          <input name="date" type="date" value="${new Date().toISOString().slice(0,10)}" required/>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Fecha *</label>
-        <input name="date" type="date" value="${new Date().toISOString().slice(0,10)}" required
-               autocomplete="off" data-1p-ignore="true" data-lpignore="true"/>
-      </div>
-      <p style="font-size:12px;color:#8e8e93;margin:0 0 16px;line-height:1.4">
-        Se crean ${DEFAULT_BAR_ACCOUNTS} cuentas de barra, el crew habitual y los gastos por defecto (todos en 0).
-      </p>
-      <!-- Inputs trampa ocultos para despistar a 1Password / LastPass -->
-      <input type="text" name="__fake_user" autocomplete="username" style="display:none" tabindex="-1" aria-hidden="true"/>
-      <input type="password" name="__fake_pass" autocomplete="new-password" style="display:none" tabindex="-1" aria-hidden="true"/>
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
         <button type="submit" class="btn btn-primary">Crear y activar</button>
@@ -2163,8 +2197,8 @@ function openNewEvent() {
       .select().single();
     if (error) { toast('Error: ' + error.message, 'error'); return; }
 
-    // Inicializar cuentas de barra (150 por defecto)
-    await db.rpc('init_bar_accounts', { p_event_id: newEvent.id, p_count: DEFAULT_BAR_ACCOUNTS });
+    // No pre-creamos cuentas de barra: se crean on-demand cuando se asigna un slot
+    // a un asistente (ver ensureBarAccountSlot).
 
     // Insertar crew por defecto (asistentes)
     const crewRows = DEFAULT_CREW.map(c => ({
@@ -2201,7 +2235,7 @@ function openNewEvent() {
     // Event settings default (door_can_charge sólo — blocked_cards es global)
     await db.from('event_settings').insert({ event_id: newEvent.id, door_can_charge: false });
 
-    toast(`Evento "${newEvent.name}" creado con ${DEFAULT_BAR_ACCOUNTS} cuentas y crew por defecto`, 'success');
+    toast(`Evento "${newEvent.name}" creado`, 'success');
     closeModal();
     window.location.reload();
   });
@@ -2210,8 +2244,15 @@ function openNewEvent() {
 async function activateEvent(id) {
   if (!confirm('¿Activar este evento? El evento actual quedará inactivo.')) return;
   const db = getDb();
-  await db.from('events').update({ is_active: false }).eq('is_active', true);
-  await db.from('events').update({ is_active: true }).eq('id', id);
+  // Atómico vía RPC para evitar race entre los dos UPDATEs separados
+  const { data, error } = await db.rpc('activate_event', { p_event_id: id });
+  if (error || !data?.ok) {
+    // Fallback: si el RPC todavía no fue creado (migración pendiente), hacemos los 2 updates.
+    const fallback = (error?.message || '').toLowerCase().includes('function');
+    if (!fallback) { toast(data?.error || error?.message || 'Error', 'error'); return; }
+    await db.from('events').update({ is_active: false }).eq('is_active', true);
+    await db.from('events').update({ is_active: true }).eq('id', id);
+  }
   toast('Evento activado', 'success');
   window.location.reload();
 }
@@ -2521,7 +2562,47 @@ function showModal(html) {
   document.getElementById('modalBody').innerHTML = html;
   document.getElementById('modalOverlay').classList.remove('hidden');
   document.body.classList.add('modal-open');
-  // Apply form styles — saltar inputs ocultos (trampas para password managers)
+
+  // Bloquear gestores de contraseñas (1Password, LastPass, Bitwarden) en modales
+  // que NO sean de auth. Si el form tiene un input type=password asumimos que es
+  // un form de auth (cambiar contraseña / crear usuario) y dejamos que el manager
+  // funcione normalmente.
+  document.querySelectorAll('#modalBody form').forEach(form => {
+    const isAuthForm = form.querySelector('input[type=password]');
+    if (isAuthForm) return;
+    if (!form.hasAttribute('autocomplete')) form.setAttribute('autocomplete', 'off');
+    form.querySelectorAll('input').forEach(el => {
+      if (el.type === 'hidden') return;
+      if (el.type === 'password') return;
+      if (el.getAttribute('aria-hidden') === 'true') return;
+      if (!el.hasAttribute('autocomplete')) el.setAttribute('autocomplete', 'off');
+      el.setAttribute('autocorrect', 'off');
+      el.setAttribute('spellcheck', 'false');
+      el.setAttribute('data-1p-ignore', 'true');
+      el.setAttribute('data-lpignore', 'true');
+      if (!el.hasAttribute('data-form-type')) el.setAttribute('data-form-type', 'other');
+    });
+    // Inserta inputs trampa ocultos al inicio del form si no los tiene
+    if (!form.querySelector('input[name="__fake_user"]')) {
+      const t1 = document.createElement('input');
+      t1.type = 'text'; t1.name = '__fake_user'; t1.autocomplete = 'username';
+      t1.tabIndex = -1; t1.setAttribute('aria-hidden', 'true');
+      t1.style.display = 'none';
+      const t2 = document.createElement('input');
+      t2.type = 'password'; t2.name = '__fake_pass'; t2.autocomplete = 'new-password';
+      t2.tabIndex = -1; t2.setAttribute('aria-hidden', 'true');
+      t2.style.display = 'none';
+      form.insertBefore(t2, form.firstChild);
+      form.insertBefore(t1, form.firstChild);
+    }
+    // Antes del submit, deshabilitar los traps para que no aparezcan en FormData.
+    // Capture phase asegura que esto corre antes del handler propio del form.
+    form.addEventListener('submit', () => {
+      form.querySelectorAll('input[name^="__"]').forEach(t => { t.disabled = true; });
+    }, true);
+  });
+
+  // Estilos visuales en inputs/selects (saltea ocultos)
   document.querySelectorAll('#modalBody input, #modalBody select').forEach(el => {
     if (el.getAttribute('aria-hidden') === 'true') return;
     if ((el.style.display || '').toLowerCase() === 'none') return;
@@ -2840,7 +2921,7 @@ const TAB_TITLES = {
   tareas: 'Tareas',
   evento: 'Evento',
   tarjetas: 'Tarjetas',
-  blacklist: 'Black list',
+  blacklist: 'Blacklist',
   personas: 'Personas',
   'eventos-stats': 'Eventos (Stats)',
   usuarios: 'Usuarios',

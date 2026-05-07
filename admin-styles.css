@@ -858,7 +858,12 @@ body.modal-open { overflow: hidden; position: relative; }
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 18px;
+}
+/* Variante apilada (siempre 1 columna, ej: modal Nuevo evento) */
+.form-grid.form-grid-stacked {
+  grid-template-columns: 1fr;
+  gap: 16px;
 }
 .form-group { display: flex; flex-direction: column; }
 .form-group label {

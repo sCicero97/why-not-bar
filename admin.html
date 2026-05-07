@@ -278,7 +278,7 @@
       </button>
       <button class="nav-item" data-tab="blacklist">
         <svg width="20" height="20"><use href="#i-warn"/></svg>
-        <span>Black list</span>
+        <span>Blacklist</span>
       </button>
 
       <div class="sidebar-section">Estadísticas</div>
@@ -365,6 +365,27 @@
           <div class="glass-card stat-card tint-neutral">
             <span class="summary-label">TOTAL NETO</span>
             <strong id="d-netTotal" style="font-size:32px">$ 0</strong>
+          </div>
+        </div>
+
+        <div class="admin-section-header">Caja</div>
+        <div class="summary-grid summary-grid-2">
+          <div class="glass-card stat-card">
+            <span class="summary-label">Caja inicial</span>
+            <strong id="d-openingCash">$ 0</strong>
+          </div>
+          <div class="glass-card stat-card tint-amber">
+            <span class="summary-label">Caja esperada</span>
+            <strong id="d-cashExpected">$ 0</strong>
+            <span class="summary-sub" id="d-cashExpectedSub" style="font-size:11px;color:var(--muted);margin-top:4px"></span>
+          </div>
+          <div class="glass-card stat-card tint-green">
+            <span class="summary-label">Caja real (cierre)</span>
+            <strong id="d-closingCash">—</strong>
+          </div>
+          <div class="glass-card stat-card" id="d-cashDiffCard">
+            <span class="summary-label">Diferencia</span>
+            <strong id="d-cashDiff">—</strong>
           </div>
         </div>
 
@@ -497,7 +518,7 @@
         </div>
         <div class="admin-table-wrap glass-card">
           <table class="admin-table">
-            <thead><tr><th>Nombre</th><th>Fecha</th><th>Estado</th><th>Portero cobra</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Fecha</th><th>Estado</th><th>Portero cobra</th><th>Caja inicial</th><th>Caja final</th><th>Acciones</th></tr></thead>
             <tbody id="eventsBody"></tbody>
           </table>
         </div>
@@ -544,7 +565,7 @@
         <div id="eventsStatsBody"></div>
       </section>
 
-      <!-- ── Black list ─────────────────────────────────────────── -->
+      <!-- ── Blacklist ─────────────────────────────────────────── -->
       <section id="tab-blacklist" class="tab-panel">
         <div id="blacklistCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
         <div class="admin-toolbar">

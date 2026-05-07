@@ -28,6 +28,14 @@ function getDb() {
     auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
     realtime: { timeout: 20000 },
   });
+  // Detectar expiración de sesión: cuando el token deja de ser válido,
+  // mostrar un toast y redirigir al login después de 2.5s.
+  _db.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+      try { toast('Tu sesión expiró. Iniciá sesión otra vez.', 'warning'); } catch (_) {}
+      setTimeout(() => { window.location.href = '/'; }, 2500);
+    }
+  });
   return _db;
 }
 

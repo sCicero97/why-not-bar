@@ -15,11 +15,13 @@ create table if not exists profiles (
 
 -- ─── Eventos ──────────────────────────────────────────────────────────────────
 create table if not exists events (
-  id         uuid primary key default gen_random_uuid(),
-  name       text not null,
-  date       date not null default current_date,
-  is_active  boolean default false,
-  created_at timestamptz default now()
+  id           uuid primary key default gen_random_uuid(),
+  name         text not null,
+  date         date not null default current_date,
+  is_active    boolean default false,
+  opening_cash numeric(10,2) default 0,           -- efectivo en caja al abrir el evento
+  closing_cash numeric(10,2) default null,        -- conteo de efectivo al cerrar (null = no cerrada)
+  created_at   timestamptz default now()
 );
 -- Solo un evento activo a la vez
 create unique index if not exists one_active_event on events(is_active) where is_active = true;
@@ -192,7 +194,8 @@ create policy "Admin deletes accounts" on bar_accounts for delete to authenticat
 -- bar_closures
 create policy "Staff reads closures" on bar_closures for select to authenticated using (true);
 create policy "Bar+door+admin inserts closures" on bar_closures for insert to authenticated with check (get_user_role() in ('bar','door','admin'));
-create policy "Admin modifies closures" on bar_closures for update to authenticated using (get_user_role()='admin');
+create policy "Admin updates closures" on bar_closures for update to authenticated using (get_user_role()='admin');
+create policy "Admin deletes closures" on bar_closures for delete to authenticated using (get_user_role()='admin');
 
 -- expenses
 create policy "Staff reads expenses" on expenses for select to authenticated using (true);
@@ -223,47 +226,71 @@ create policy "Admin manages event_settings" on event_settings for all to authen
 -- Funciones atómicas (sin race conditions)
 -- ═══════════════════════════════════════════════════════════════════════════
 
-create or replace function add_drink(p_account_id uuid, p_amount integer)
-returns json language plpgsql security definer as $$
+create or replace function add_drink(p_account_id uuid, p_amount numeric)
+returns json language plpgsql security definer
+set search_path = public as $$
+declare v bar_accounts; v_role text;
 begin
-  if p_amount = 160 then
-    update bar_accounts set total=total+160, qty160=qty160+1 where id=p_account_id and not is_closed;
-  elsif p_amount = 260 then
-    update bar_accounts set total=total+260, qty260=qty260+1 where id=p_account_id and not is_closed;
-  elsif p_amount = 360 then
-    update bar_accounts set total=total+360, qty360=qty360+1 where id=p_account_id and not is_closed;
-  else
-    return json_build_object('ok',false,'error','Monto inválido');
+  select role into v_role from profiles where id = auth.uid();
+  if v_role is null or v_role not in ('bar', 'admin') then
+    return json_build_object('ok', false, 'error', 'Sólo bar o admin');
   end if;
-  if not found then return json_build_object('ok',false,'error','Cuenta no encontrada o cerrada'); end if;
-  return json_build_object('ok',true);
+  select * into v from bar_accounts where id = p_account_id and not is_closed for update;
+  if not found then return json_build_object('ok', false, 'error', 'Cuenta no encontrada o cerrada'); end if;
+  if p_amount <= 0 then return json_build_object('ok', false, 'error', 'Monto inválido'); end if;
+  update bar_accounts set
+    total  = total  + p_amount,
+    qty160 = qty160 + case when p_amount = 160 then 1 else 0 end,
+    qty260 = qty260 + case when p_amount = 260 then 1 else 0 end,
+    qty360 = qty360 + case when p_amount = 360 then 1 else 0 end
+  where id = p_account_id;
+  begin
+    insert into bar_drinks (event_id, account_id, slot, attendee_id, amount, served_by)
+    values (v.event_id, p_account_id, v.slot, v.attendee_id, p_amount, 'bar');
+  exception when undefined_table then null; end;
+  return json_build_object('ok', true);
 end;
 $$;
 
-create or replace function subtract_drink(p_account_id uuid, p_amount integer)
-returns json language plpgsql security definer as $$
-declare v bar_accounts;
+create or replace function subtract_drink(p_account_id uuid, p_amount numeric)
+returns json language plpgsql security definer
+set search_path = public as $$
+declare v bar_accounts; v_role text;
 begin
-  select * into v from bar_accounts where id=p_account_id and not is_closed;
-  if not found then return json_build_object('ok',false,'error','Cuenta no encontrada o cerrada'); end if;
-  if p_amount=160 then
-    if v.qty160<=0 then return json_build_object('ok',false,'error','Sin tragos para restar'); end if;
-    update bar_accounts set total=total-160, qty160=qty160-1 where id=p_account_id;
-  elsif p_amount=260 then
-    if v.qty260<=0 then return json_build_object('ok',false,'error','Sin tragos para restar'); end if;
-    update bar_accounts set total=total-260, qty260=qty260-1 where id=p_account_id;
-  elsif p_amount=360 then
-    if v.qty360<=0 then return json_build_object('ok',false,'error','Sin tragos para restar'); end if;
-    update bar_accounts set total=total-360, qty360=qty360-1 where id=p_account_id;
+  select role into v_role from profiles where id = auth.uid();
+  if v_role is null or v_role not in ('bar', 'admin') then
+    return json_build_object('ok', false, 'error', 'Sólo bar o admin');
   end if;
-  return json_build_object('ok',true);
+  select * into v from bar_accounts where id = p_account_id and not is_closed for update;
+  if not found then return json_build_object('ok', false, 'error', 'Cuenta no encontrada o cerrada'); end if;
+  if p_amount = 160 and v.qty160 <= 0 then return json_build_object('ok', false, 'error', 'Sin tragos para restar'); end if;
+  if p_amount = 260 and v.qty260 <= 0 then return json_build_object('ok', false, 'error', 'Sin tragos para restar'); end if;
+  if p_amount = 360 and v.qty360 <= 0 then return json_build_object('ok', false, 'error', 'Sin tragos para restar'); end if;
+  update bar_accounts set
+    total  = greatest(total  - p_amount, 0),
+    qty160 = greatest(qty160 - case when p_amount = 160 then 1 else 0 end, 0),
+    qty260 = greatest(qty260 - case when p_amount = 260 then 1 else 0 end, 0),
+    qty360 = greatest(qty360 - case when p_amount = 360 then 1 else 0 end, 0)
+  where id = p_account_id;
+  begin
+    delete from bar_drinks where id = (
+      select id from bar_drinks where account_id = p_account_id and amount = p_amount
+      order by created_at desc limit 1
+    );
+  exception when undefined_table then null; end;
+  return json_build_object('ok', true);
 end;
 $$;
 
 create or replace function close_bar_account(p_account_id uuid, p_closed_by text, p_photo_url text default null)
-returns json language plpgsql security definer as $$
-declare v bar_accounts;
+returns json language plpgsql security definer
+set search_path = public as $$
+declare v bar_accounts; v_role text;
 begin
+  select role into v_role from profiles where id = auth.uid();
+  if v_role is null or v_role not in ('bar', 'door', 'admin') then
+    return json_build_object('ok', false, 'error', 'Sin permisos');
+  end if;
   select * into v from bar_accounts where id=p_account_id and not is_closed for update;
   if not found then return json_build_object('ok',false,'error','Cuenta no encontrada o ya cerrada'); end if;
   if v.total=0 then return json_build_object('ok',false,'error','La cuenta no tiene consumo'); end if;
@@ -310,8 +337,27 @@ end;
 $$;
 grant execute on function reset_event(uuid) to authenticated;
 
+-- Activar evento atómico (evita race entre dos UPDATE separados)
+create or replace function activate_event(p_event_id uuid)
+returns json language plpgsql security definer
+set search_path = public as $$
+declare v_role text;
+begin
+  select role into v_role from profiles where id = auth.uid();
+  if v_role is null or v_role <> 'admin' then
+    return json_build_object('ok', false, 'error', 'Sólo admin');
+  end if;
+  perform pg_advisory_xact_lock(hashtext('events_activate'));
+  update events set is_active = false where is_active = true and id <> p_event_id;
+  update events set is_active = true  where id = p_event_id;
+  return json_build_object('ok', true);
+end;
+$$;
+grant execute on function activate_event(uuid) to authenticated;
+
 create or replace function mark_exit(p_attendee_id uuid)
-returns json language plpgsql security definer as $$
+returns json language plpgsql security definer
+set search_path = public as $$
 declare v attendees; acc bar_accounts;
 begin
   select * into v from attendees where id=p_attendee_id;
