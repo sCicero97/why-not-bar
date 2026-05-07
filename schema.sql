@@ -39,8 +39,8 @@ create table if not exists attendees (
   entry_time        timestamptz,      -- hora de ingreso
   exit_time         timestamptz,      -- hora de egreso
   entry_amount      numeric(10,2) default 0,   -- lo que pagó de entrada
-  amount_paid       numeric(10,2) default 0,   -- total pagado (entrada + barra)
-  payment_photo_url text,             -- foto de comprobante de pago
+  amount_paid       numeric(10,2) default 0,   -- lo pagado por la entrada (no incluye barra)
+  payment_photo_url text,             -- foto del comprobante de pago de entrada
   notes             text,
   paid_by_id        uuid references attendees(id),  -- quién pagó por este asistente
   is_organizer      boolean default false,          -- organizador: sin botón de ingreso/salida
@@ -125,7 +125,15 @@ create table if not exists task_checks (
 create table if not exists event_settings (
   event_id        uuid primary key references events(id) on delete cascade,
   door_can_charge boolean default false,
-  blocked_slots   jsonb   default '[]'::jsonb
+  blocked_slots   jsonb   default '[]'::jsonb  -- DEPRECATED: ahora vive en blocked_cards (global)
+);
+
+-- ─── Tarjetas bloqueadas (perdidas/robadas) — global cross-event ─────────────
+create table if not exists blocked_cards (
+  slot       integer primary key,
+  blocked_at timestamptz default now(),
+  blocked_by uuid references profiles(id),
+  notes      text
 );
 
 -- ─── Black list (personas a vigilar, cross-event) ────────────────────────────
@@ -203,6 +211,9 @@ create policy "Staff inserts task_checks" on task_checks for insert to authentic
 -- event_settings
 alter table event_settings enable row level security;
 alter table blacklist enable row level security;
+alter table blocked_cards enable row level security;
+create policy if not exists "Staff reads blocked_cards" on blocked_cards for select to authenticated using (true);
+create policy if not exists "Admin manages blocked_cards" on blocked_cards for all to authenticated using (get_user_role() = 'admin') with check (get_user_role() = 'admin');
 create policy if not exists "Staff reads blacklist" on blacklist for select to authenticated using (true);
 create policy if not exists "Admin manages blacklist" on blacklist for all to authenticated using (get_user_role() = 'admin') with check (get_user_role() = 'admin');
 create policy "Staff reads event_settings" on event_settings for select to authenticated using (true);
@@ -262,11 +273,9 @@ begin
 
   update bar_accounts set is_closed=true where id=p_account_id;
 
-  -- Si tiene asistente vinculado, guardar la foto en su perfil
-  if v.attendee_id is not null and p_photo_url is not null then
-    update attendees set payment_photo_url=p_photo_url, status='paid', amount_paid=coalesce(amount_paid,0)+v.total
-    where id=v.attendee_id;
-  end if;
+  -- IMPORTANTE: bar y asistentes son sistemas independientes.
+  -- No tocamos status, amount_paid ni payment_photo_url del asistente.
+  -- La info del cierre queda en bar_closures (método, foto, etc).
 
   return json_build_object('ok',true,'total',v.total);
 end;

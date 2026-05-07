@@ -31,6 +31,8 @@ let allAttendeesXE = [];   // asistentes de todos los eventos (para Estadística
 let allClosuresXE  = [];   // cierres de cuenta de todos los eventos
 let allExpensesXE  = [];   // gastos de todos los eventos
 let allDrinksXE    = [];   // log de tragos (bar_drinks) de todos los eventos
+let blockedCards   = [];   // tarjetas bloqueadas (cross-event) — array de {slot,...}
+let allEventSettings = [];  // settings de todos los eventos — array {event_id, door_can_charge}
 let selectedEventStatsId = null; // evento seleccionado en la pestaña Estadísticas → Eventos
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -87,6 +89,10 @@ async function loadAll() {
     db.from('expenses').select('id,event_id,amount,description,created_at'),
     // Log de tragos (para stats de consumo por hora) — opcional, puede fallar si no hay migración
     db.from('bar_drinks').select('event_id,slot,amount,created_at'),
+    // Tarjetas bloqueadas — global, cross-event
+    db.from('blocked_cards').select('*').order('slot'),
+    // Settings de TODOS los eventos (para el toggle "portero cobra" en pestaña Eventos)
+    db.from('event_settings').select('event_id, door_can_charge'),
   ];
   if (eventId) {
     queries.push(
@@ -111,13 +117,18 @@ async function loadAll() {
   // bar_drinks puede no existir si no se corrió la migración todavía
   if (results[6] && !results[6].error && results[6].data) allDrinksXE = results[6].data;
   else if (results[6]?.error) { allDrinksXE = []; }
-  if (results[7]?.data) attendees = results[7].data;
-  if (results[8]?.data) barAccounts = results[8].data;
-  if (results[9]?.data) barClosures = results[9].data;
-  if (results[10]?.data) expenses = results[10].data;
-  if (results[11]?.data) tasks = results[11].data;
-  if (results[12]?.data) {
-    eventSettings = results[12].data || { door_can_charge: false, blocked_slots: [] };
+  // blocked_cards (global). Si la tabla no existe, fallback a event_settings.blocked_slots
+  if (results[7] && !results[7].error && results[7].data) blockedCards = results[7].data;
+  else if (results[7]?.error) { blockedCards = []; _blockedCardsTableSupported = false; }
+  // event_settings de todos los eventos (para columna toggle en pestaña Eventos)
+  if (results[8]?.data) allEventSettings = results[8].data;
+  if (results[9]?.data) attendees = results[9].data;
+  if (results[10]?.data) barAccounts = results[10].data;
+  if (results[11]?.data) barClosures = results[11].data;
+  if (results[12]?.data) expenses = results[12].data;
+  if (results[13]?.data) tasks = results[13].data;
+  if (results[14]?.data) {
+    eventSettings = results[14].data || { door_can_charge: false, blocked_slots: [] };
     if (!Array.isArray(eventSettings.blocked_slots)) eventSettings.blocked_slots = [];
   }
 
@@ -980,9 +991,16 @@ function renderAttendeesTable() {
   const search = document.getElementById('attSearch')?.value?.toLowerCase() || '';
   const statusF = document.getElementById('attStatusFilter')?.value || '';
 
-  // Contadores por estado
+  // Contadores por estado + ingresados
   const counters = document.getElementById('attStatusCounters');
   if (counters) {
+    // Excluyo a los organizadores del cálculo "adentro/faltan" (ellos no marcan ingreso/salida)
+    const trackable = attendees.filter(a => !a.is_organizer);
+    const adentro   = trackable.filter(a => a.entered && !a.exit_time).length;
+    const faltan    = trackable.filter(a => !a.entered).length;
+    const totalTrackable = trackable.length;
+    const pct       = totalTrackable > 0 ? Math.round((adentro / totalTrackable) * 100) : 0;
+
     const cfg = [
       { key: 'paid',       label: 'Pago',        color: '#1ed760', bg: '#0d1f0d', border: '#1a3a1a' },
       { key: 'in_process', label: 'En proceso',  color: '#f59e0b', bg: '#1f1900', border: '#3a2e00' },
@@ -990,7 +1008,28 @@ function renderAttendeesTable() {
       { key: 'crew',       label: 'Crew',        color: '#8b5cf6', bg: '#130d1f', border: '#2a1a3a' },
       { key: '__total',    label: 'Total',       color: '#f5f5f7', bg: '#181818', border: '#2a2a2a' },
     ];
-    counters.innerHTML = cfg.map(c => {
+
+    // Tarjeta especial "Adentro" con barra de progreso de fondo
+    const adentroCard = `
+      <div class="att-counter-progress" title="${adentro} de ${totalTrackable} (${pct}%)">
+        <div class="att-counter-progress-fill" style="width:${pct}%"></div>
+        <div class="att-counter-progress-content">
+          <span class="att-counter-progress-num">${adentro}</span>
+          <div class="att-counter-progress-meta">
+            <span class="att-counter-progress-label">Adentro</span>
+            <span class="att-counter-progress-pct">${pct}%</span>
+          </div>
+        </div>
+      </div>`;
+
+    // Tarjeta "Faltan"
+    const faltanCard = `
+      <div style="background:#1f1900;border:1px solid #3a2e00;border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
+        <span style="font-size:22px;font-weight:bold;color:#f59e0b">${faltan}</span>
+        <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Faltan</span>
+      </div>`;
+
+    const statusCards = cfg.map(c => {
       const n = c.key === '__total'
         ? attendees.length
         : attendees.filter(a => a.status === c.key).length;
@@ -999,6 +1038,8 @@ function renderAttendeesTable() {
         <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
       </div>`;
     }).join('');
+
+    counters.innerHTML = adentroCard + faltanCard + statusCards;
   }
 
   let list = attendees.filter(a => {
@@ -1354,14 +1395,23 @@ function renderExpenses() {
 function renderEvents() {
   const tbody = document.getElementById('eventsBody');
   if (!tbody) return;
-  tbody.innerHTML = events.map(ev => `
+  const settingsByEvent = Object.fromEntries((allEventSettings || []).map(s => [s.event_id, s]));
+  tbody.innerHTML = events.map(ev => {
+    const canCharge = !!(settingsByEvent[ev.id]?.door_can_charge);
+    return `
     <tr>
-      <td><strong>${ev.name}</strong></td>
-      <td>${ev.date}</td>
+      <td class="editable-cell" data-entity="event" data-id="${ev.id}" data-field="name" data-type="text"><strong>${ev.name}</strong></td>
+      <td class="editable-cell" data-entity="event" data-id="${ev.id}" data-field="date" data-type="date">${ev.date}</td>
       <td>${ev.is_active
         ? '<span class="status-pill" style="background:#1a3a1a;color:#1ed760">ACTIVO</span>'
         : '<span class="status-pill" style="background:#1c1c1c;color:#6b7280">Inactivo</span>'
       }</td>
+      <td>
+        <label class="task-checkbox" title="${canCharge ? 'Activado' : 'Desactivado'}: el portero puede cobrar cuentas de barra en este evento" onclick="event.stopPropagation()">
+          <input type="checkbox" onchange="toggleEventDoorCanCharge('${ev.id}', this.checked)" ${canCharge ? 'checked' : ''}/>
+          <span class="checkmark"></span>
+        </label>
+      </td>
       <td>
         <div class="row-actions">
           <button class="btn btn-sm" onclick="resetEventData('${ev.id}')" title="Reset total del evento (mantiene asistentes)" style="border-color:rgba(255,159,10,.35);color:#ffbf4a">
@@ -1371,8 +1421,27 @@ function renderEvents() {
           <button class="btn btn-sm btn-danger" onclick="deleteEvent('${ev.id}')" title="Eliminar">${icon('trash',15)}</button>
         </div>
       </td>
-    </tr>`).join('') || '<tr><td colspan="4" class="empty-state">Sin eventos. Creá uno.</td></tr>';
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="empty-state">Sin eventos. Creá uno.</td></tr>';
 }
+
+// Cambia door_can_charge para un evento específico desde la pestaña Eventos.
+async function toggleEventDoorCanCharge(eventId, value) {
+  const db = getDb();
+  const { error } = await db.from('event_settings').upsert({
+    event_id: eventId,
+    door_can_charge: !!value,
+  });
+  if (error) { toast('Error: ' + error.message, 'error'); renderEvents(); return; }
+  // Actualizar estado local
+  const i = (allEventSettings || []).findIndex(s => s.event_id === eventId);
+  if (i >= 0) allEventSettings[i].door_can_charge = !!value;
+  else allEventSettings.push({ event_id: eventId, door_can_charge: !!value });
+  // Si es el evento activo o el visualizado, sincronizar el flag
+  if (currentEvent()?.id === eventId) eventSettings.door_can_charge = !!value;
+  toast(value ? 'Portero puede cobrar' : 'Portero NO puede cobrar', 'success');
+}
+window.toggleEventDoorCanCharge = toggleEventDoorCanCharge;
 
 // ─── Inline cell editing ──────────────────────────────────────────────────────
 // Soporta entidades: attendee (default), expense, user.
@@ -1401,10 +1470,16 @@ document.addEventListener('click', async (e) => {
     const u = (typeof appUsers !== 'undefined' ? appUsers : []).find(x => x.id === id);
     if (!u) return;
     current = u[field] ?? '';
+  } else if (entity === 'event') {
+    const ev = events.find(e => e.id === id);
+    if (!ev) return;
+    current = ev[field] ?? '';
   }
 
   const input     = document.createElement('input');
-  input.type      = type === 'number' ? 'number' : (type === 'email' ? 'email' : 'text');
+  input.type      = type === 'date' ? 'date' :
+                    type === 'number' ? 'number' :
+                    type === 'email' ? 'email' : 'text';
   input.value     = current;
   input.className = 'inline-input';
   cell.innerHTML  = '';
@@ -1424,6 +1499,8 @@ document.addEventListener('click', async (e) => {
       await updateExpenseField(id, field, val);
     } else if (entity === 'user') {
       await updateUserField(id, field, val);
+    } else if (entity === 'event') {
+      await updateEventField(id, field, val);
     }
   };
   const cancel = () => {
@@ -1432,6 +1509,7 @@ document.addEventListener('click', async (e) => {
     if (entity === 'attendee') renderAttendeesTable();
     else if (entity === 'expense') renderExpenses();
     else if (entity === 'user') renderUsers();
+    else if (entity === 'event') renderEvents();
   };
   input.addEventListener('blur',  save);
   input.addEventListener('keydown', (ev) => {
@@ -1447,6 +1525,25 @@ async function updateExpenseField(id, field, value) {
   const i = expenses.findIndex(x => x.id === id);
   if (i >= 0) expenses[i][field] = value;
   renderExpenses();
+}
+
+async function updateEventField(id, field, value) {
+  // Validación básica
+  if (field === 'name' && (!value || !value.trim())) {
+    toast('El nombre no puede estar vacío', 'error');
+    renderEvents();
+    return;
+  }
+  const db = getDb();
+  const { error } = await db.from('events').update({ [field]: value }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); renderEvents(); return; }
+  const i = events.findIndex(e => e.id === id);
+  if (i >= 0) events[i][field] = value;
+  // Si renombramos el evento activo o el que estamos viendo, refrescar también el picker / título
+  if (activeEvent?.id === id)  activeEvent[field]  = value;
+  if (viewingEvent?.id === id) viewingEvent[field] = value;
+  toast('Evento actualizado', 'success');
+  renderAll();
 }
 
 async function updateUserField(id, field, value) {
@@ -2042,14 +2139,8 @@ function openNewEvent() {
       remind_from: '22:00', remind_until: '04:00',
     });
 
-    // Event settings default (incluye blocked_slots vacío)
-    const settingsPayload = { event_id: newEvent.id, door_can_charge: false };
-    if (_blockedSlotsColSupported) settingsPayload.blocked_slots = [];
-    const { error: settingsErr } = await db.from('event_settings').insert(settingsPayload);
-    if (settingsErr && _isMissingBlockedSlotsError(settingsErr)) {
-      _blockedSlotsColSupported = false;
-      await db.from('event_settings').insert({ event_id: newEvent.id, door_can_charge: false });
-    }
+    // Event settings default (door_can_charge sólo — blocked_cards es global)
+    await db.from('event_settings').insert({ event_id: newEvent.id, door_can_charge: false });
 
     toast(`Evento "${newEvent.name}" creado con ${DEFAULT_BAR_ACCOUNTS} cuentas y crew por defecto`, 'success');
     closeModal();
@@ -2764,7 +2855,8 @@ function openMoreSheet() {
   const currentTab = document.querySelector('.tab-panel.active')?.id.replace('tab-', '') || 'dashboard';
   // Las pestañas de Estadísticas (Personas, Eventos-stats) no se muestran en mobile —
   // se accede sólo desde desktop o escribiendo el hash en la URL.
-  const HIDDEN_ON_MOBILE = ['personas', 'eventos-stats'];
+  // Tareas está deshabilitada por ahora.
+  const HIDDEN_ON_MOBILE = ['personas', 'eventos-stats', 'tareas'];
   const items = Object.keys(TAB_TITLES)
     .filter(key => !HIDDEN_ON_MOBILE.includes(key))
     .map(key => `
@@ -3236,36 +3328,29 @@ function openEditTask(taskId) {
 window.openEditTask = openEditTask;
 
 // ─── Configuración del portero ─────────────────────────────────────────────────
-let _blockedSlotsColSupported = true;
-
-function _isMissingBlockedSlotsError(err) {
-  if (!err) return false;
-  const m = String(err.message || err || '').toLowerCase();
-  return m.includes('blocked_slots');
-}
-
-function _showMissingBlockedSlotsHint() {
-  toast("Falta la columna 'blocked_slots'. Correlo en Supabase → SQL Editor: alter table event_settings add column if not exists blocked_slots jsonb default '[]'::jsonb;", 'error');
-}
-
 async function saveDoorSettings(canCharge) {
   if (!activeEvent) return;
   const db = getDb();
   const payload = { event_id: currentEvent().id, door_can_charge: canCharge };
-  if (_blockedSlotsColSupported) payload.blocked_slots = eventSettings.blocked_slots || [];
   const { error } = await db.from('event_settings').upsert(payload);
-  if (error && _isMissingBlockedSlotsError(error)) {
-    _blockedSlotsColSupported = false;
-    // Reintentar sin la columna faltante
-    await db.from('event_settings').upsert({ event_id: currentEvent().id, door_can_charge: canCharge });
-  }
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
   eventSettings.door_can_charge = canCharge;
 }
 
-// ─── Tarjetas bloqueadas ─────────────────────────────────────────────────────
+// ─── Tarjetas bloqueadas (GLOBALES, cross-event) ─────────────────────────────
+let _blockedCardsTableSupported = true;
+
+function _isMissingBlockedCardsTable(err) {
+  const m = String(err?.message || err || '').toLowerCase();
+  return m.includes("blocked_cards") && (m.includes('does not exist') || m.includes('not find') || m.includes('schema cache'));
+}
+
+function _showMissingBlockedCardsHint() {
+  toast("Falta la tabla 'blocked_cards'. Correlo en Supabase → migration_blocked_cards_global.sql", 'error');
+}
+
 function getBlockedSlots() {
-  const arr = eventSettings?.blocked_slots;
-  return Array.isArray(arr) ? arr.map(n => Number(n)).filter(n => Number.isFinite(n)) : [];
+  return blockedCards.map(b => Number(b.slot)).filter(n => Number.isFinite(n));
 }
 
 function renderBlockedCards() {
@@ -3301,50 +3386,42 @@ function renderBlockedCards() {
 }
 
 async function addBlockedCard(slot) {
-  if (!activeEvent) { toast('No hay evento activo', 'error'); return; }
   const n = parseInt(slot, 10);
   if (!Number.isFinite(n) || n < 1) { toast('Número inválido', 'error'); return; }
-  const current = getBlockedSlots();
-  if (current.includes(n)) { toast('Esa tarjeta ya está bloqueada', 'warning'); return; }
-  const next = [...current, n].sort((a, b) => a - b);
+  if (getBlockedSlots().includes(n)) { toast('Esa tarjeta ya está bloqueada', 'warning'); return; }
   const db = getDb();
-  const { error } = await db.from('event_settings').upsert({
-    event_id: currentEvent().id,
-    door_can_charge: eventSettings.door_can_charge || false,
-    blocked_slots: next,
-  });
+  const { data, error } = await db.from('blocked_cards')
+    .insert({ slot: n })
+    .select()
+    .single();
   if (error) {
-    if (_isMissingBlockedSlotsError(error)) {
-      _blockedSlotsColSupported = false;
-      _showMissingBlockedSlotsHint();
+    if (_isMissingBlockedCardsTable(error)) {
+      _blockedCardsTableSupported = false;
+      _showMissingBlockedCardsHint();
       return;
     }
-    toast('Error: ' + error.message, 'error'); return;
+    toast('Error: ' + error.message, 'error');
+    return;
   }
-  eventSettings.blocked_slots = next;
+  blockedCards = [...blockedCards, data].sort((a, b) => a.slot - b.slot);
   renderBlockedCards();
   toast(`Tarjeta ${padId(n)} bloqueada`, 'success');
 }
 
 async function unblockCard(slot) {
-  if (!activeEvent) return;
   const n = parseInt(slot, 10);
-  const next = getBlockedSlots().filter(x => x !== n);
   const db = getDb();
-  const { error } = await db.from('event_settings').upsert({
-    event_id: currentEvent().id,
-    door_can_charge: eventSettings.door_can_charge || false,
-    blocked_slots: next,
-  });
+  const { error } = await db.from('blocked_cards').delete().eq('slot', n);
   if (error) {
-    if (_isMissingBlockedSlotsError(error)) {
-      _blockedSlotsColSupported = false;
-      _showMissingBlockedSlotsHint();
+    if (_isMissingBlockedCardsTable(error)) {
+      _blockedCardsTableSupported = false;
+      _showMissingBlockedCardsHint();
       return;
     }
-    toast('Error: ' + error.message, 'error'); return;
+    toast('Error: ' + error.message, 'error');
+    return;
   }
-  eventSettings.blocked_slots = next;
+  blockedCards = blockedCards.filter(b => Number(b.slot) !== n);
   renderBlockedCards();
   toast(`Tarjeta ${padId(n)} desbloqueada`, 'success');
 }

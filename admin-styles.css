@@ -709,6 +709,54 @@ body.modal-open { overflow: hidden; position: relative; }
   filter: drop-shadow(0 2px 8px rgba(255,255,255,.18));
 }
 
+/* Counter "Adentro" con barra de progreso de fondo */
+.att-counter-progress {
+  position: relative;
+  background: #0d1f0d;
+  border: 1px solid #1a3a1a;
+  border-radius: 12px;
+  padding: 10px 16px;
+  overflow: hidden;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+}
+.att-counter-progress-fill {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  background: linear-gradient(90deg, rgba(48,209,88,.42) 0%, rgba(48,209,88,.18) 100%);
+  transition: width .35s ease;
+  z-index: 0;
+}
+.att-counter-progress-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.att-counter-progress-num {
+  font-size: 22px;
+  font-weight: bold;
+  color: #1ed760;
+}
+.att-counter-progress-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.att-counter-progress-label {
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.att-counter-progress-pct {
+  font-size: 11px;
+  color: #1ed760;
+  font-weight: 600;
+}
+
 /* Black list chips y razones */
 .bl-chip {
   display: inline-block;
