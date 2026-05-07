@@ -1488,11 +1488,24 @@ document.addEventListener('click', async (e) => {
   input.select?.();
 
   let saved = false;
+  const renderForEntity = () => {
+    if (entity === 'attendee') renderAttendeesTable();
+    else if (entity === 'expense') renderExpenses();
+    else if (entity === 'user') renderUsers();
+    else if (entity === 'event') renderEvents();
+  };
   const save = async () => {
     if (saved) return;
     saved = true;
     const raw = input.value;
     const val = type === 'number' ? (parseFloat(raw) || 0) : String(raw).trim();
+    // Si el valor no cambió, no llamar a la DB ni mostrar toast — solo cerrar el editor.
+    // Esto evita que un blur accidental "guarde" el valor original cuando el usuario
+    // todavía no había escrito nada.
+    if (String(val) === String(current ?? '')) {
+      renderForEntity();
+      return;
+    }
     if (entity === 'attendee') {
       await updateAttendeeField(id, field, val);
     } else if (entity === 'expense') {
@@ -1506,10 +1519,7 @@ document.addEventListener('click', async (e) => {
   const cancel = () => {
     if (saved) return;
     saved = true;
-    if (entity === 'attendee') renderAttendeesTable();
-    else if (entity === 'expense') renderExpenses();
-    else if (entity === 'user') renderUsers();
-    else if (entity === 'event') renderEvents();
+    renderForEntity();
   };
   input.addEventListener('blur',  save);
   input.addEventListener('keydown', (ev) => {
@@ -1543,7 +1553,9 @@ async function updateEventField(id, field, value) {
   if (activeEvent?.id === id)  activeEvent[field]  = value;
   if (viewingEvent?.id === id) viewingEvent[field] = value;
   toast('Evento actualizado', 'success');
-  renderAll();
+  // Actualizamos sólo lo necesario, no el dashboard entero (evita destruir otros editores activos)
+  renderEvents();
+  renderEventPicker();
 }
 
 async function updateUserField(id, field, value) {
@@ -2080,12 +2092,24 @@ const DEFAULT_BAR_ACCOUNTS = 150;
 function openNewEvent() {
   showModal(`
     <h3 style="margin:0 0 18px">Nuevo evento</h3>
-    <form id="eventForm">
-      <div class="form-group"><label>Nombre del evento *</label><input name="name" required autofocus/></div>
-      <div class="form-group"><label>Fecha *</label><input name="date" type="date" value="${new Date().toISOString().slice(0,10)}" required/></div>
+    <form id="eventForm" autocomplete="off">
+      <div class="form-group">
+        <label>Nombre del evento *</label>
+        <input name="name" required autofocus
+               autocomplete="off" autocorrect="off" spellcheck="false"
+               data-1p-ignore="true" data-lpignore="true" data-form-type="other"/>
+      </div>
+      <div class="form-group">
+        <label>Fecha *</label>
+        <input name="date" type="date" value="${new Date().toISOString().slice(0,10)}" required
+               autocomplete="off" data-1p-ignore="true" data-lpignore="true"/>
+      </div>
       <p style="font-size:12px;color:#8e8e93;margin:0 0 16px;line-height:1.4">
         Se crean ${DEFAULT_BAR_ACCOUNTS} cuentas de barra, el crew habitual y los gastos por defecto (todos en 0).
       </p>
+      <!-- Inputs trampa ocultos para despistar a 1Password / LastPass -->
+      <input type="text" name="__fake_user" autocomplete="username" style="display:none" tabindex="-1" aria-hidden="true"/>
+      <input type="password" name="__fake_pass" autocomplete="new-password" style="display:none" tabindex="-1" aria-hidden="true"/>
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
         <button type="submit" class="btn btn-primary">Crear y activar</button>
@@ -2095,6 +2119,9 @@ function openNewEvent() {
   document.getElementById('eventForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    // Quitar campos trampa antes de procesar
+    fd.delete('__fake_user');
+    fd.delete('__fake_pass');
     const db = getDb();
     // Desactivar los demás
     await db.from('events').update({ is_active: false }).eq('is_active', true);
