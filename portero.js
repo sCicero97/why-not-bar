@@ -53,44 +53,25 @@ async function loadData() {
 }
 
 function setupRealtime() {
-  const db = getDb();
-  db.channel('portero-live')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'attendees', filter: `event_id=eq.${activeEvent.id}` },
-      (p) => {
-        if (p.eventType === 'UPDATE') {
-          const i = attendees.findIndex(a => a.id === p.new.id);
-          if (i >= 0) attendees[i] = { ...attendees[i], ...p.new };
-        } else if (p.eventType === 'INSERT') {
-          attendees.push(p.new);
-        } else if (p.eventType === 'DELETE') {
-          const i = attendees.findIndex(a => a.id === p.old.id);
-          if (i >= 0) attendees.splice(i, 1);
-        }
-        renderAll();
-        if (selectedPersonId === p.new?.id) renderModal(p.new.id);
-      })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'bar_accounts', filter: `event_id=eq.${activeEvent.id}` },
-      (p) => {
-        if (p.eventType === 'UPDATE') {
-          const i = barAccounts.findIndex(a => a.id === p.new.id);
-          if (i >= 0) barAccounts[i] = { ...barAccounts[i], ...p.new };
-        }
-        renderAll();
-        if (selectedPersonId) renderModal(selectedPersonId);
-      })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_settings', filter: `event_id=eq.${activeEvent.id}` },
-      (p) => {
-        if (p.new) eventSettings = p.new;
-        renderAll();
-        if (selectedPersonId) renderModal(selectedPersonId);
-      })
-    .subscribe();
-
-  // Polling de respaldo cada 8s
-  setInterval(() => loadData(), 8000);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') loadData();
-  });
+  if (!activeEvent) return;
+  // Cubrimos TODAS las tablas que afectan al portero. Cualquier cambio dispara
+  // un loadData() debounced — siempre traemos joins frescos (asistentes con
+  // bar_accounts info actualizada, deudas, etc).
+  setupRealtimeAutoReload(
+    'portero-live',
+    [
+      { name: 'attendees',      scoped: true },
+      { name: 'bar_accounts',   scoped: true },
+      { name: 'bar_closures',   scoped: true },  // saber cuándo se cobró una cuenta
+      { name: 'event_settings', scoped: true },
+      { name: 'blocked_cards',  scoped: false }, // tarjetas bloqueadas globales
+    ],
+    () => activeEvent?.id,
+    async () => {
+      await loadData();
+      if (selectedPersonId) renderModal(selectedPersonId);
+    },
+  );
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────

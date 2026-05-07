@@ -73,23 +73,21 @@ async function reloadFromDB() {
 }
 
 function setupRealtime() {
-  const db = getDb();
-  db.channel('bar-live')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'bar_accounts',
-        filter: `event_id=eq.${activeEvent.id}` }, reloadFromDB)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'bar_closures',
-        filter: `event_id=eq.${activeEvent.id}` }, reloadFromDB)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'attendees',
-        filter: `event_id=eq.${activeEvent.id}` }, reloadFromDB)
-    .subscribe();
-
-  // Polling de respaldo cada 8s (por si el realtime se cae)
-  setInterval(() => loadData(), 8000);
-
-  // Recargar cuando la pantalla vuelve al foco (ej: se desbloquea el teléfono)
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') loadData();
-  });
+  if (!activeEvent) return;
+  // Cubrimos todas las tablas que afectan a la barra. Cualquier cambio dispara
+  // un loadData() debounced — los joins (attendees(name)) quedan frescos.
+  setupRealtimeAutoReload(
+    'bar-live',
+    [
+      { name: 'attendees',      scoped: true },
+      { name: 'bar_accounts',   scoped: true },
+      { name: 'bar_closures',   scoped: true },
+      { name: 'event_settings', scoped: true },
+      { name: 'blocked_cards',  scoped: false },
+    ],
+    () => activeEvent?.id,
+    () => loadData(),
+  );
 }
 
 function renderIfNotHolding() {

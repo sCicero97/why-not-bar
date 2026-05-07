@@ -16,6 +16,94 @@ const VAPID_PUBLIC_KEY = 'BO47pb3rswPO0Qkzp05k30WH8kQjJkG9IvloCIqlhtA5geOwvXYoMR
 
 const STORAGE_BUCKET = 'payment-photos';
 
+// ─── Realtime helper común a las 3 apps ──────────────────────────────────────
+// Suscribe a Postgres changes en varias tablas y dispara un reload (debounced)
+// del callback ante cualquier cambio. Maneja reconexión automática al volver
+// online o cambiar de tab, y un fallback de polling ligero cada 15s.
+let _liveStatus = 'connecting'; // 'connecting' | 'live' | 'offline'
+function _setLiveStatus(s) {
+  _liveStatus = s;
+  let dot = document.getElementById('liveStatusDot');
+  if (!dot) {
+    dot = document.createElement('div');
+    dot.id = 'liveStatusDot';
+    dot.title = 'Estado del realtime';
+    dot.style.cssText = 'position:fixed;bottom:8px;right:8px;width:10px;height:10px;border-radius:50%;z-index:99999;pointer-events:none;transition:background .2s,box-shadow .2s;opacity:.55';
+    document.body.appendChild(dot);
+  }
+  if (s === 'live') {
+    dot.style.background = '#30d158';
+    dot.style.boxShadow  = '0 0 8px rgba(48,209,88,.6)';
+    dot.title = 'Realtime conectado';
+  } else if (s === 'offline') {
+    dot.style.background = '#ff453a';
+    dot.style.boxShadow  = '0 0 8px rgba(255,69,58,.6)';
+    dot.title = 'Realtime desconectado — reintentando…';
+  } else {
+    dot.style.background = '#f59e0b';
+    dot.style.boxShadow  = '0 0 8px rgba(245,158,11,.6)';
+    dot.title = 'Conectando realtime…';
+  }
+}
+
+function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
+  const db = getDb();
+  let _timer = null;
+  let _channel = null;
+  let _retryDelay = 2000; // backoff exponencial al fallar
+
+  // Debounce: si llegan varios cambios seguidos, hacer un solo reload.
+  function scheduleReload() {
+    if (_timer) clearTimeout(_timer);
+    _timer = setTimeout(() => { _timer = null; Promise.resolve(reload()).catch(() => {}); }, 250);
+  }
+
+  function buildChannel() {
+    const eid = getEventId && getEventId();
+    const ch = db.channel(channelName + '-' + (eid || 'global') + '-' + Date.now());
+    for (const t of tables) {
+      const cfg = { event: '*', schema: 'public', table: t.name };
+      if (t.scoped !== false && eid) cfg.filter = `event_id=eq.${eid}`;
+      ch.on('postgres_changes', cfg, scheduleReload);
+    }
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        _setLiveStatus('live');
+        _retryDelay = 2000;
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        _setLiveStatus('offline');
+        // Cerrar y reabrir con backoff exponencial (max 30s)
+        try { db.removeChannel(_channel); } catch (_) {}
+        const delay = Math.min(_retryDelay, 30000);
+        _retryDelay = Math.min(_retryDelay * 2, 30000);
+        setTimeout(() => { _channel = buildChannel(); }, delay);
+        // Mientras estamos offline, hacer un reload para no quedar con datos viejos
+        scheduleReload();
+      }
+    });
+    return ch;
+  }
+
+  _setLiveStatus('connecting');
+  _channel = buildChannel();
+
+  // Polling fallback: cada 15s, por si websockets se caen silenciosamente
+  setInterval(scheduleReload, 15000);
+
+  // Al volver online, recargar y forzar reconexión
+  window.addEventListener('online', () => {
+    scheduleReload();
+    try { db.removeChannel(_channel); } catch (_) {}
+    _channel = buildChannel();
+  });
+  window.addEventListener('offline', () => _setLiveStatus('offline'));
+
+  // Al volver visible la tab, recargar
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') scheduleReload();
+  });
+}
+
 // ─── Supabase client ──────────────────────────────────────────────────────────
 let _db = null;
 function getDb() {
@@ -25,17 +113,19 @@ function getDb() {
     throw new Error('SETUP_REQUIRED');
   }
   _db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+      storage: window.localStorage,
+      storageKey: 'whynot-supabase-auth',
+    },
     realtime: { timeout: 20000 },
   });
-  // Detectar expiración de sesión: cuando el token deja de ser válido,
-  // mostrar un toast y redirigir al login después de 2.5s.
-  _db.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
-      try { toast('Tu sesión expiró. Iniciá sesión otra vez.', 'warning'); } catch (_) {}
-      setTimeout(() => { window.location.href = '/'; }, 2500);
-    }
-  });
+  // No redirigimos automáticamente al login en SIGNED_OUT/expiración:
+  // el usuario quiere que las sesiones persistan lo máximo posible.
+  // Si el token expira, autoRefreshToken intenta renovarlo. Si falla, los
+  // queries van a empezar a devolver errores 401 — el usuario puede recargar.
   return _db;
 }
 
@@ -83,7 +173,15 @@ function redirectToRoleApp(role) {
 
 async function requireAuth(allowedRoles) {
   const db = getDb();
-  const { data: { session } } = await db.auth.getSession();
+  let { data: { session } } = await db.auth.getSession();
+
+  // Si no hay sesión local, intentar refresh por si quedó un refresh_token guardado
+  if (!session) {
+    try {
+      const { data } = await db.auth.refreshSession();
+      session = data?.session || null;
+    } catch (_) {}
+  }
 
   if (!session) {
     showLoginModal(allowedRoles);
@@ -96,10 +194,20 @@ async function requireAuth(allowedRoles) {
     .eq('id', session.user.id)
     .single();
 
+  // Si la query del perfil falla (ej: red intermitente), NO cerramos sesión.
+  // Sólo lo hacemos si el error es claramente de auth/permiso.
   if (error || !profile) {
-    await db.auth.signOut();
-    showLoginModal(allowedRoles);
-    return null;
+    const msg = String(error?.message || '').toLowerCase();
+    const isAuthError = msg.includes('jwt') || msg.includes('expired') || msg.includes('unauthor') || msg.includes('not authenticated');
+    if (isAuthError) {
+      await db.auth.signOut();
+      showLoginModal(allowedRoles);
+      return null;
+    }
+    // Error transitorio: igual dejamos al usuario adentro con info mínima
+    console.warn('[auth] No se pudo cargar el perfil (transitorio):', msg);
+    _currentUser = { id: session.user.id, email: session.user.email, role: 'bar', displayName: session.user.email };
+    return _currentUser;
   }
 
   const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];

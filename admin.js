@@ -161,38 +161,28 @@ async function healDanglingBarAccountLinks() {
 
 function setupRealtime() {
   if (!currentEvent()) return;
-  const db = getDb();
-  const eid = currentEvent().id;
-
-  db.channel('admin-live')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'attendees', filter: `event_id=eq.${eid}` },
-      (p) => { applyChange(attendees, p); renderAll(); })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'bar_accounts', filter: `event_id=eq.${eid}` },
-      (p) => { applyChange(barAccounts, p); renderAll(); })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'bar_closures', filter: `event_id=eq.${eid}` },
-      (p) => { applyChange(barClosures, p); renderAll(); })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `event_id=eq.${eid}` },
-      (p) => { applyChange(expenses, p); renderAll(); })
-    .subscribe();
-
-  // Polling fallback: reload all data every 8s para mantener info siempre fresca
-  setInterval(() => loadAll(), 8000);
-
-  // Recargar al volver a la pestaña
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') loadAll();
-  });
-}
-
-function applyChange(arr, payload) {
-  if (payload.eventType === 'INSERT') arr.push(payload.new);
-  else if (payload.eventType === 'UPDATE') {
-    const i = arr.findIndex(x => x.id === payload.new.id);
-    if (i >= 0) arr[i] = { ...arr[i], ...payload.new };
-  } else if (payload.eventType === 'DELETE') {
-    const i = arr.findIndex(x => x.id === payload.old.id);
-    if (i >= 0) arr.splice(i, 1);
-  }
+  // Cubrimos TODAS las tablas que pueden afectar la UI del admin.
+  // Cualquier cambio dispara loadAll() (debounced) — así siempre tenemos los joins frescos.
+  setupRealtimeAutoReload(
+    'admin-live',
+    [
+      // Tablas scope-de-evento (filter: event_id=eq.X)
+      { name: 'attendees',      scoped: true },
+      { name: 'bar_accounts',   scoped: true },
+      { name: 'bar_closures',   scoped: true },
+      { name: 'expenses',       scoped: true },
+      { name: 'tasks',          scoped: true },
+      { name: 'event_settings', scoped: true },
+      { name: 'bar_drinks',     scoped: true },
+      // Tablas globales (sin filtro de event_id)
+      { name: 'events',         scoped: false },
+      { name: 'blacklist',      scoped: false },
+      { name: 'blocked_cards',  scoped: false },
+      { name: 'profiles',       scoped: false },
+    ],
+    () => currentEvent()?.id,
+    () => loadAll(),
+  );
 }
 
 // ─── Render all ───────────────────────────────────────────────────────────────
