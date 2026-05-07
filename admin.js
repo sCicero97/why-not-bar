@@ -196,6 +196,14 @@ function applyChange(arr, payload) {
 }
 
 // ─── Render all ───────────────────────────────────────────────────────────────
+// Si hay un editor inline activo, los renders de la entidad correspondiente
+// se saltean para no destruir el input mientras el usuario tipea.
+let _activeInlineEdit = null; // { entity, id } o null
+
+function _hasActiveEdit(entity) {
+  return _activeInlineEdit && _activeInlineEdit.entity === entity;
+}
+
 function renderAll() {
   renderDashboard();
   renderAttendeesTable();
@@ -333,8 +341,10 @@ function renderEventsStats() {
     return;
   }
 
-  const sorted = [...events].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const statsByEv = sorted.map(computeEventStats);
+  const sorted = [...events].sort((a, b) => (b.date || '').localeCompare(a.date || ''));     // desc (tabla, dropdown)
+  const sortedAsc = [...events].sort((a, b) => (a.date || '').localeCompare(b.date || ''));   // asc (gráfico izq→der)
+  const statsByEv    = sorted.map(computeEventStats);
+  const statsByEvAsc = sortedAsc.map(computeEventStats);
 
   // Totales agregados
   const totAccesses = statsByEv.reduce((s, x) => s + x.accesses, 0);
@@ -372,7 +382,7 @@ function renderEventsStats() {
   const compareBarW = 44;
   const compareW = Math.max(360, statsByEv.length * compareSlot + 40);
   const compareH = 240;
-  const compareBars = statsByEv.map((s, i) => {
+  const compareBars = statsByEvAsc.map((s, i) => {
     const bh = Math.round(((compareH - 80) * Math.abs(s.profit)) / maxProfit);
     const xCenter = 20 + i * compareSlot + compareSlot / 2;
     const x = xCenter - compareBarW / 2;
@@ -969,7 +979,11 @@ function renderDashboard() {
   setText('d-expenses',    formatMoney(expTotal));
   setText('d-netTotal',    formatMoney(netTotal));
   setText('d-attendees',   attendees.length);
-  setText('d-entered',     attendees.filter(a => a.entered).length);
+  // Ingresaron: número + porcentaje (excluye organizadores que no marcan ingreso)
+  const trackable = attendees.filter(a => !a.is_organizer);
+  const enteredCount = trackable.filter(a => a.entered).length;
+  const enteredPct = trackable.length ? Math.round((enteredCount / trackable.length) * 100) : 0;
+  setText('d-entered', `${enteredCount} (${enteredPct}%)`);
   setText('d-openAccs',    openAccounts.filter(a => a.total > 0).length);
   setText('d-closedAccs',  barClosures.length);
   setText('d-q160', q160); setText('d-q260', q260); setText('d-q360', q360);
@@ -988,6 +1002,7 @@ function renderDashboard() {
 
 // ─── Attendees table ──────────────────────────────────────────────────────────
 function renderAttendeesTable() {
+  if (_hasActiveEdit('attendee')) return; // preservar input inline activo
   const search = document.getElementById('attSearch')?.value?.toLowerCase() || '';
   const statusF = document.getElementById('attStatusFilter')?.value || '';
 
@@ -1357,6 +1372,7 @@ function wireBarRowHold() {
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
 function renderExpenses() {
+  if (_hasActiveEdit('expense')) return; // preservar input inline activo
   const tbody = document.getElementById('expensesBody');
   if (!tbody) return;
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
@@ -1393,6 +1409,7 @@ function renderExpenses() {
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 function renderEvents() {
+  if (_hasActiveEdit('event')) return; // no destruir el input mientras se edita
   const tbody = document.getElementById('eventsBody');
   if (!tbody) return;
   const settingsByEvent = Object.fromEntries((allEventSettings || []).map(s => [s.event_id, s]));
@@ -1482,10 +1499,20 @@ document.addEventListener('click', async (e) => {
                     type === 'email' ? 'email' : 'text';
   input.value     = current;
   input.className = 'inline-input';
+  // Bloquear password managers que se cuelan en inputs sueltos
+  input.setAttribute('autocomplete', 'off');
+  input.setAttribute('autocorrect', 'off');
+  input.setAttribute('spellcheck', 'false');
+  input.setAttribute('data-1p-ignore', 'true');
+  input.setAttribute('data-lpignore', 'true');
+  input.setAttribute('data-form-type', 'other');
   cell.innerHTML  = '';
   cell.appendChild(input);
   input.focus();
   input.select?.();
+
+  // Marcar edición activa para que loadAll/realtime no destruyan el input
+  _activeInlineEdit = { entity, id, field };
 
   let saved = false;
   const renderForEntity = () => {
@@ -1494,18 +1521,22 @@ document.addEventListener('click', async (e) => {
     else if (entity === 'user') renderUsers();
     else if (entity === 'event') renderEvents();
   };
+  const finish = () => {
+    // Liberar el guard global ANTES de renderizar para que el render efectivamente reconstruya.
+    _activeInlineEdit = null;
+  };
   const save = async () => {
     if (saved) return;
     saved = true;
     const raw = input.value;
     const val = type === 'number' ? (parseFloat(raw) || 0) : String(raw).trim();
     // Si el valor no cambió, no llamar a la DB ni mostrar toast — solo cerrar el editor.
-    // Esto evita que un blur accidental "guarde" el valor original cuando el usuario
-    // todavía no había escrito nada.
     if (String(val) === String(current ?? '')) {
+      finish();
       renderForEntity();
       return;
     }
+    finish();
     if (entity === 'attendee') {
       await updateAttendeeField(id, field, val);
     } else if (entity === 'expense') {
@@ -1519,6 +1550,7 @@ document.addEventListener('click', async (e) => {
   const cancel = () => {
     if (saved) return;
     saved = true;
+    finish();
     renderForEntity();
   };
   input.addEventListener('blur',  save);
@@ -2575,6 +2607,7 @@ const ROLE_LABELS = { admin: 'Admin', bar: 'Barra', door: 'Portero' };
 const ROLE_COLORS = { admin: '#ff9f0a', bar: '#30d158', door: '#64a9ff' };
 
 function renderUsers() {
+  if (_hasActiveEdit('user')) return; // preservar input inline activo
   const tbody = document.getElementById('usersBody');
   if (!tbody) return;
 
