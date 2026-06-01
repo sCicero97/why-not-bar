@@ -2950,9 +2950,9 @@ function activateTab(tab, opts = {}) {
       b.classList.toggle('active', b.dataset.tab === tab);
     }
   });
-  // Título en topbar
-  const titleEl = document.getElementById('topbarTitle');
-  if (titleEl) titleEl.textContent = TAB_TITLES[tab] || '';
+  // En mobile, el botón "Más" del bottom-tabbar muestra dinámicamente el nombre
+  // de la pestaña actual cuando es una sub-pestaña (Eventos, Tarjetas, etc).
+  updateMoreButtonLabel(tab);
   // Cerrar sidebar en mobile al navegar
   closeSidebar();
   // Cerrar bottom sheet
@@ -2972,6 +2972,26 @@ function closeSidebar() {
 }
 
 // ─── Bottom sheet ("Más") para mobile ─────────────────────────────────────────
+// Cambia dinámicamente el label/ícono del botón "Más" del bottom-tabbar:
+// si estoy en una sub-pestaña (Eventos, Tarjetas, etc), el botón refleja eso.
+function updateMoreButtonLabel(currentTab) {
+  const btn = document.getElementById('bottomMoreBtn');
+  if (!btn) return;
+  const labelEl = document.getElementById('bottomMoreLabel');
+  const iconEl  = document.getElementById('bottomMoreIcon');
+  const HIDDEN_ON_MOBILE = ['personas', 'eventos-stats'];
+  const inPrimary = PRIMARY_MOBILE_TABS.includes(currentTab);
+  if (inPrimary || HIDDEN_ON_MOBILE.includes(currentTab)) {
+    if (labelEl) labelEl.textContent = btn.dataset.defaultLabel || 'Más';
+    if (iconEl)  iconEl.innerHTML = `<use href="#i-${btn.dataset.defaultIcon || 'menu'}"/>`;
+    btn.classList.remove('active');
+  } else {
+    if (labelEl) labelEl.textContent = TAB_TITLES[currentTab] || 'Más';
+    if (iconEl)  iconEl.innerHTML = `<use href="#i-${TAB_ICONS[currentTab] || 'menu'}"/>`;
+    btn.classList.add('active');
+  }
+}
+
 function openMoreSheet() {
   let sheet = document.getElementById('moreSheet');
   if (!sheet) {
@@ -3110,9 +3130,6 @@ function setupUI() {
     renderAttendeesTable();
   });
 
-  // Título inicial
-  const titleEl = document.getElementById('topbarTitle');
-  if (titleEl) titleEl.textContent = TAB_TITLES.dashboard;
 }
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────

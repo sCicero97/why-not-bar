@@ -257,7 +257,7 @@ function showLoginModal(allowedRoles) {
     <div class="login-screen">
       <div class="login-card">
         <div class="login-logo">
-          <div class="brand-dot"></div>
+          <img src="./WN%20Logo%20Alpha.png" alt="Why Not" class="brand-logo brand-logo-lg"/>
           <h1>Why Not</h1>
         </div>
         <p class="login-role">${label}</p>

@@ -225,7 +225,7 @@
   <!-- ═══════════ SIDEBAR (desktop) ═══════════ -->
   <aside class="sidebar" id="sidebar">
     <header class="sidebar-brand">
-      <div class="brand-dot" style="background:#ff453a;box-shadow:0 0 18px rgba(255,69,58,.65)"></div>
+      <img src="./WN%20Logo%20Alpha.png" alt="Why Not" class="brand-logo"/>
       <div class="sidebar-brand-text">
         <h1>Why Not</h1>
         <div class="event-picker-wrap">
@@ -315,10 +315,9 @@
   <!-- ═══════════ MAIN AREA ═══════════ -->
   <main class="main-area">
 
-    <!-- Top bar (minimal, floating glass) -->
-    <header class="glass-topbar">
+    <!-- Top bar (sólo en mobile, sirve para el event picker) -->
+    <header class="glass-topbar mobile-only-topbar">
       <div class="topbar-title-wrap">
-        <div class="topbar-title" id="topbarTitle">Dashboard</div>
         <div class="event-picker-wrap mobile-only-picker">
           <button class="event-picker-btn" id="eventPickerBtnMobile" type="button">
             <span class="event-picker-status" id="eventPickerStatusMobile"></span>
@@ -327,9 +326,6 @@
           </button>
           <div class="event-picker-menu" id="eventPickerMenuMobile" hidden></div>
         </div>
-      </div>
-
-      <div class="topbar-actions">
       </div>
     </header>
 
@@ -617,9 +613,9 @@
         <svg width="22" height="22"><use href="#i-receipt"/></svg>
         <span>Gastos</span>
       </button>
-      <button class="bottom-tab" id="bottomMoreBtn">
-        <svg width="22" height="22"><use href="#i-menu"/></svg>
-        <span>Más</span>
+      <button class="bottom-tab" id="bottomMoreBtn" data-default-label="Más" data-default-icon="menu">
+        <svg width="22" height="22" id="bottomMoreIcon"><use href="#i-menu"/></svg>
+        <span id="bottomMoreLabel">Más</span>
       </button>
     </nav>
 
