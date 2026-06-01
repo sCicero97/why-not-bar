@@ -54,17 +54,26 @@ body.admin-body {
 
 /* ═══════════ SIDEBAR ═══════════ */
 .sidebar {
-  position: relative;
+  /* Sidebar flotante: separada de los bordes, con esquinas redondeadas y blur
+     que deja ver el bloom rojo + Background.png detrás. */
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  bottom: 12px;
+  width: calc(var(--sidebar-w) - 24px);
   z-index: 30;
   display: flex;
   flex-direction: column;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, .025), transparent 25%),
-    var(--glass-bg);
-  backdrop-filter: blur(28px) saturate(190%);
-  -webkit-backdrop-filter: blur(28px) saturate(190%);
-  border-right: 1px solid var(--glass-border);
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, .02);
+    linear-gradient(180deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, .01)),
+    rgba(20, 20, 22, .55);
+  backdrop-filter: blur(34px) saturate(200%);
+  -webkit-backdrop-filter: blur(34px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, .10);
+  border-radius: 28px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .10),
+    0 16px 40px rgba(0, 0, 0, .45);
   padding: 16px 12px 12px;
   overflow-y: auto;
 }
@@ -98,9 +107,9 @@ body.admin-body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: linear-gradient(180deg, rgba(255, 69, 58, .22), rgba(255, 69, 58, .12));
-  border: 1px solid rgba(255, 69, 58, .45);
-  color: #fff;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-hi, #f5f5f7);
   padding: 8px 14px;
   border-radius: 999px;
   font-size: 13px;
@@ -108,13 +117,15 @@ body.admin-body {
   cursor: pointer;
   width: 100%;
   max-width: 100% !important;
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .18),
-    0 4px 14px rgba(255, 69, 58, .22);
+    inset 0 1px 0 rgba(255, 255, 255, .08),
+    0 8px 20px rgba(0, 0, 0, .25);
   transition: background .15s, transform .12s;
 }
 .event-picker-btn-prominent:hover {
-  background: linear-gradient(180deg, rgba(255, 69, 58, .30), rgba(255, 69, 58, .18));
+  background: rgba(255, 255, 255, .07);
 }
 .event-picker-btn-prominent:active { transform: scale(.98); }
 .event-picker-btn-prominent > span:not(.event-picker-status) {
@@ -315,7 +326,7 @@ body.admin-body {
 @media (max-width: 900px) {
   .dashboard-event-picker {
     display: block;
-    margin: calc(env(safe-area-inset-top, 0px) + 6px) 0 12px;
+    margin: 0 0 8px;
   }
 }
 
@@ -1298,18 +1309,26 @@ body.modal-open { overflow: hidden; position: relative; }
   /* Excel sólo en desktop (>900px) */
   #exportBtn { display: none !important; }
 
-  .main-scroll { padding: 6px 12px calc(110px + env(safe-area-inset-bottom, 0px)); }
+  .main-scroll {
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(110px + env(safe-area-inset-bottom, 0px));
+  }
 
-  /* Dashboard mobile compacto: todos los stat-cards caben sin scroll */
-  #tab-dashboard .admin-section-header { font-size: 11px; margin: 10px 0 6px; letter-spacing: .06em; }
-  #tab-dashboard .summary-grid { gap: 6px; margin-bottom: 6px; }
-  #tab-dashboard .summary-grid-2 { grid-template-columns: repeat(2, 1fr); }
-  #tab-dashboard .stat-card { padding: 8px 12px; }
-  #tab-dashboard .stat-card strong { font-size: 17px; }
-  #tab-dashboard .stat-card #d-netTotal { font-size: 24px !important; }
-  #tab-dashboard .stat-card .summary-label { font-size: 10.5px; margin-bottom: 2px; }
-  /* Tragos en 3 columnas en mobile */
+  /* Dashboard mobile super compacto: todos los stat-cards caben sin scroll */
+  #tab-dashboard .admin-section-header { font-size: 10px; margin: 8px 0 4px; letter-spacing: .06em; opacity: .65; }
+  #tab-dashboard .summary-grid { gap: 6px; margin-bottom: 4px; }
+  #tab-dashboard .stat-card { padding: 6px 10px; min-height: 0; }
+  #tab-dashboard .stat-card strong { font-size: 15px; line-height: 1.1; }
+  #tab-dashboard .stat-card #d-netTotal { font-size: 19px !important; }
+  #tab-dashboard .stat-card .summary-label { font-size: 9.5px; margin-bottom: 2px; letter-spacing: .04em; }
+  /* Cuentas: 4 cards en 2x2 (compacto) */
+  #tab-dashboard .summary-grid:has(#d-barTotal) { grid-template-columns: repeat(2, 1fr); }
+  /* Asistentes: 3 cards en 1 fila */
+  #tab-dashboard .summary-grid:has(#d-entered) { grid-template-columns: repeat(3, 1fr); }
+  /* Tragos: 3 cards en 1 fila */
   #tab-dashboard .summary-grid:has(#d-q160) { grid-template-columns: repeat(3, 1fr); }
+
+  /* Event picker como una card compact más */
+  .event-picker-btn-prominent { padding: 7px 12px; font-size: 13px; }
 
   .summary-grid-2 { grid-template-columns: repeat(2, 1fr); }
   .form-grid { grid-template-columns: 1fr; }
