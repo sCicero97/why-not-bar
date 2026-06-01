@@ -45,11 +45,25 @@ body.admin-body {
 
 /* ═══════════ SHELL LAYOUT ═══════════ */
 .admin-shell {
-  display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  /* Sidebar es position:fixed → usamos margin-left en main-area en lugar de grid */
+  position: relative;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
+}
+.main-area {
+  margin-left: var(--sidebar-w);
+  width: calc(100vw - var(--sidebar-w));
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+@media (max-width: 900px) {
+  .main-area {
+    margin-left: 0;
+    width: 100vw;
+  }
 }
 
 /* ═══════════ SIDEBAR ═══════════ */
@@ -93,13 +107,12 @@ body.admin-body {
   flex-shrink: 0;
 }
 .sidebar-brand .brand-logo {
-  width: 28px; height: 28px;
+  width: 48px; height: 48px;
   object-fit: contain;
   flex-shrink: 0;
-  /* sin drop-shadow */
 }
 .sidebar-brand .brand-logo-circle {
-  width: 42px; height: 42px;
+  width: 48px; height: 48px;
 }
 /* Event picker en sidebar — al lado del logo, ocupa el resto del ancho */
 .sidebar-event-picker { flex: 1; min-width: 0; }
@@ -107,26 +120,20 @@ body.admin-body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: transparent;
+  border: none;
   color: var(--text-hi, #f5f5f7);
   padding: 8px 14px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   width: 100%;
   max-width: 100% !important;
-  backdrop-filter: blur(22px) saturate(180%);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .08),
-    0 8px 20px rgba(0, 0, 0, .25);
+  box-shadow: none;
   transition: background .15s, transform .12s;
 }
-.event-picker-btn-prominent:hover {
-  background: rgba(255, 255, 255, .07);
-}
+.event-picker-btn-prominent:hover { background: rgba(255, 255, 255, .05); }
 .event-picker-btn-prominent:active { transform: scale(.98); }
 .event-picker-btn-prominent > span:not(.event-picker-status) {
   max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -311,11 +318,7 @@ body.admin-body {
 /* ═══════════ MAIN ═══════════ */
 .main-area {
   position: relative;
-  display: flex;
-  flex-direction: column;
   min-width: 0;
-  height: 100vh;
-  overflow: hidden;
 }
 
 .glass-topbar { display: none; }
@@ -1313,22 +1316,52 @@ body.modal-open { overflow: hidden; position: relative; }
     padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(110px + env(safe-area-inset-bottom, 0px));
   }
 
-  /* Dashboard mobile super compacto: todos los stat-cards caben sin scroll */
-  #tab-dashboard .admin-section-header { font-size: 10px; margin: 8px 0 4px; letter-spacing: .06em; opacity: .65; }
-  #tab-dashboard .summary-grid { gap: 6px; margin-bottom: 4px; }
-  #tab-dashboard .stat-card { padding: 6px 10px; min-height: 0; }
-  #tab-dashboard .stat-card strong { font-size: 15px; line-height: 1.1; }
-  #tab-dashboard .stat-card #d-netTotal { font-size: 19px !important; }
-  #tab-dashboard .stat-card .summary-label { font-size: 9.5px; margin-bottom: 2px; letter-spacing: .04em; }
-  /* Cuentas: 4 cards en 2x2 (compacto) */
-  #tab-dashboard .summary-grid:has(#d-barTotal) { grid-template-columns: repeat(2, 1fr); }
-  /* Asistentes: 3 cards en 1 fila */
-  #tab-dashboard .summary-grid:has(#d-entered) { grid-template-columns: repeat(3, 1fr); }
-  /* Tragos: 3 cards en 1 fila */
-  #tab-dashboard .summary-grid:has(#d-q160) { grid-template-columns: repeat(3, 1fr); }
+  /* Dashboard mobile: el panel ocupa toda la pantalla y los contadores
+     se reparten el alto disponible en 2 columnas, todos del mismo tamaño */
+  #tab-dashboard.tab-panel.active {
+    display: flex;
+    flex-direction: column;
+    /* Llenar el viewport menos safe-area top/bottom-tabbar */
+    min-height: calc(100vh - env(safe-area-inset-top, 0px) - 130px - env(safe-area-inset-bottom, 0px));
+    gap: 6px;
+  }
+  #tab-dashboard .dashboard-event-picker { flex-shrink: 0; margin: 0; }
+  #tab-dashboard .admin-section-header {
+    font-size: 10px; margin: 6px 0 2px; letter-spacing: .06em; opacity: .55;
+    flex-shrink: 0;
+  }
+  /* Todas las grids son 2 cols, se reparten el alto */
+  #tab-dashboard .summary-grid,
+  #tab-dashboard .summary-grid:has(#d-barTotal),
+  #tab-dashboard .summary-grid:has(#d-entered),
+  #tab-dashboard .summary-grid:has(#d-q160) {
+    grid-template-columns: repeat(2, 1fr) !important;
+    grid-auto-rows: 1fr;
+    gap: 6px;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  #tab-dashboard .stat-card {
+    padding: 10px 12px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  #tab-dashboard .stat-card strong { font-size: 18px; line-height: 1.1; }
+  #tab-dashboard .stat-card #d-netTotal { font-size: 22px !important; }
+  #tab-dashboard .stat-card .summary-label { font-size: 10px; margin-bottom: 3px; letter-spacing: .04em; }
 
-  /* Event picker como una card compact más */
-  .event-picker-btn-prominent { padding: 7px 12px; font-size: 13px; }
+  /* Event picker: sin fondo, alto similar a los cards */
+  .dashboard-event-picker .event-picker-btn-prominent {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 15px;
+    justify-content: center;
+  }
 
   .summary-grid-2 { grid-template-columns: repeat(2, 1fr); }
   .form-grid { grid-template-columns: 1fr; }
