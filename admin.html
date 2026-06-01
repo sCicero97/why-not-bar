@@ -225,17 +225,16 @@
   <!-- ═══════════ SIDEBAR (desktop) ═══════════ -->
   <aside class="sidebar" id="sidebar">
     <header class="sidebar-brand">
-      <img src="./WN%20Logo%20Alpha.png" alt="Why Not" class="brand-logo"/>
-      <div class="sidebar-brand-text">
-        <h1>Why Not</h1>
-        <div class="event-picker-wrap">
-          <button class="event-picker-btn" id="eventPickerBtn" type="button">
-            <span class="event-picker-status" id="eventPickerStatus" title="Evento activo"></span>
-            <span id="eventName">Admin</span>
-            <svg width="13" height="13"><use href="#i-chevron-down"/></svg>
-          </button>
-          <div class="event-picker-menu" id="eventPickerMenu" hidden></div>
-        </div>
+      <div class="brand-logo-circle">
+        <img src="./WN%20Logo%20Alpha.png" alt="Why Not" class="brand-logo"/>
+      </div>
+      <div class="event-picker-wrap sidebar-event-picker">
+        <button class="event-picker-btn event-picker-btn-prominent" id="eventPickerBtn" type="button">
+          <span class="event-picker-status" id="eventPickerStatus" title="Evento activo"></span>
+          <span id="eventName">Admin</span>
+          <svg width="14" height="14"><use href="#i-chevron-down"/></svg>
+        </button>
+        <div class="event-picker-menu" id="eventPickerMenu" hidden></div>
       </div>
       <button class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Cerrar menú">
         <svg width="22" height="22"><use href="#i-close"/></svg>
@@ -315,24 +314,20 @@
   <!-- ═══════════ MAIN AREA ═══════════ -->
   <main class="main-area">
 
-    <!-- Top bar (sólo en mobile, sirve para el event picker) -->
-    <header class="glass-topbar mobile-only-topbar">
-      <div class="topbar-title-wrap">
-        <div class="event-picker-wrap mobile-only-picker">
-          <button class="event-picker-btn" id="eventPickerBtnMobile" type="button">
-            <span class="event-picker-status" id="eventPickerStatusMobile"></span>
-            <span id="eventNameMobile">Admin</span>
-            <svg width="12" height="12"><use href="#i-chevron-down"/></svg>
-          </button>
-          <div class="event-picker-menu" id="eventPickerMenuMobile" hidden></div>
-        </div>
-      </div>
-    </header>
-
     <div class="main-scroll">
 
       <!-- ── Dashboard ────────────────────────────────────────── -->
       <section id="tab-dashboard" class="tab-panel active">
+
+        <!-- Event picker prominente — sólo en mobile, arriba del dashboard -->
+        <div class="event-picker-wrap mobile-only-picker dashboard-event-picker">
+          <button class="event-picker-btn event-picker-btn-prominent" id="eventPickerBtnMobile" type="button">
+            <span class="event-picker-status" id="eventPickerStatusMobile"></span>
+            <span id="eventNameMobile">Admin</span>
+            <svg width="14" height="14"><use href="#i-chevron-down"/></svg>
+          </button>
+          <div class="event-picker-menu" id="eventPickerMenuMobile" hidden></div>
+        </div>
 
         <div class="admin-section-header">Cuentas</div>
         <div class="summary-grid summary-grid-2">

@@ -23,27 +23,10 @@ const STORAGE_BUCKET = 'payment-photos';
 let _liveStatus = 'connecting'; // 'connecting' | 'live' | 'offline'
 function _setLiveStatus(s) {
   _liveStatus = s;
-  let dot = document.getElementById('liveStatusDot');
-  if (!dot) {
-    dot = document.createElement('div');
-    dot.id = 'liveStatusDot';
-    dot.title = 'Estado del realtime';
-    dot.style.cssText = 'position:fixed;bottom:8px;right:8px;width:10px;height:10px;border-radius:50%;z-index:99999;pointer-events:none;transition:background .2s,box-shadow .2s;opacity:.55';
-    document.body.appendChild(dot);
-  }
-  if (s === 'live') {
-    dot.style.background = '#30d158';
-    dot.style.boxShadow  = '0 0 8px rgba(48,209,88,.6)';
-    dot.title = 'Realtime conectado';
-  } else if (s === 'offline') {
-    dot.style.background = '#ff453a';
-    dot.style.boxShadow  = '0 0 8px rgba(255,69,58,.6)';
-    dot.title = 'Realtime desconectado — reintentando…';
-  } else {
-    dot.style.background = '#f59e0b';
-    dot.style.boxShadow  = '0 0 8px rgba(245,158,11,.6)';
-    dot.title = 'Conectando realtime…';
-  }
+  // Marcamos el body con clase para que las apps puedan reaccionar (borde rojo
+  // en bottom-tabbar / sidebar / topbar cuando hay problemas de conexión).
+  document.body.classList.toggle('rt-offline', s === 'offline');
+  document.body.classList.toggle('rt-connecting', s === 'connecting');
 }
 
 function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
