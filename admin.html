@@ -330,16 +330,6 @@
       </div>
 
       <div class="topbar-actions">
-        <button class="icon-btn ghost-btn" id="sneezeBtn" title="Notificar a todos">
-          <svg width="20" height="20"><use href="#i-sneeze"/></svg>
-        </button>
-        <button class="icon-btn danger-btn" id="helpBtn" title="Pedir ayuda">
-          <svg width="20" height="20"><use href="#i-sos"/></svg>
-        </button>
-        <button id="exportBtn" class="icon-btn accent-btn" title="Exportar Excel">
-          <svg width="20" height="20"><use href="#i-download"/></svg>
-          <span class="icon-btn-label">Excel</span>
-        </button>
       </div>
     </header>
 
@@ -368,27 +358,6 @@
           </div>
         </div>
 
-        <div class="admin-section-header">Caja</div>
-        <div class="summary-grid summary-grid-2">
-          <div class="glass-card stat-card">
-            <span class="summary-label">Caja inicial</span>
-            <strong id="d-openingCash">$ 0</strong>
-          </div>
-          <div class="glass-card stat-card tint-amber">
-            <span class="summary-label">Caja esperada</span>
-            <strong id="d-cashExpected">$ 0</strong>
-            <span class="summary-sub" id="d-cashExpectedSub" style="font-size:11px;color:var(--muted);margin-top:4px"></span>
-          </div>
-          <div class="glass-card stat-card tint-green">
-            <span class="summary-label">Caja real (cierre)</span>
-            <strong id="d-closingCash">—</strong>
-          </div>
-          <div class="glass-card stat-card" id="d-cashDiffCard">
-            <span class="summary-label">Diferencia</span>
-            <strong id="d-cashDiff">—</strong>
-          </div>
-        </div>
-
         <div class="admin-section-header">Asistentes</div>
         <div class="summary-grid summary-grid-2">
           <div class="glass-card stat-card tint-green">
@@ -412,13 +381,6 @@
           <div class="glass-card stat-card"><span class="summary-label">Tragos 360</span><strong id="d-q360">0</strong></div>
         </div>
 
-        <div class="admin-section-header">Últimos cobros</div>
-        <div class="admin-table-wrap glass-card">
-          <table class="admin-table">
-            <thead><tr><th>Cuenta</th><th>Nombre</th><th>Total</th><th>Por</th><th>Hora</th><th>Foto</th></tr></thead>
-            <tbody id="d-recentClosures"></tbody>
-          </table>
-        </div>
       </section>
 
       <!-- ── Asistentes ────────────────────────────────────────── -->
@@ -518,7 +480,7 @@
         </div>
         <div class="admin-table-wrap glass-card">
           <table class="admin-table">
-            <thead><tr><th>Nombre</th><th>Fecha</th><th>Estado</th><th>Portero cobra</th><th>Caja inicial</th><th>Caja final</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Fecha</th><th>Estado</th><th>Portero cobra</th><th>Acciones</th></tr></thead>
             <tbody id="eventsBody"></tbody>
           </table>
         </div>

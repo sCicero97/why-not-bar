@@ -119,10 +119,21 @@ function renderSummary() {
 
 function renderAccounts() {
   const wrap        = document.getElementById('accountsList');
-  const searchDig   = document.getElementById('searchInput').value.replace(/\D/g, '');
+  const rawSearch   = (document.getElementById('searchInput').value || '').trim();
+  const searchDig   = rawSearch.replace(/\D/g, '');
+  const searchName  = rawSearch.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   // Mostrar solo cuentas abiertas vinculadas a asistentes
   const list        = accounts.filter(a => !a.is_closed && a.attendee_id);
-  const filtered    = searchDig ? list.filter(a => String(a.slot).padStart(3,'0').includes(searchDig)) : list;
+  // Búsqueda: si la cadena tiene SOLO dígitos → busca por slot.
+  // Si tiene letras → busca por nombre (sin acentos, case insensitive).
+  const filtered    = !rawSearch
+    ? list
+    : list.filter(a => {
+        const slotMatch = searchDig && String(a.slot).padStart(3, '0').includes(searchDig);
+        const name = (a.attendees?.name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        const nameMatch = searchName && name.includes(searchName);
+        return slotMatch || nameMatch;
+      });
 
   wrap.innerHTML = '';
   if (!filtered.length) {

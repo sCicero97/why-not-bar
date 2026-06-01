@@ -969,36 +969,6 @@ function renderDashboard() {
   setText('d-expenses',    formatMoney(expTotal));
   setText('d-netTotal',    formatMoney(netTotal));
 
-  // ── Caja ────────────────────────────────────────────────────────────────────
-  // Caja esperada = caja inicial + cash neto recibido en barra (recibido - vuelto) - todos los gastos
-  // (asumimos por ahora que todos los gastos salen de la caja).
-  const ev = currentEvent();
-  const opening = Number(ev?.opening_cash || 0);
-  const closing = ev?.closing_cash != null ? Number(ev.closing_cash) : null;
-  const cashIn  = barClosures
-    .filter(c => c.payment_method === 'cash')
-    .reduce((s, c) => s + (Number(c.cash_received || c.total || 0) - Number(c.change_given || 0)), 0);
-  const expected = opening + cashIn - expTotal;
-  setText('d-openingCash',  formatMoney(opening));
-  setText('d-cashExpected', formatMoney(expected));
-  const sub = document.getElementById('d-cashExpectedSub');
-  if (sub) sub.textContent = `${formatMoney(opening)} inicial + ${formatMoney(cashIn)} barra cash − ${formatMoney(expTotal)} gastos`;
-  setText('d-closingCash', closing != null ? formatMoney(closing) : '—');
-  const diffEl = document.getElementById('d-cashDiff');
-  const diffCard = document.getElementById('d-cashDiffCard');
-  if (closing != null) {
-    const diff = closing - expected;
-    if (diffEl) diffEl.textContent = (diff >= 0 ? '+' : '') + formatMoney(diff);
-    if (diffCard) {
-      diffCard.classList.remove('tint-green', 'tint-red', 'tint-amber');
-      if (Math.abs(diff) < 0.01) diffCard.classList.add('tint-green');
-      else if (diff < 0) diffCard.classList.add('tint-red');
-      else diffCard.classList.add('tint-amber');
-    }
-  } else {
-    if (diffEl) diffEl.textContent = '—';
-  }
-
   setText('d-attendees',   attendees.length);
   // Ingresaron: número + porcentaje (excluye organizadores que no marcan ingreso)
   const trackable = attendees.filter(a => !a.is_organizer);
@@ -1008,17 +978,6 @@ function renderDashboard() {
   setText('d-openAccs',    openAccounts.filter(a => a.total > 0).length);
   setText('d-closedAccs',  barClosures.length);
   setText('d-q160', q160); setText('d-q260', q260); setText('d-q360', q360);
-
-  const tbody = document.getElementById('d-recentClosures');
-  tbody.innerHTML = barClosures.slice(0, 10).map(c => `
-    <tr>
-      <td><strong>${padId(c.slot)}</strong></td>
-      <td>${c.attendees?.name || '—'}</td>
-      <td><strong>${formatMoney(c.total)}</strong></td>
-      <td>${c.closed_by || '—'}</td>
-      <td style="font-size:12px;color:var(--muted)">${c.closed_at ? new Date(c.closed_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
-      <td>${c.payment_photo_url ? `<button class="btn btn-sm icon-label-btn" onclick="viewPhoto('${c.payment_photo_url}')">${icon('camera',14)}Ver</button>` : '—'}</td>
-    </tr>`).join('') || '<tr><td colspan="6" class="empty-state">Sin cobros todavía.</td></tr>';
 }
 
 // ─── Attendees table ──────────────────────────────────────────────────────────
@@ -1429,17 +1388,29 @@ function renderExpenses() {
 }
 
 // ─── Events ───────────────────────────────────────────────────────────────────
+// Formatea una fecha ISO (YYYY-MM-DD) en DD/MM/YYYY local.
+function formatDateLocal(iso) {
+  if (!iso) return '';
+  // iso viene como 'YYYY-MM-DD' (sin hora) o ISO completo. Parseo manual para no
+  // tener corrimiento de zona horaria.
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return iso;
+}
+
 function renderEvents() {
   if (_hasActiveEdit('event')) return; // no destruir el input mientras se edita
   const tbody = document.getElementById('eventsBody');
   if (!tbody) return;
   const settingsByEvent = Object.fromEntries((allEventSettings || []).map(s => [s.event_id, s]));
-  tbody.innerHTML = events.map(ev => {
+  // Orden: fecha más reciente / próxima primero, vieja al final.
+  const sortedEvents = [...events].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  tbody.innerHTML = sortedEvents.map(ev => {
     const canCharge = !!(settingsByEvent[ev.id]?.door_can_charge);
     return `
     <tr>
       <td class="editable-cell" data-entity="event" data-id="${ev.id}" data-field="name" data-type="text"><strong>${ev.name}</strong></td>
-      <td class="editable-cell" data-entity="event" data-id="${ev.id}" data-field="date" data-type="date">${ev.date}</td>
+      <td class="editable-cell" data-entity="event" data-id="${ev.id}" data-field="date" data-type="date">${formatDateLocal(ev.date)}</td>
       <td>${ev.is_active
         ? '<span class="status-pill" style="background:#1a3a1a;color:#1ed760">ACTIVO</span>'
         : '<span class="status-pill" style="background:#1c1c1c;color:#6b7280">Inactivo</span>'
@@ -1450,10 +1421,11 @@ function renderEvents() {
           <span class="checkmark"></span>
         </label>
       </td>
-      <td class="editable-cell" data-entity="event" data-id="${ev.id}" data-field="opening_cash" data-type="number" title="Click para editar">${formatMoney(Number(ev.opening_cash || 0))}</td>
-      <td class="editable-cell" data-entity="event" data-id="${ev.id}" data-field="closing_cash" data-type="number" title="Click para registrar el cierre de caja">${ev.closing_cash != null ? formatMoney(Number(ev.closing_cash)) : '<span style="color:var(--muted)">—</span>'}</td>
       <td>
         <div class="row-actions">
+          <button class="btn btn-sm" onclick="downloadEventExcel('${ev.id}')" title="Descargar Excel de este evento">
+            ${icon('download',15)}
+          </button>
           <button class="btn btn-sm" onclick="resetEventData('${ev.id}')" title="Reset total del evento (mantiene asistentes)" style="border-color:rgba(255,159,10,.35);color:#ffbf4a">
             Reset
           </button>
@@ -1462,7 +1434,7 @@ function renderEvents() {
         </div>
       </td>
     </tr>`;
-  }).join('') || '<tr><td colspan="7" class="empty-state">Sin eventos. Creá uno.</td></tr>';
+  }).join('') || '<tr><td colspan="5" class="empty-state">Sin eventos. Creá uno.</td></tr>';
 }
 
 // Cambia door_can_charge para un evento específico desde la pestaña Eventos.
@@ -2003,6 +1975,14 @@ async function resetEventData(eventId) {
 }
 window.resetEventData = resetEventData;
 
+// Descargar Excel de un evento específico desde la pestaña Eventos
+function downloadEventExcel(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if (!ev) { toast('Evento no encontrado', 'error'); return; }
+  exportToExcel(ev);
+}
+window.downloadEventExcel = downloadEventExcel;
+
 // ─── Admin close bar account ──────────────────────────────────────────────────
 // Replica el flujo de la barra (app.js): método + opcional "pagar por otros".
 async function adminCloseBarAccount(barAccountId, slot) {
@@ -2305,7 +2285,7 @@ async function importCsv(file) {
 }
 
 // ─── Export Excel ─────────────────────────────────────────────────────────────
-function exportToExcel() {
+function exportToExcel(exportEventOverride) {
   if (typeof XLSX === 'undefined') { toast('Librería Excel no disponible', 'error'); return; }
   const wb = XLSX.utils.book_new();
   wb.Props = {
@@ -2415,13 +2395,30 @@ function exportToExcel() {
     return ws;
   }
 
-  const ev = currentEvent();
-  const barOpen    = barAccounts.filter(a => !a.is_closed);
-  const barClosed  = barClosures;
-  const barT       = barClosed.reduce((s,c)=>s+Number(c.total),0) + barOpen.reduce((s,a)=>s+Number(a.total),0);
-  const entryT     = attendees.reduce((s,a)=>s+Number(a.entry_amount||0),0);
-  const expT       = expenses.reduce((s,e)=>s+Number(e.amount),0);
-  const neto       = barT + entryT - expT;
+  // Si se pidió un evento puntual (param), filtrar todos los datos por su id.
+  // Si no, usar el evento activo/visualizado actualmente.
+  const ev = (typeof exportEventOverride !== 'undefined' && exportEventOverride)
+    ? exportEventOverride
+    : currentEvent();
+  const evId = ev?.id;
+  // Para el evento actual usamos los arrays ya cargados (con joins).
+  // Para otros eventos usamos los XE (cross-event) que no tienen joins.
+  const isCurrent = !exportEventOverride || (currentEvent()?.id === evId);
+  const attRows   = isCurrent ? attendees   : (allAttendeesXE || []).filter(a => a.event_id === evId);
+  const closedAll = isCurrent ? barClosures : (allClosuresXE  || []).filter(c => c.event_id === evId);
+  const expRows   = isCurrent ? expenses    : (allExpensesXE  || []).filter(e => e.event_id === evId);
+  // bar_accounts no tenemos cross-event, así que para eventos no-actuales esa hoja queda vacía
+  const accRows   = isCurrent ? barAccounts : [];
+  const barOpen   = accRows.filter(a => !a.is_closed);
+  const barT      = closedAll.reduce((s,c)=>s+Number(c.total),0) + barOpen.reduce((s,a)=>s+Number(a.total),0);
+  const entryT    = attRows.reduce((s,a)=>s+Number(a.entry_amount||0),0);
+  const expT      = expRows.reduce((s,e)=>s+Number(e.amount),0);
+  const neto      = barT + entryT - expT;
+  // Re-asigno para que el resto del código siga usando los nombres familiares
+  const attendees_ = attRows;
+  const barClosed = closedAll;
+  const expenses_ = expRows;
+  const barAccounts_ = accRows;
 
   // ── Resumen ─────────────────────────────────────────────────────────────────
   const resumenRows = [
@@ -2452,11 +2449,11 @@ function exportToExcel() {
   XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
 
   // ── Asistentes (sólo reales) ────────────────────────────────────────────────
-  if (attendees.length) {
+  if (attendees_.length) {
     const wsAtt = buildSheet({
       title: `Asistentes — ${ev?.name || ''}`,
       headers: ['Nombre','Estado','Barra #','Cédula','Email','Teléfono','Entrada $','Total pagado','Ingresó','Salió'],
-      rows: attendees.map(a => [
+      rows: attendees_.map(a => [
         a.name,
         statusLabel(a.status),
         a.bar_account_slot ? padId(a.bar_account_slot) : '',
@@ -2515,15 +2512,15 @@ function exportToExcel() {
   }
 
   // ── Gastos ──────────────────────────────────────────────────────────────────
-  if (expenses.length) {
+  if (expenses_.length) {
     const wsExp = buildSheet({
       title: `Gastos — ${ev?.name || ''}`,
       headers: ['Descripción','Monto','Fecha'],
-      rows: [...expenses]
+      rows: [...expenses_]
         .sort((a,b) => String(a.description).localeCompare(String(b.description), 'es'))
         .map(e => [e.description, Number(e.amount || 0), e.created_at ? new Date(e.created_at) : '']),
       columnFormats: [null, 'money', 'date'],
-      footerRow: ['TOTAL', expenses.reduce((s,e)=>s+Number(e.amount||0),0), ''],
+      footerRow: ['TOTAL', expenses_.reduce((s,e)=>s+Number(e.amount||0),0), ''],
     });
     XLSX.utils.book_append_sheet(wb, wsExp, 'Gastos');
   }
@@ -3079,7 +3076,7 @@ function setupUI() {
 
   // Header actions
   document.getElementById('logoutBtn').addEventListener('click', signOut);
-  document.getElementById('exportBtn').addEventListener('click', exportToExcel);
+  document.getElementById('exportBtn')?.addEventListener('click', () => exportToExcel());
   document.getElementById('closeModalBtn').addEventListener('click', closeModal);
   document.getElementById('modalOverlay').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
 

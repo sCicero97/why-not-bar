@@ -696,60 +696,7 @@ function setupNotifChannel(appName, currentUserDisplay) {
     })
     .subscribe();
 
-  const helpBtn   = document.getElementById('helpBtn');
-  const sneezeBtn = document.getElementById('sneezeBtn');
-
-  // Cooldown helper: bloquea el botón N segundos para evitar spam.
-  // El timer empieza AL INSTANTE — no espera a que el fetch termine.
-  function withCooldown(btn, seconds, fn) {
-    if (btn.dataset.cooldown) return;
-    btn.dataset.cooldown = '1';
-    btn.style.opacity = '0.4';
-    btn.style.pointerEvents = 'none';
-
-    // Desbloquear siempre después de `seconds` segundos, pase lo que pase
-    setTimeout(() => {
-      delete btn.dataset.cooldown;
-      btn.style.opacity = '';
-      btn.style.pointerEvents = '';
-    }, seconds * 1000);
-
-    // Ejecutar la función en paralelo sin bloquear el unlock
-    fn().catch(e => console.warn('[Alert] Error:', e.message));
-  }
-
-  if (helpBtn) {
-    // SOS desde barra o portería → va solo a los admins
-    helpBtn.addEventListener('click', () => {
-      // Toast inmediato — no esperar al fetch
-      toast('🆘 Señal enviada a los admins', 'warning');
-      withCooldown(helpBtn, 10, async () => {
-        await requestNotifPermission();
-        const msg = `Necesita ayuda en ${appName}`;
-        _notifChannel.send({ type: 'broadcast', event: 'alert',
-          payload: { emoji: '🆘', msg, from: currentUserDisplay, target: 'admin' } });
-        await sendPushToAll(`🆘 ${currentUserDisplay}`, msg, 'whynot-sos', 'admin');
-        // Formato: "Nombre: necesita ayuda en <App> 🆘" (o sin "en ..." si es admin)
-        const where = appName && appName !== 'Admin' ? ` en ${appName}` : '';
-        await sendWhatsApp(`${currentUserDisplay}: necesita ayuda${where} 🆘`);
-      });
-    });
-  }
-  if (sneezeBtn) {
-    // Estornudo desde admin → va solo a los admins
-    sneezeBtn.addEventListener('click', () => {
-      toast('🤧 Señal enviada a los admins', 'success');
-      withCooldown(sneezeBtn, 10, async () => {
-        await requestNotifPermission();
-        const msg = '¡Atención de admin!';
-        _notifChannel.send({ type: 'broadcast', event: 'alert',
-          payload: { emoji: '🤧', msg, from: currentUserDisplay, target: 'admin' } });
-        await sendPushToAll(`🤧 ${currentUserDisplay}`, msg, 'whynot-admin', 'admin');
-        await sendWhatsApp(`${currentUserDisplay}: Atención requerida 🤧`);
-      });
-    });
-  }
-
+  // (Botones SOS y estornudo removidos — sólo queda el canal de broadcast para tareas)
   console.log(`[Notif] Permiso: ${Notification?.permission ?? 'no disponible'}`);
 }
 
