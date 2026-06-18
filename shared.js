@@ -21,10 +21,27 @@ const STORAGE_BUCKET = 'payment-photos';
 // del callback ante cualquier cambio. Maneja reconexión automática al volver
 // online o cambiar de tab, y un fallback de polling ligero cada 15s.
 let _liveStatus = 'connecting'; // 'connecting' | 'live' | 'offline'
+let _offlinePendingTimer = null;
 function _setLiveStatus(s) {
+  // Tolerancia: no marcar offline si la desconexión dura < 5 segundos.
+  // Esto evita parpadeos cuando el websocket reconecta solo.
+  if (s === 'offline') {
+    if (_liveStatus === 'offline') return;          // ya marcado
+    if (_offlinePendingTimer) return;               // ya hay un timer pendiente
+    _offlinePendingTimer = setTimeout(() => {
+      _offlinePendingTimer = null;
+      _liveStatus = 'offline';
+      document.body.classList.add('rt-offline');
+      document.body.classList.remove('rt-connecting');
+    }, 5000);
+    return;
+  }
+  // Si estábamos por marcar offline pero volvió la conexión, cancelar
+  if (_offlinePendingTimer) {
+    clearTimeout(_offlinePendingTimer);
+    _offlinePendingTimer = null;
+  }
   _liveStatus = s;
-  // Marcamos el body con clase para que las apps puedan reaccionar (borde rojo
-  // en bottom-tabbar / sidebar / topbar cuando hay problemas de conexión).
   document.body.classList.toggle('rt-offline', s === 'offline');
   document.body.classList.toggle('rt-connecting', s === 'connecting');
 }
@@ -33,7 +50,7 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
   const db = getDb();
   let _timer = null;
   let _channel = null;
-  let _retryDelay = 2000; // backoff exponencial al fallar
+  let _retryDelay = 1500; // backoff exponencial al fallar
 
   // Debounce: si llegan varios cambios seguidos, hacer un solo reload.
   function scheduleReload() {
@@ -52,15 +69,13 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
     ch.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         _setLiveStatus('live');
-        _retryDelay = 2000;
+        _retryDelay = 1500;
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        _setLiveStatus('offline');
-        // Cerrar y reabrir con backoff exponencial (max 30s)
+        _setLiveStatus('offline');  // con tolerancia 5s
         try { db.removeChannel(_channel); } catch (_) {}
-        const delay = Math.min(_retryDelay, 30000);
-        _retryDelay = Math.min(_retryDelay * 2, 30000);
+        const delay = Math.min(_retryDelay, 15000);
+        _retryDelay = Math.min(_retryDelay * 1.5, 15000);
         setTimeout(() => { _channel = buildChannel(); }, delay);
-        // Mientras estamos offline, hacer un reload para no quedar con datos viejos
         scheduleReload();
       }
     });

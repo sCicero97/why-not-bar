@@ -102,6 +102,15 @@ function renderAll() {
   renderPaidTable();
 }
 
+// Precios de tragos del evento activo. Fallback a defaults.
+function drinkPrices() {
+  return [
+    Number(activeEvent?.drink_price_1 ?? 160),
+    Number(activeEvent?.drink_price_2 ?? 260),
+    Number(activeEvent?.drink_price_3 ?? 360),
+  ];
+}
+
 function renderSummary() {
   const openAcc  = accounts.filter(a => !a.is_closed);
   const openTot  = openAcc.reduce((s, a) => s + Number(a.total || 0), 0);
@@ -115,6 +124,18 @@ function renderSummary() {
   document.getElementById('all260').textContent     = q260;
   document.getElementById('all360').textContent     = q360;
   document.getElementById('grandTotal').textContent = formatMoney(openTot + paidTot);
+  // Actualizar labels con precios dinámicos del evento
+  const [p1, p2, p3] = drinkPrices();
+  const labels = document.querySelectorAll('.summary-card .summary-label');
+  labels.forEach(lbl => {
+    const txt = lbl.textContent.trim();
+    if (/Tragos\s+\d+/.test(txt)) {
+      const id = lbl.nextElementSibling?.id;
+      if (id === 'all160') lbl.lastChild.textContent = 'Tragos ' + p1;
+      else if (id === 'all260') lbl.lastChild.textContent = 'Tragos ' + p2;
+      else if (id === 'all360') lbl.lastChild.textContent = 'Tragos ' + p3;
+    }
+  });
 }
 
 function renderAccounts() {
@@ -142,6 +163,8 @@ function renderAccounts() {
     return;
   }
 
+  const [p1, p2, p3] = drinkPrices();
+
   for (const acc of filtered) {
     const id      = padId(acc.slot);
     const name    = acc.attendees?.name || '';
@@ -161,9 +184,9 @@ function renderAccounts() {
         <div class="account-total">${formatMoney(acc.total)}</div>
       </div>
       <div class="account-stats">
-        <div class="pill">160: <strong>${acc.qty160}</strong></div>
-        <div class="pill">260: <strong>${acc.qty260}</strong></div>
-        <div class="pill">360: <strong>${acc.qty360}</strong></div>
+        <div class="pill">${p1}: <strong>${acc.qty160}</strong></div>
+        <div class="pill">${p2}: <strong>${acc.qty260}</strong></div>
+        <div class="pill">${p3}: <strong>${acc.qty360}</strong></div>
       </div>
       ${acc.is_closed
         ? `<div class="account-actions" style="grid-template-columns:1fr">
@@ -175,9 +198,9 @@ function renderAccounts() {
              }
            </div>`
         : `<div class="account-actions">
-             <button class="action-btn btn-160" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="160">+160<span class="hold-bar"></span><span class="subtract-bar"></span></button>
-             <button class="action-btn btn-260" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="260">+260<span class="hold-bar"></span><span class="subtract-bar"></span></button>
-             <button class="action-btn btn-360" data-id="${acc.id}" data-slot="${acc.slot}" data-amount="360">+360<span class="hold-bar"></span><span class="subtract-bar"></span></button>
+             <button class="action-btn btn-160" data-id="${acc.id}" data-slot="${acc.slot}" data-range="1" data-amount="${p1}">+${p1}<span class="hold-bar"></span><span class="subtract-bar"></span></button>
+             <button class="action-btn btn-260" data-id="${acc.id}" data-slot="${acc.slot}" data-range="2" data-amount="${p2}">+${p2}<span class="hold-bar"></span><span class="subtract-bar"></span></button>
+             <button class="action-btn btn-360" data-id="${acc.id}" data-slot="${acc.slot}" data-range="3" data-amount="${p3}">+${p3}<span class="hold-bar"></span><span class="subtract-bar"></span></button>
              <button class="action-btn btn-close ${acc.total === 0 ? 'hidden' : ''}" onclick="doCloseAccount('${acc.id}',${acc.slot})">Cerrar</button>
            </div>`
       }
@@ -329,8 +352,9 @@ function setupHoldInteractions() {
     const amount = parseInt(btn.dataset.amount, 10);
     clearHold(e.pointerId);
 
-    if (subtractReady) await doSubtractDrink(id, amount);
-    else if (addReady) await doAddDrink(id, amount);
+    const range = parseInt(btn.dataset.range, 10) || (amount === 160 ? 1 : amount === 260 ? 2 : 3);
+    if (subtractReady) await doSubtractDrink(id, range, amount);
+    else if (addReady) await doAddDrink(id, range, amount);
   });
 
   list.addEventListener('pointercancel', (e) => clearHold(e.pointerId));
@@ -338,26 +362,36 @@ function setupHoldInteractions() {
 }
 
 // ─── DB actions ───────────────────────────────────────────────────────────────
-async function doAddDrink(accountId, amount) {
+async function doAddDrink(accountId, range, price) {
   const db   = getDb();
-  const { data, error } = await db.rpc('add_drink', { p_account_id: accountId, p_amount: amount });
-  if (error || !data?.ok) toast(data?.error || error?.message || 'Error al agregar', 'error');
-  else {
-    // Auto-marcar como llegado si no lo está
-    const acc = accounts.find(a => a.id === accountId);
-    if (acc?.attendee_id) {
-      const { data: att } = await db.from('attendees').select('entered').eq('id', acc.attendee_id).single();
-      if (att && !att.entered) {
-        await db.from('attendees').update({ entered: true, entry_time: new Date().toISOString() }).eq('id', acc.attendee_id);
-      }
-    }
-    await loadData();
+  // Usa la nueva RPC ranged (rango 1/2/3 + precio dinámico). Fallback a la vieja
+  // si la migración no fue corrida aún.
+  let { data, error } = await db.rpc('add_drink_ranged', {
+    p_account_id: accountId, p_range: range, p_price: price,
+  });
+  if (error && /not\s+exist|not\s+find|function/i.test(error.message || '')) {
+    ({ data, error } = await db.rpc('add_drink', { p_account_id: accountId, p_amount: price }));
   }
+  if (error || !data?.ok) { toast(data?.error || error?.message || 'Error al agregar', 'error'); return; }
+  // Auto-marcar como llegado si no lo está
+  const acc = accounts.find(a => a.id === accountId);
+  if (acc?.attendee_id) {
+    const { data: att } = await db.from('attendees').select('entered').eq('id', acc.attendee_id).single();
+    if (att && !att.entered) {
+      await db.from('attendees').update({ entered: true, entry_time: new Date().toISOString() }).eq('id', acc.attendee_id);
+    }
+  }
+  await loadData();
 }
 
-async function doSubtractDrink(accountId, amount) {
+async function doSubtractDrink(accountId, range, price) {
   const db   = getDb();
-  const { data, error } = await db.rpc('subtract_drink', { p_account_id: accountId, p_amount: amount });
+  let { data, error } = await db.rpc('subtract_drink_ranged', {
+    p_account_id: accountId, p_range: range, p_price: price,
+  });
+  if (error && /not\s+exist|not\s+find|function/i.test(error.message || '')) {
+    ({ data, error } = await db.rpc('subtract_drink', { p_account_id: accountId, p_amount: price }));
+  }
   if (error || !data?.ok) toast(data?.error || error?.message || 'Error al restar', 'error');
   else { await loadData(); }
 }

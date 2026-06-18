@@ -22,6 +22,9 @@ create table if not exists events (
   opening_cash         numeric(10,2) default 0,           -- efectivo en caja al abrir el evento (deprecated)
   closing_cash         numeric(10,2) default null,        -- conteo de efectivo al cerrar (deprecated)
   default_entry_amount numeric(10,2) default 700,         -- costo de acceso por defecto al crear asistentes
+  drink_price_1        numeric(10,2) default 160,         -- precio del trago Rango 1
+  drink_price_2        numeric(10,2) default 260,         -- precio del trago Rango 2
+  drink_price_3        numeric(10,2) default 360,         -- precio del trago Rango 3
   created_at           timestamptz default now()
 );
 -- Solo un evento activo a la vez

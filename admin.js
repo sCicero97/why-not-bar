@@ -207,6 +207,21 @@ function renderAll() {
   renderPersonas();
   renderBlacklist();
   renderEventsStats();
+  syncDrinkPriceHeaders();
+}
+
+// Sincroniza los headers de la tabla Barra con los precios configurados en el evento.
+function syncDrinkPriceHeaders() {
+  const ev = currentEvent();
+  if (!ev) return;
+  const p1 = Number(ev.drink_price_1 ?? 160);
+  const p2 = Number(ev.drink_price_2 ?? 260);
+  const p3 = Number(ev.drink_price_3 ?? 360);
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('th-p1', p1); set('th-p2', p2); set('th-p3', p3);
+  // Dashboard cards
+  const setLabel = (id, val) => { const el = document.querySelector(`[id="d-q${id}"]`)?.previousElementSibling; if (el) el.textContent = 'Tragos ' + val; };
+  setLabel(160, p1); setLabel(260, p2); setLabel(360, p3);
 }
 
 // ─── Estadísticas → Eventos ──────────────────────────────────────────────────
@@ -1044,8 +1059,10 @@ function renderAttendeesTable() {
   const toggleBtn = document.getElementById('toggleGroupBtn');
   const toggleTxt = document.getElementById('toggleGroupText');
   if (toggleBtn && toggleTxt) {
-    toggleTxt.textContent = groupByStatus ? 'Ordenar por cuenta' : 'Agrupar por estado';
+    toggleTxt.textContent = groupByStatus ? 'Agrupado por estado' : 'Ordenado por cuenta';
+    // Cambia de visual: activo (azul) cuando no es el default (ordenado por cuenta)
     toggleBtn.classList.toggle('btn-primary', !groupByStatus);
+    toggleBtn.classList.toggle('toggle-active', !groupByStatus);
   }
 
   const tbody = document.getElementById('attendeesBody');
@@ -1069,8 +1086,20 @@ function renderAttendeesTable() {
       <td class="editable-cell" data-id="${att.id}" data-field="email">${att.email || '<span class="empty-val">—</span>'}</td>
       <td class="editable-cell" data-id="${att.id}" data-field="phone">${att.phone || '<span class="empty-val">—</span>'}</td>
       <td class="editable-cell" data-id="${att.id}" data-field="entry_amount">${att.entry_amount > 0 ? formatMoney(att.entry_amount) : '<span class="empty-val">—</span>'}</td>
-      <td>${att.amount_paid > 0 ? `<strong>${formatMoney(att.amount_paid)}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${consumption > 0 ? formatMoney(consumption) : '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${(() => {
+        // Total = lo que pagó por entrada (si pagó) + consumición de barra.
+        const entryPaid = att.status === 'paid' ? Number(att.entry_amount || 0) : 0;
+        const totalDeb  = entryPaid + Number(consumption || 0);
+        const owesEntry = att.status === 'in_process' || att.status === 'pay_later';
+        if (totalDeb > 0) {
+          let html = `<strong>${formatMoney(totalDeb)}</strong>`;
+          if (owesEntry) html += ` <span style="color:#ff453a;font-size:11px">(+${formatMoney(att.entry_amount || 0)} entrada pendiente)</span>`;
+          return html;
+        }
+        if (owesEntry) return `<span style="color:#ff453a;font-weight:600">Pendiente ${formatMoney(att.entry_amount || 0)}</span>`;
+        return '<span style="color:var(--muted)">—</span>';
+      })()}</td>
       <td style="font-size:12px;color:var(--muted)">${att.entry_time ? new Date(att.entry_time).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td style="font-size:12px;color:var(--muted)">${att.exit_time ? new Date(att.exit_time).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td>${att.payment_photo_url ? `<button class="btn btn-sm icon-label-btn" onclick="viewPhoto('${att.payment_photo_url}')">${icon('camera',14)}Ver</button>` : '—'}</td>
@@ -1408,13 +1437,10 @@ function renderEvents() {
         </label>
       </td>
       <td>
-        <div class="row-actions">
-          <button class="btn btn-sm" onclick="downloadEventExcel('${ev.id}')" title="Descargar Excel de este evento">
-            ${icon('download',15)}
-          </button>
-          <button class="btn btn-sm" onclick="resetEventData('${ev.id}')" title="Reset total del evento (mantiene asistentes)" style="border-color:rgba(255,159,10,.35);color:#ffbf4a">
-            Reset
-          </button>
+        <div class="row-actions" style="justify-content:flex-end">
+          <button class="btn btn-sm" onclick="openEditEvent('${ev.id}')" title="Editar evento">${icon('edit',15)}</button>
+          <button class="btn btn-sm" onclick="downloadEventExcel('${ev.id}')" title="Descargar Excel de este evento">${icon('download',15)}</button>
+          <button class="btn btn-sm" onclick="resetEventData('${ev.id}')" title="Reset total del evento (mantiene asistentes)" style="border-color:rgba(255,159,10,.35);color:#ffbf4a">Reset</button>
           ${!ev.is_active ? `<button class="btn btn-sm btn-success" onclick="activateEvent('${ev.id}')">Activar</button>` : ''}
           <button class="btn btn-sm btn-danger" onclick="deleteEvent('${ev.id}')" title="Eliminar">${icon('trash',15)}</button>
         </div>
@@ -2029,6 +2055,78 @@ function downloadEventExcel(eventId) {
 }
 window.downloadEventExcel = downloadEventExcel;
 
+// Editar evento (nombre, fecha, costos y precios) desde un modal centralizado.
+function openEditEvent(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if (!ev) { toast('Evento no encontrado', 'error'); return; }
+  const settings = (allEventSettings || []).find(s => s.event_id === eventId) || {};
+  const canCharge = !!settings.door_can_charge;
+  showModal(`
+    <h3 style="margin:0 0 18px">Editar evento</h3>
+    <form id="editEventForm" autocomplete="off">
+      <div class="form-grid form-grid-stacked">
+        <div class="form-group">
+          <label>Nombre *</label>
+          <input name="name" value="${(ev.name || '').replace(/"/g, '&quot;')}" required/>
+        </div>
+        <div class="form-group">
+          <label>Fecha *</label>
+          <input name="date" type="date" value="${ev.date}" required/>
+        </div>
+        <div class="form-group">
+          <label>Costo de acceso ($)</label>
+          <input name="default_entry_amount" type="number" min="0" value="${Number(ev.default_entry_amount ?? 700)}"/>
+        </div>
+        <div class="form-grid" style="grid-template-columns:repeat(3,1fr);gap:8px">
+          <div class="form-group">
+            <label>Rango 1 ($)</label>
+            <input name="drink_price_1" type="number" min="0" value="${Number(ev.drink_price_1 ?? 160)}"/>
+          </div>
+          <div class="form-group">
+            <label>Rango 2 ($)</label>
+            <input name="drink_price_2" type="number" min="0" value="${Number(ev.drink_price_2 ?? 260)}"/>
+          </div>
+          <div class="form-group">
+            <label>Rango 3 ($)</label>
+            <input name="drink_price_3" type="number" min="0" value="${Number(ev.drink_price_3 ?? 360)}"/>
+          </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text);cursor:pointer">
+          <input type="checkbox" name="door_can_charge" style="width:18px;height:18px" ${canCharge ? 'checked' : ''}/>
+          Portero puede cobrar cuentas de barra
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('editEventForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {
+      name: fd.get('name').trim(),
+      date: fd.get('date'),
+      default_entry_amount: Number(fd.get('default_entry_amount')) || 700,
+      drink_price_1: Number(fd.get('drink_price_1')) || 160,
+      drink_price_2: Number(fd.get('drink_price_2')) || 260,
+      drink_price_3: Number(fd.get('drink_price_3')) || 360,
+    };
+    const newCanCharge = !!fd.get('door_can_charge');
+    const db = getDb();
+    const { error } = await db.from('events').update(payload).eq('id', eventId);
+    if (error) { toast('Error: ' + error.message, 'error'); return; }
+    // Sincronizar door_can_charge en event_settings
+    await db.from('event_settings').upsert({ event_id: eventId, door_can_charge: newCanCharge });
+    toast('Evento actualizado', 'success');
+    closeModal();
+    await loadAll();
+    renderAll();
+  });
+}
+window.openEditEvent = openEditEvent;
+
 // ─── Admin close bar account ──────────────────────────────────────────────────
 // Replica el flujo de la barra (app.js): método + opcional "pagar por otros".
 async function adminCloseBarAccount(barAccountId, slot) {
@@ -2195,6 +2293,24 @@ function openNewEvent() {
           <label>Costo de acceso ($)</label>
           <input name="default_entry_amount" type="number" min="0" value="700"/>
         </div>
+        <div class="form-grid" style="grid-template-columns:repeat(3,1fr);gap:8px">
+          <div class="form-group">
+            <label>Rango 1 ($)</label>
+            <input name="drink_price_1" type="number" min="0" value="160"/>
+          </div>
+          <div class="form-group">
+            <label>Rango 2 ($)</label>
+            <input name="drink_price_2" type="number" min="0" value="260"/>
+          </div>
+          <div class="form-group">
+            <label>Rango 3 ($)</label>
+            <input name="drink_price_3" type="number" min="0" value="360"/>
+          </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text);cursor:pointer">
+          <input type="checkbox" name="door_can_charge" style="width:18px;height:18px"/>
+          Portero puede cobrar cuentas de barra
+        </label>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
@@ -2212,13 +2328,20 @@ function openNewEvent() {
     // Desactivar los demás
     await db.from('events').update({ is_active: false }).eq('is_active', true);
     // Crear evento
-    const entryAmount = Number(fd.get('default_entry_amount')) || 700;
+    const entryAmount  = Number(fd.get('default_entry_amount')) || 700;
+    const drinkPrice1  = Number(fd.get('drink_price_1')) || 160;
+    const drinkPrice2  = Number(fd.get('drink_price_2')) || 260;
+    const drinkPrice3  = Number(fd.get('drink_price_3')) || 360;
+    const doorCanCharge = !!fd.get('door_can_charge');
     const { data: newEvent, error } = await db.from('events')
       .insert({
         name: fd.get('name'),
         date: fd.get('date'),
         is_active: true,
         default_entry_amount: entryAmount,
+        drink_price_1: drinkPrice1,
+        drink_price_2: drinkPrice2,
+        drink_price_3: drinkPrice3,
       })
       .select().single();
     if (error) { toast('Error: ' + error.message, 'error'); return; }
@@ -2259,7 +2382,7 @@ function openNewEvent() {
     });
 
     // Event settings default (door_can_charge sólo — blocked_cards es global)
-    await db.from('event_settings').insert({ event_id: newEvent.id, door_can_charge: false });
+    await db.from('event_settings').insert({ event_id: newEvent.id, door_can_charge: doorCanCharge });
 
     toast(`Evento "${newEvent.name}" creado`, 'success');
     closeModal();
