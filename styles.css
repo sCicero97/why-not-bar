@@ -84,11 +84,11 @@ button {
 .login-logo { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 0 0 14px; }
 .login-logo h1 { margin: 0; font-size: 28px; letter-spacing: -.02em; font-weight: 700; }
 .login-logo .brand-dot { width: 14px; height: 14px; border-radius: 999px; background: #ff453a; box-shadow: 0 0 14px rgba(255, 69, 58, .65); }
-/* Realtime offline: borde rojo con destello de luz girando en sentido horario.
-   El conic-gradient rota infinitamente y un mask deja sólo el borde visible. */
-@keyframes rt-offline-sweep {
-  0%   { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+/* Realtime offline: borde rojo + punto de luz que recorre el contorno del menu
+   (no gira en sí mismo, sigue la línea del borde como un haz a través de un tubo). */
+@keyframes rt-trace {
+  0%   { offset-distance: 0%; }
+  100% { offset-distance: 100%; }
 }
 body.rt-offline .glass-topbar,
 body.rt-offline .bottom-tabbar,
@@ -96,36 +96,37 @@ body.rt-offline .sidebar {
   border-color: rgba(255, 69, 58, .55) !important;
   position: relative;
 }
+/* El punto de luz — sigue el contorno usando offset-path con rect() que
+   matchea la border-radius del elemento padre. */
 body.rt-offline .glass-topbar::after,
 body.rt-offline .bottom-tabbar::after,
 body.rt-offline .sidebar::after {
   content: '';
   position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  padding: 2px;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    transparent 280deg,
-    rgba(255, 69, 58, .35) 320deg,
-    rgba(255, 120, 100, 1) 350deg,
-    rgba(255, 200, 180, 1) 358deg,
-    rgba(255, 120, 100, 1) 6deg,
-    rgba(255, 69, 58, .35) 40deg,
-    transparent 80deg,
-    transparent 360deg
+  /* Tamaño del punto de luz */
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;   /* centrar sobre la línea del borde */
+  top: 0; left: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 240, 220, 1) 0%,
+    rgba(255, 140, 110, .95) 25%,
+    rgba(255, 69, 58, .6) 50%,
+    rgba(255, 69, 58, 0) 75%
   );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
   pointer-events: none;
-  animation: rt-offline-sweep 2.4s linear infinite;
-  filter: drop-shadow(0 0 6px rgba(255, 69, 58, .55));
   z-index: 100;
+  filter: blur(1px);
+  /* offset-path sigue el rectángulo redondeado del padre.
+     Cada selector específico abajo setea el border-radius correcto. */
+  animation: rt-trace 3s linear infinite;
 }
+/* Cada elemento tiene su propio border-radius — matchear en el path */
+body.rt-offline .bottom-tabbar::after { offset-path: rect(0 100% 100% 0 round 28px); }
+body.rt-offline .sidebar::after        { offset-path: rect(0 100% 100% 0 round 28px); }
+body.rt-offline .glass-topbar::after   { offset-path: rect(0 100% 100% 0 round 0px); }
 
 /* Logo image — sin glow, dentro de círculo negro */
 .brand-logo { width: 26px; height: 26px; object-fit: contain; flex-shrink: 0; }

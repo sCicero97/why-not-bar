@@ -417,16 +417,6 @@ function renderEventsStats() {
   const consumptionBuckets = hasDrinksLog
     ? nightHourBuckets(drinksScope.map(d => d.created_at))
     : null;
-  const consumptionAmountBuckets = hasDrinksLog
-    ? (() => {
-        const b = new Array(NIGHT_HOURS.length).fill(0);
-        for (const d of drinksScope) {
-          const i = nightHourIdx(d.created_at);
-          if (i >= 0) b[i] += Number(d.amount || 0);
-        }
-        return b;
-      })()
-    : null;
 
   const eventSelector = `
     <div class="admin-toolbar" style="margin-bottom:10px">
@@ -489,12 +479,6 @@ function renderEventsStats() {
             color: '#bf5af2', unit: 'tragos'
           })
         : '<div class="stats-chart"><div class="stats-chart-title">Tragos servidos por hora</div><div class="empty-state" style="padding:30px">Disponible desde que se active el log de consumo (correr la migración <code>migration_bar_drinks.sql</code>).</div></div>'}
-      ${hasDrinksLog
-        ? nightBarChartSvg(consumptionAmountBuckets, {
-            title: isAll ? 'Ingreso de barra por hora ($) — todos los eventos' : 'Ingreso de barra por hora ($)',
-            color: '#f59e0b', formatter: (v) => formatMoney(v)
-          })
-        : ''}
     </div>
   `;
 
