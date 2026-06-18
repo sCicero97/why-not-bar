@@ -561,8 +561,9 @@ body.admin-body {
 }
 /* En mobile, ocultar columnas no esenciales de Asistentes y alinear acciones a la derecha */
 @media (max-width: 900px) {
-  #attendeesTable th:nth-child(n+4):nth-child(-n+12),
-  #attendeesTable td:nth-child(n+4):nth-child(-n+12) {
+  /* Visible: 1=Nombre, 2=Estado, 3=Barra #, 14=Acciones. Ocultar 4..13 (incluida Notas) */
+  #attendeesTable th:nth-child(n+4):nth-child(-n+13),
+  #attendeesTable td:nth-child(n+4):nth-child(-n+13) {
     display: none;
   }
   #attendeesTable th:last-child,
@@ -573,6 +574,34 @@ body.admin-body {
     justify-content: flex-end;
   }
 }
+
+/* Cards del dashboard clickeables: cursor + hover sutil */
+.stat-card.is-clickable {
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.stat-card.is-clickable:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, .18);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+.stat-card.is-clickable:active { transform: translateY(0); }
+.stat-card.is-clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Celda de Notas: máx ancho, truncar con "..." si es muy larga, hint visual de editable */
+.admin-table td.notes-cell {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  color: #c8c8cc;
+}
+.admin-table td.notes-cell .notes-val { color: #e5e5ea; }
+.admin-table td.notes-cell .empty-val { color: #5e5e63; }
 
 /* Toggle activo — claro y obvio que está en estado on */
 .admin-body .btn.toggle-active {

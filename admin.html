@@ -351,15 +351,21 @@
 
         <div class="admin-section-header">Asistentes</div>
         <div class="summary-grid summary-grid-2">
-          <div class="glass-card stat-card tint-green">
+          <div class="glass-card stat-card tint-green is-clickable" role="button" tabindex="0"
+            onclick="goToAttendeesWithFilter('not_entered')"
+            title="Ver quienes no ingresaron">
             <span class="summary-label">Ingresaron</span>
             <strong id="d-entered">0</strong>
           </div>
-          <div class="glass-card stat-card">
+          <div class="glass-card stat-card is-clickable" role="button" tabindex="0"
+            onclick="goToBarWithFilter('open')"
+            title="Ver cuentas de barra sin cerrar">
             <span class="summary-label">Cuentas barra abiertas</span>
             <strong id="d-openAccs">0</strong>
           </div>
-          <div class="glass-card stat-card tint-green">
+          <div class="glass-card stat-card tint-green is-clickable" role="button" tabindex="0"
+            onclick="goToBarWithFilter('closed')"
+            title="Ver cuentas de barra cerradas">
             <span class="summary-label">Cuentas barra cerradas</span>
             <strong id="d-closedAccs">0</strong>
           </div>
@@ -390,6 +396,12 @@
             <option value="in_process">En proceso</option>
             <option value="paid">Pago</option>
           </select>
+          <select id="attQuickFilter" class="admin-select" title="Vista rápida">
+            <option value="">Vista: todos</option>
+            <option value="not_entered">No ingresaron</option>
+            <option value="entered">Ingresaron</option>
+            <option value="bar_open">Cuenta barra sin cerrar</option>
+          </select>
           <button id="addAttendeeBtn" class="btn btn-primary btn-sm icon-label-btn">
             <svg width="16" height="16"><use href="#i-plus"/></svg>
             Agregar
@@ -416,6 +428,7 @@
                 <th>Ingresó</th>
                 <th>Salió</th>
                 <th>Foto pago</th>
+                <th>Notas</th>
                 <th class="th-actions">Acciones</th>
               </tr>
             </thead>

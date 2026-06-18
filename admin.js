@@ -53,7 +53,7 @@ async function init() {
       document.getElementById('eventName').textContent = activeEvent.name;
     }
 
-    await loadAll();
+    await loadAll({ firstLoad: true });
     setupRealtime();
     setupUI();
     // Routing por hash: #barra, #tareas, etc. — abrir la pestaña si es válida.
@@ -74,28 +74,27 @@ function currentEvent() {
   return viewingEvent || activeEvent;
 }
 
-async function loadAll() {
+// Cache de la última vez que cargamos cross-event (no recargar en cada reload realtime).
+let _crossEventLoadedAt = 0;
+const CROSS_EVENT_TTL_MS = 60_000; // re-cargar si pasó >60s desde última carga
+
+// loadAll: carga RÁPIDA — sólo lo del evento activo + listas que la UI necesita.
+// Las queries cross-event (Estadísticas / Personas) se cargan después en background.
+async function loadAll(opts = {}) {
   const db = getDb();
   const eventId = currentEvent()?.id;
 
-  const queries = [
+  // Core queries: rápidas, lo que se ve al entrar
+  const coreQueries = [
     db.from('events').select('*').order('date', { ascending: false }),
     db.from('profiles').select('id,display_name,role'),
-    db.from('blacklist').select('*').order('created_at', { ascending: false }),
-    // Asistentes de todos los eventos (para stats de Personas)
-    db.from('attendees').select('id,event_id,name,cedula,email,phone,entry_amount,amount_paid,bar_account_slot,entered,entry_time,exit_time,created_at'),
-    // Cierres y gastos cross-event para stats
-    db.from('bar_closures').select('id,event_id,slot,total,qty160,qty260,qty360,payment_method,closed_at,closed_by'),
-    db.from('expenses').select('id,event_id,amount,description,created_at'),
-    // Log de tragos (para stats de consumo por hora) — opcional, puede fallar si no hay migración
-    db.from('bar_drinks').select('event_id,slot,amount,created_at'),
-    // Tarjetas bloqueadas — global, cross-event
+    // Tarjetas bloqueadas: pocas filas, se usan en validaciones del bar
     db.from('blocked_cards').select('*').order('slot'),
-    // Settings de TODOS los eventos (para el toggle "portero cobra" en pestaña Eventos)
+    // event_settings cross-event: pocas filas (1 por evento), usado en pestaña Eventos
     db.from('event_settings').select('event_id, door_can_charge'),
   ];
   if (eventId) {
-    queries.push(
+    coreQueries.push(
       db.from('attendees').select('*').eq('event_id', eventId).order('name'),
       db.from('bar_accounts').select('*, attendees(name)').eq('event_id', eventId).order('slot'),
       db.from('bar_closures').select('*, attendees(name)').eq('event_id', eventId).order('closed_at', { ascending: false }),
@@ -105,39 +104,62 @@ async function loadAll() {
     );
   }
 
-  const results = await Promise.all(queries);
+  const results = await Promise.all(coreQueries);
   if (results[0].data) events = results[0].data;
   if (results[1].data) profiles = results[1].data;
-  // blacklist puede fallar si la tabla no existe todavía (pre-migración) — manejar
-  if (results[2] && !results[2].error && results[2].data) blacklist = results[2].data;
-  else if (results[2]?.error) { blacklist = []; console.warn('[blacklist]', results[2].error.message); }
-  if (results[3]?.data) allAttendeesXE = results[3].data;
-  if (results[4]?.data) allClosuresXE = results[4].data;
-  if (results[5]?.data) allExpensesXE = results[5].data;
-  // bar_drinks puede no existir si no se corrió la migración todavía
-  if (results[6] && !results[6].error && results[6].data) allDrinksXE = results[6].data;
-  else if (results[6]?.error) { allDrinksXE = []; }
-  // blocked_cards (global). Si la tabla no existe, fallback a event_settings.blocked_slots
-  if (results[7] && !results[7].error && results[7].data) blockedCards = results[7].data;
-  else if (results[7]?.error) { blockedCards = []; _blockedCardsTableSupported = false; }
-  // event_settings de todos los eventos (para columna toggle en pestaña Eventos)
-  if (results[8]?.data) allEventSettings = results[8].data;
-  if (results[9]?.data) attendees = results[9].data;
-  if (results[10]?.data) barAccounts = results[10].data;
-  if (results[11]?.data) barClosures = results[11].data;
-  if (results[12]?.data) expenses = results[12].data;
-  if (results[13]?.data) tasks = results[13].data;
-  if (results[14]?.data) {
-    eventSettings = results[14].data || { door_can_charge: false, blocked_slots: [] };
+  // blocked_cards: si la tabla no existe (pre-migración), no romper
+  if (results[2] && !results[2].error && results[2].data) blockedCards = results[2].data;
+  else if (results[2]?.error) { blockedCards = []; _blockedCardsTableSupported = false; }
+  if (results[3]?.data) allEventSettings = results[3].data;
+  if (results[4]?.data) attendees = results[4].data;
+  if (results[5]?.data) barAccounts = results[5].data;
+  if (results[6]?.data) barClosures = results[6].data;
+  if (results[7]?.data) expenses = results[7].data;
+  if (results[8]?.data) tasks = results[8].data;
+  if (results[9]?.data) {
+    eventSettings = results[9].data || { door_can_charge: false, blocked_slots: [] };
     if (!Array.isArray(eventSettings.blocked_slots)) eventSettings.blocked_slots = [];
   }
 
-  // Self-heal: asistentes con bar_account_slot cuya bar_account está sin attendee_id
-  // (bug histórico: crew creado antes de corregir el event_id).
-  await healDanglingBarAccountLinks();
+  // Self-heal: sólo en init (no en cada reload realtime).
+  if (opts.firstLoad) {
+    await healDanglingBarAccountLinks();
+  }
 
   renderAll();
+
+  // Cross-event en background — sin bloquear la UI. Sólo refresca si pasó el TTL.
+  if (Date.now() - _crossEventLoadedAt > CROSS_EVENT_TTL_MS) {
+    loadCrossEventStats().catch(() => {});
+  }
 }
+
+// Datos cross-event para pestañas de Estadísticas / Personas / Blacklist.
+// Se cargan en background y se cachean. NO bloquean el primer pintado.
+async function loadCrossEventStats() {
+  const db = getDb();
+  const queries = [
+    db.from('blacklist').select('*').order('created_at', { ascending: false }),
+    db.from('attendees').select('id,event_id,name,cedula,email,phone,entry_amount,amount_paid,bar_account_slot,entered,entry_time,exit_time,created_at'),
+    db.from('bar_closures').select('id,event_id,slot,total,qty160,qty260,qty360,payment_method,closed_at,closed_by'),
+    db.from('expenses').select('id,event_id,amount,description,created_at'),
+    // bar_drinks puede ser MUY grande — limitar a últimas 5000 filas (suficiente para stats)
+    db.from('bar_drinks').select('event_id,slot,amount,created_at').order('created_at', { ascending: false }).limit(5000),
+  ];
+  const r = await Promise.all(queries);
+  if (r[0] && !r[0].error && r[0].data) blacklist = r[0].data;
+  if (r[1]?.data) allAttendeesXE = r[1].data;
+  if (r[2]?.data) allClosuresXE = r[2].data;
+  if (r[3]?.data) allExpensesXE = r[3].data;
+  if (r[4] && !r[4].error && r[4].data) allDrinksXE = r[4].data;
+  _crossEventLoadedAt = Date.now();
+
+  // Re-render sólo de las pestañas que usan datos cross-event (sin redibujar todo)
+  try { renderBlacklist(); } catch (_) {}
+  try { renderPersonas(); } catch (_) {}
+  try { renderEventsStats(); } catch (_) {}
+}
+window.loadCrossEventStats = loadCrossEventStats;
 
 async function healDanglingBarAccountLinks() {
   if (!currentEvent()) return;
@@ -1040,6 +1062,8 @@ function renderAttendeesTable() {
     counters.innerHTML = adentroCard + faltanCard + statusCards;
   }
 
+  const quickF = document.getElementById('attQuickFilter')?.value || '';
+
   let list = attendees.filter(a => {
     if (search) {
       const slot = a.bar_account_slot ? String(a.bar_account_slot) : '';
@@ -1048,6 +1072,20 @@ function renderAttendeesTable() {
       if (!hay.includes(search)) return false;
     }
     if (statusF && a.status !== statusF) return false;
+
+    // Vista rápida
+    if (quickF === 'not_entered') {
+      // Excluir organizadores (no marcan ingreso) y los que ya entraron
+      if (a.is_organizer) return false;
+      if (a.entered) return false;
+    } else if (quickF === 'entered') {
+      if (!a.entered) return false;
+    } else if (quickF === 'bar_open') {
+      // Tiene cuenta de barra asignada y la cuenta sigue abierta
+      if (!a.bar_account_slot) return false;
+      const acc = barAccounts.find(b => b.slot === a.bar_account_slot && b.attendee_id === a.id);
+      if (!acc || acc.is_closed) return false;
+    }
     return true;
   });
 
@@ -1106,8 +1144,9 @@ function renderAttendeesTable() {
       <td style="font-size:12px;color:var(--muted)">${att.entry_time ? new Date(att.entry_time).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td style="font-size:12px;color:var(--muted)">${att.exit_time ? new Date(att.exit_time).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td>${att.payment_photo_url ? `<button class="btn btn-sm icon-label-btn" onclick="viewPhoto('${att.payment_photo_url}')">${icon('camera',14)}Ver</button>` : '—'}</td>
-      <td>
-        <div class="row-actions">
+      <td class="editable-cell notes-cell" data-id="${att.id}" data-field="notes" data-type="text" title="Click para editar">${att.notes ? `<span class="notes-val">${String(att.notes).replace(/</g,'&lt;')}</span>` : '<span class="empty-val">—</span>'}</td>
+      <td class="td-actions">
+        <div class="row-actions" style="justify-content:flex-end">
           <button class="btn btn-sm" onclick="openEditAttendee('${att.id}')" title="Editar">${icon('edit',15)}</button>
           ${att.entered && !att.exit_time ? `<button class="btn btn-sm" onclick="revertAttendeeEntry('${att.id}')" title="Marcar como NO ingresado">↺ Ingreso</button>` : ''}
           ${att.exit_time ? `<button class="btn btn-sm" onclick="revertAttendeeExit('${att.id}')" title="Marcar como adentro (deshacer salida)">↺ Salida</button>` : ''}
@@ -1116,7 +1155,7 @@ function renderAttendeesTable() {
         </div>
       </td>
     </tr>`;
-  }).join('') || '<tr><td colspan="13" class="empty-state">Sin asistentes. Agregá uno con el botón +</td></tr>';
+  }).join('') || '<tr><td colspan="14" class="empty-state">Sin asistentes. Agregá uno con el botón +</td></tr>';
 }
 
 // ─── Bar counters ─────────────────────────────────────────────────────────────
@@ -3114,6 +3153,39 @@ const TAB_ICONS = {
 // Tabs visibles en la tab-bar inferior (mobile). El resto va en "Más".
 const PRIMARY_MOBILE_TABS = ['dashboard', 'asistentes', 'barra', 'gastos'];
 
+// Navegación con filtro pre-aplicado desde las cards del dashboard
+function goToAttendeesWithFilter(quickFilter) {
+  activateTab('asistentes');
+  // Esperar al próximo frame para que el select exista en el DOM
+  requestAnimationFrame(() => {
+    const sel = document.getElementById('attQuickFilter');
+    if (sel) {
+      sel.value = quickFilter || '';
+      // Limpiar filtro de estado y búsqueda para que el filtro rápido se vea
+      const stFilter = document.getElementById('attStatusFilter');
+      if (stFilter) stFilter.value = '';
+      const search = document.getElementById('attSearch');
+      if (search) search.value = '';
+      renderAttendeesTable();
+    }
+  });
+}
+window.goToAttendeesWithFilter = goToAttendeesWithFilter;
+
+function goToBarWithFilter(barFilter) {
+  activateTab('barra');
+  requestAnimationFrame(() => {
+    const sel = document.getElementById('barFilter');
+    if (sel) {
+      sel.value = barFilter || 'all';
+      const search = document.getElementById('barSearch');
+      if (search) search.value = '';
+      renderBarTable();
+    }
+  });
+}
+window.goToBarWithFilter = goToBarWithFilter;
+
 function activateTab(tab, opts = {}) {
   // Paneles
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -3144,6 +3216,12 @@ function activateTab(tab, opts = {}) {
   closeMoreSheet();
   // Carga bajo demanda
   if (tab === 'usuarios') loadUsers();
+  // Tabs cross-event: si los datos están viejos, recargar en background (sin bloquear)
+  if (tab === 'personas' || tab === 'blacklist' || tab === 'eventos-stats') {
+    if (Date.now() - _crossEventLoadedAt > CROSS_EVENT_TTL_MS) {
+      loadCrossEventStats().catch(() => {});
+    }
+  }
   // Scroll top
   const scroll = document.querySelector('.main-scroll');
   if (scroll) scroll.scrollTop = 0;
@@ -3306,6 +3384,7 @@ function setupUI() {
 
   document.getElementById('attSearch').addEventListener('input', renderAttendeesTable);
   document.getElementById('attStatusFilter').addEventListener('change', renderAttendeesTable);
+  document.getElementById('attQuickFilter')?.addEventListener('change', renderAttendeesTable);
   document.getElementById('barFilter').addEventListener('change', renderBarTable);
   document.getElementById('barSearch')?.addEventListener('input', renderBarTable);
   document.getElementById('personasSearch')?.addEventListener('input', renderPersonas);
