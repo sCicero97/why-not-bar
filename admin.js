@@ -567,10 +567,11 @@ function renderPersonas() {
       { label: 'Personas únicas', value: list.length, color: '#3b82f6', bg: '#0d1420', border: '#1a2a3a' },
       { label: 'En blacklist',   value: blacklist.length, color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
     ];
+    counters.classList.add('mini-stats');
     counters.innerHTML = cfg.map(c => `
-      <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
-        <span style="font-size:22px;font-weight:bold;color:${c.color}">${c.value}</span>
-        <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+      <div class="mini-stat" style="background:${c.bg};border:1px solid ${c.border}">
+        <span class="mini-stat-val" style="color:${c.color}">${c.value}</span>
+        <span class="mini-stat-lbl">${c.label}</span>
       </div>`).join('');
   }
 
@@ -592,8 +593,8 @@ function renderPersonas() {
       </td>
       <td style="font-size:12.5px;color:var(--muted)">${p.lastAt ? p.lastAt.toLocaleDateString('es-UY') : '—'}</td>
       <td><strong>${formatMoney(p.totalSpent)}</strong></td>
-      <td>
-        <div class="row-actions">
+      <td class="td-actions">
+        <div class="row-actions" style="justify-content:flex-end">
           <button class="btn btn-sm" onclick="openEditPersona('${p.key.replace(/'/g, "\\'")}')" title="Editar información" aria-label="Editar" style="padding:6px 10px">
             ${icon('edit', 16)}
           </button>
@@ -690,10 +691,11 @@ function renderBlacklist() {
     const cfg = [
       { label: 'En blacklist', value: blacklist.length, color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
     ];
+    counters.classList.add('mini-stats');
     counters.innerHTML = cfg.map(c => `
-      <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
-        <span style="font-size:22px;font-weight:bold;color:${c.color}">${c.value}</span>
-        <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+      <div class="mini-stat" style="background:${c.bg};border:1px solid ${c.border}">
+        <span class="mini-stat-val" style="color:${c.color}">${c.value}</span>
+        <span class="mini-stat-lbl">${c.label}</span>
       </div>`).join('');
   }
 
@@ -711,8 +713,10 @@ function renderBlacklist() {
       </td>
       <td style="font-size:12.5px;color:var(--muted)">${b.notes || ''}</td>
       <td style="font-size:12px;color:var(--muted)">${b.created_at ? new Date(b.created_at).toLocaleDateString('es-UY') : ''}</td>
-      <td>
-        <button class="btn btn-sm btn-danger" onclick="removeFromBlacklist('${b.id}')" title="Quitar de la lista">${icon('trash', 14)}</button>
+      <td class="td-actions">
+        <div class="row-actions" style="justify-content:flex-end">
+          <button class="btn btn-sm btn-danger" onclick="removeFromBlacklist('${b.id}')" title="Quitar de la lista">${icon('trash', 14)}</button>
+        </div>
       </td>
     </tr>
   `).join('') || '<tr><td colspan="7" class="empty-state">La blacklist está vacía.</td></tr>';
@@ -1060,9 +1064,8 @@ function renderAttendeesTable() {
   const toggleTxt = document.getElementById('toggleGroupText');
   if (toggleBtn && toggleTxt) {
     toggleTxt.textContent = groupByStatus ? 'Agrupado por estado' : 'Ordenado por cuenta';
-    // Cambia de visual: activo (azul) cuando no es el default (ordenado por cuenta)
-    toggleBtn.classList.toggle('btn-primary', !groupByStatus);
-    toggleBtn.classList.toggle('toggle-active', !groupByStatus);
+    // Botón siempre con el mismo color — el texto refleja el estado actual.
+    toggleBtn.classList.remove('btn-primary', 'toggle-active');
   }
 
   const tbody = document.getElementById('attendeesBody');
@@ -1133,10 +1136,11 @@ function renderAdminBarCounters() {
     { label: 'Cerradas',      value: `${formatMoney(closedTot)} (${closed})`, color: '#3b82f6', bg: '#0d1420', border: '#1a2a3a' },
     { label: 'Total general', value: formatMoney(grandTot),                   color: '#f5f5f7', bg: '#181818', border: '#2a2a2a' },
   ];
+  el.classList.add('mini-stats');
   el.innerHTML = cfg.map(c => `
-    <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
-      <span style="font-size:22px;font-weight:bold;color:${c.color}">${c.value}</span>
-      <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+    <div class="mini-stat" style="background:${c.bg};border:1px solid ${c.border}">
+      <span class="mini-stat-val" style="color:${c.color}">${c.value}</span>
+      <span class="mini-stat-lbl">${c.label}</span>
     </div>`).join('');
 }
 
@@ -1371,18 +1375,28 @@ function renderExpenses() {
   const tbody = document.getElementById('expensesBody');
   if (!tbody) return;
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
-  const countItems = expenses.length;
 
-  // Counter (sólo total, sin ítems)
+  // Ingresos = entradas cobradas (status paid) + barra cobrada (closures)
+  const entradas = (attendees || [])
+    .filter(a => a.status === 'paid')
+    .reduce((s, a) => s + Number(a.amount_paid || a.entry_amount || 0), 0);
+  const barCobrado = (barClosures || []).reduce((s, c) => s + Number(c.total || 0), 0);
+  const ingresos = entradas + barCobrado;
+  const balance = ingresos - total;
+
+  // Counters: ingresos (verde) + gastos (rojo) + balance
   const counters = document.getElementById('expensesCounters');
   if (counters) {
     const cfg = [
+      { label: 'Ingresos', value: formatMoney(ingresos), color: '#30d158', bg: '#0d1f12', border: '#1a3a1a' },
       { label: 'Total gastos', value: formatMoney(total), color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
+      { label: 'Balance', value: formatMoney(balance), color: balance >= 0 ? '#30d158' : '#ff453a', bg: '#101116', border: '#1f1f25' },
     ];
+    counters.classList.add('mini-stats');
     counters.innerHTML = cfg.map(c => `
-      <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
-        <span style="font-size:22px;font-weight:bold;color:${c.color}">${c.value}</span>
-        <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+      <div class="mini-stat" style="background:${c.bg};border:1px solid ${c.border}">
+        <span class="mini-stat-val" style="color:${c.color}">${c.value}</span>
+        <span class="mini-stat-lbl">${c.label}</span>
       </div>`).join('');
   }
 
@@ -1394,8 +1408,8 @@ function renderExpenses() {
       <td class="editable-cell" data-entity="expense" data-id="${exp.id}" data-field="description" data-type="text">${exp.description}</td>
       <td class="editable-cell" data-entity="expense" data-id="${exp.id}" data-field="amount" data-type="number"><strong>${formatMoney(exp.amount)}</strong></td>
       <td style="font-size:12px;color:var(--muted)">${new Date(exp.created_at).toLocaleDateString('es-UY')}</td>
-      <td>
-        <div class="row-actions">
+      <td class="td-actions">
+        <div class="row-actions" style="justify-content:flex-end">
           <button class="btn btn-sm btn-danger" onclick="deleteExpense('${exp.id}')" title="Eliminar">${icon('trash',15)}</button>
         </div>
       </td>
@@ -1417,11 +1431,9 @@ function renderEvents() {
   if (_hasActiveEdit('event')) return; // no destruir el input mientras se edita
   const tbody = document.getElementById('eventsBody');
   if (!tbody) return;
-  const settingsByEvent = Object.fromEntries((allEventSettings || []).map(s => [s.event_id, s]));
   // Orden: fecha más reciente / próxima primero, vieja al final.
   const sortedEvents = [...events].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   tbody.innerHTML = sortedEvents.map(ev => {
-    const canCharge = !!(settingsByEvent[ev.id]?.door_can_charge);
     return `
     <tr>
       <td class="editable-cell" data-entity="event" data-id="${ev.id}" data-field="name" data-type="text"><strong>${ev.name}</strong></td>
@@ -1430,13 +1442,7 @@ function renderEvents() {
         ? '<span class="status-pill" style="background:#1a3a1a;color:#1ed760">ACTIVO</span>'
         : '<span class="status-pill" style="background:#1c1c1c;color:#6b7280">Inactivo</span>'
       }</td>
-      <td>
-        <label class="task-checkbox" title="${canCharge ? 'Activado' : 'Desactivado'}: el portero puede cobrar cuentas de barra en este evento" onclick="event.stopPropagation()">
-          <input type="checkbox" onchange="toggleEventDoorCanCharge('${ev.id}', this.checked)" ${canCharge ? 'checked' : ''}/>
-          <span class="checkmark"></span>
-        </label>
-      </td>
-      <td>
+      <td class="td-actions">
         <div class="row-actions" style="justify-content:flex-end">
           <button class="btn btn-sm" onclick="openEditEvent('${ev.id}')" title="Editar evento">${icon('edit',15)}</button>
           <button class="btn btn-sm" onclick="downloadEventExcel('${ev.id}')" title="Descargar Excel de este evento">${icon('download',15)}</button>
@@ -1446,7 +1452,7 @@ function renderEvents() {
         </div>
       </td>
     </tr>`;
-  }).join('') || '<tr><td colspan="5" class="empty-state">Sin eventos. Creá uno.</td></tr>';
+  }).join('') || '<tr><td colspan="4" class="empty-state">Sin eventos. Creá uno.</td></tr>';
 }
 
 // Cambia door_can_charge para un evento específico desde la pestaña Eventos.
@@ -2077,7 +2083,7 @@ function openEditEvent(eventId) {
           <label>Costo de acceso ($)</label>
           <input name="default_entry_amount" type="number" min="0" value="${Number(ev.default_entry_amount ?? 700)}"/>
         </div>
-        <div class="form-grid" style="grid-template-columns:repeat(3,1fr);gap:8px">
+        <div class="form-grid form-grid-rangos">
           <div class="form-group">
             <label>Rango 1 ($)</label>
             <input name="drink_price_1" type="number" min="0" value="${Number(ev.drink_price_1 ?? 160)}"/>
@@ -2091,9 +2097,9 @@ function openEditEvent(eventId) {
             <input name="drink_price_3" type="number" min="0" value="${Number(ev.drink_price_3 ?? 360)}"/>
           </div>
         </div>
-        <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text);cursor:pointer">
-          <input type="checkbox" name="door_can_charge" style="width:18px;height:18px" ${canCharge ? 'checked' : ''}/>
-          Portero puede cobrar cuentas de barra
+        <label class="form-check-row">
+          <input type="checkbox" name="door_can_charge" ${canCharge ? 'checked' : ''}/>
+          <span>Portero puede cobrar cuentas de barra</span>
         </label>
       </div>
       <div class="modal-actions">
@@ -2293,7 +2299,7 @@ function openNewEvent() {
           <label>Costo de acceso ($)</label>
           <input name="default_entry_amount" type="number" min="0" value="700"/>
         </div>
-        <div class="form-grid" style="grid-template-columns:repeat(3,1fr);gap:8px">
+        <div class="form-grid form-grid-rangos">
           <div class="form-group">
             <label>Rango 1 ($)</label>
             <input name="drink_price_1" type="number" min="0" value="160"/>
@@ -2307,9 +2313,9 @@ function openNewEvent() {
             <input name="drink_price_3" type="number" min="0" value="360"/>
           </div>
         </div>
-        <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text);cursor:pointer">
-          <input type="checkbox" name="door_can_charge" style="width:18px;height:18px"/>
-          Portero puede cobrar cuentas de barra
+        <label class="form-check-row">
+          <input type="checkbox" name="door_can_charge"/>
+          <span>Portero puede cobrar cuentas de barra</span>
         </label>
       </div>
       <div class="modal-actions">
@@ -2884,8 +2890,8 @@ function renderUsers() {
       <td style="font-size:12px;color:#8e8e93">
         ${u.last_sign_in ? new Date(u.last_sign_in).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'Nunca'}
       </td>
-      <td>
-        <div class="row-actions">
+      <td class="td-actions">
+        <div class="row-actions" style="justify-content:flex-end">
           <button class="btn btn-sm icon-label-btn" onclick="openChangePasswordModal('${u.id}','${u.email.replace(/'/g,"&#39;")}')"
             title="Cambiar contraseña">${icon('key',14)}Clave</button>
           <button class="btn btn-sm btn-danger" onclick="deleteAppUser('${u.id}','${u.email.replace(/'/g,"&#39;")}')" title="Eliminar">${icon('trash',15)}</button>
@@ -3687,10 +3693,11 @@ function renderBlockedCards() {
     const cfg = [
       { label: 'Tarjetas bloqueadas', value: blocked.length, color: '#ff453a', bg: '#1f0d0d', border: '#3a1a1a' },
     ];
+    counter.classList.add('mini-stats');
     counter.innerHTML = cfg.map(c => `
-      <div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
-        <span style="font-size:22px;font-weight:bold;color:${c.color}">${c.value}</span>
-        <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+      <div class="mini-stat" style="background:${c.bg};border:1px solid ${c.border}">
+        <span class="mini-stat-val" style="color:${c.color}">${c.value}</span>
+        <span class="mini-stat-lbl">${c.label}</span>
       </div>`).join('');
   }
 

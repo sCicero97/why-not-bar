@@ -643,6 +643,53 @@ body.admin-body {
 .admin-table .row-active td { background: rgba(48, 209, 88, .04); }
 .admin-table .row-closed td { opacity: .5; }
 
+/* Acciones alineadas a la derecha (header + celdas) */
+.admin-table th.th-actions { text-align: right; }
+.admin-table td.td-actions { text-align: right; }
+.admin-table td.td-actions .row-actions { justify-content: flex-end; display: inline-flex; }
+
+/* ═══════════ MINI STATS (contadores de secciones) ═══════════ */
+.mini-stats {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.mini-stats .mini-stat {
+  flex: 1 1 auto;
+  min-width: 140px;
+  border-radius: 12px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mini-stats .mini-stat-val {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+.mini-stats .mini-stat-lbl {
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+/* Mobile: dos por fila, más compacto */
+@media (max-width: 700px) {
+  .mini-stats { gap: 8px; }
+  .mini-stats .mini-stat {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    padding: 8px 10px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .mini-stats .mini-stat-val { font-size: 17px; }
+  .mini-stats .mini-stat-lbl { font-size: 10.5px; letter-spacing: .04em; }
+}
+
 /* Hold-to-close: sólo touch. Anillo que se cierra alrededor del dedo. */
 .admin-table tr.bar-row-hold {
   position: relative;
@@ -973,6 +1020,34 @@ body.modal-open { overflow: hidden; position: relative; }
 .form-grid.form-grid-stacked {
   grid-template-columns: 1fr;
   gap: 16px;
+}
+/* Variante 3 columnas para rangos de tragos (R1/R2/R3) */
+.form-grid.form-grid-rangos {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+/* Fila checkbox + label que envuelve sin desbordar */
+.form-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.form-check-row input[type=checkbox] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.form-check-row span {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .form-group { display: flex; flex-direction: column; }
 .form-group label {
@@ -1360,7 +1435,18 @@ body.modal-open { overflow: hidden; position: relative; }
     min-height: 0;
     margin: 0;
   }
-  #tab-dashboard .admin-section-header { display: none; }
+  /* Section headers visibles pero compactos: Cuentas, Asistentes, Detalle de la barra */
+  #tab-dashboard .admin-section-header {
+    display: block;
+    font-size: 11px;
+    margin: 4px 0 -2px 4px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #c8c8cc;
+    font-weight: 700;
+    opacity: .85;
+    flex-shrink: 0;
+  }
   #tab-dashboard .summary-grid,
   #tab-dashboard .summary-grid:has(#d-barTotal),
   #tab-dashboard .summary-grid:has(#d-entered),
@@ -1385,15 +1471,18 @@ body.modal-open { overflow: hidden; position: relative; }
   #tab-dashboard .stat-card #d-netTotal { font-size: 26px !important; }
   #tab-dashboard .stat-card .summary-label { font-size: 10.5px; margin-bottom: 4px; letter-spacing: .04em; }
 
-  /* Event picker: fondo negro redondeado, alto similar a los cards */
+  /* Event picker: fondo con tinte rojo sutil para llamar la atención sin romper estética */
   .dashboard-event-picker .event-picker-btn-prominent {
-    background: rgba(0, 0, 0, .55) !important;
-    border: 1px solid rgba(255, 255, 255, .08) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 69, 58, .14), rgba(255, 69, 58, .06)),
+      rgba(20, 8, 8, .65) !important;
+    border: 1px solid rgba(255, 69, 58, .28) !important;
     color: #fff !important;
     backdrop-filter: blur(18px) saturate(170%);
     -webkit-backdrop-filter: blur(18px) saturate(170%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, .06),
+      inset 0 1px 0 rgba(255, 255, 255, .08),
+      0 6px 18px rgba(255, 69, 58, .15),
       0 6px 16px rgba(0, 0, 0, .35) !important;
     width: 100%;
     padding: 0 18px;
@@ -1404,6 +1493,9 @@ body.modal-open { overflow: hidden; position: relative; }
     gap: 10px;
     min-height: 0;
     height: 100%;
+  }
+  .dashboard-event-picker .event-picker-btn-prominent:active {
+    transform: scale(.985);
   }
   .dashboard-event-picker .event-picker-btn-prominent svg {
     color: #fff;
@@ -1426,9 +1518,19 @@ body.modal-open { overflow: hidden; position: relative; }
 
   .summary-grid-2 { grid-template-columns: repeat(2, 1fr); }
   .form-grid { grid-template-columns: 1fr; }
+  /* Mantener 3 columnas para rangos de tragos en mobile (entran ok) */
+  .form-grid.form-grid-rangos { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 6px; }
+  .form-grid.form-grid-rangos .form-group input { padding: 9px 8px; font-size: 14px; }
+  .form-grid.form-grid-rangos .form-group label { font-size: 10.5px; letter-spacing: .04em; }
   .admin-toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
   .search-field { width: 100%; }
-  .admin-modal-box { padding: 20px; max-height: 92vh; }
+  .admin-modal-box {
+    padding: 20px 18px;
+    max-height: 92vh;
+    max-width: calc(100vw - 24px);
+    overflow-x: hidden;
+  }
+  .modal-overlay { padding: 12px; }
 }
 
 @media (max-width: 520px) {

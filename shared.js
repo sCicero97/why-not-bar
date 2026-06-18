@@ -22,9 +22,11 @@ const STORAGE_BUCKET = 'payment-photos';
 // online o cambiar de tab, y un fallback de polling ligero cada 15s.
 let _liveStatus = 'connecting'; // 'connecting' | 'live' | 'offline'
 let _offlinePendingTimer = null;
+// Tolerancia generosa para mobile: redes celulares y wifi débil tienen
+// microcortes (1-10s) constantes. No queremos parpadear el indicador.
+const OFFLINE_TOLERANCE_MS = 15000;
 function _setLiveStatus(s) {
-  // Tolerancia: no marcar offline si la desconexión dura < 5 segundos.
-  // Esto evita parpadeos cuando el websocket reconecta solo.
+  // Tolerancia: no marcar offline si la desconexión dura < OFFLINE_TOLERANCE_MS.
   if (s === 'offline') {
     if (_liveStatus === 'offline') return;          // ya marcado
     if (_offlinePendingTimer) return;               // ya hay un timer pendiente
@@ -33,7 +35,7 @@ function _setLiveStatus(s) {
       _liveStatus = 'offline';
       document.body.classList.add('rt-offline');
       document.body.classList.remove('rt-connecting');
-    }, 5000);
+    }, OFFLINE_TOLERANCE_MS);
     return;
   }
   // Si estábamos por marcar offline pero volvió la conexión, cancelar
@@ -50,12 +52,22 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
   const db = getDb();
   let _timer = null;
   let _channel = null;
-  let _retryDelay = 1500; // backoff exponencial al fallar
+  let _retryDelay = 800; // backoff exponencial al fallar (arranca rápido)
+  let _lastReloadAt = 0;
 
   // Debounce: si llegan varios cambios seguidos, hacer un solo reload.
   function scheduleReload() {
     if (_timer) clearTimeout(_timer);
-    _timer = setTimeout(() => { _timer = null; Promise.resolve(reload()).catch(() => {}); }, 250);
+    _timer = setTimeout(() => {
+      _timer = null;
+      _lastReloadAt = Date.now();
+      Promise.resolve(reload()).catch(() => {});
+    }, 250);
+  }
+
+  function rebuildChannel() {
+    try { if (_channel) db.removeChannel(_channel); } catch (_) {}
+    _channel = buildChannel();
   }
 
   function buildChannel() {
@@ -69,13 +81,14 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
     ch.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         _setLiveStatus('live');
-        _retryDelay = 1500;
+        _retryDelay = 800;
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        _setLiveStatus('offline');  // con tolerancia 5s
-        try { db.removeChannel(_channel); } catch (_) {}
-        const delay = Math.min(_retryDelay, 15000);
-        _retryDelay = Math.min(_retryDelay * 1.5, 15000);
+        _setLiveStatus('offline');  // con tolerancia (no inmediato)
+        try { db.removeChannel(ch); } catch (_) {}
+        const delay = Math.min(_retryDelay, 10000);
+        _retryDelay = Math.min(_retryDelay * 1.5, 10000);
         setTimeout(() => { _channel = buildChannel(); }, delay);
+        // Recargar datos por las dudas (puede haber cambios perdidos)
         scheduleReload();
       }
     });
@@ -85,20 +98,46 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
   _setLiveStatus('connecting');
   _channel = buildChannel();
 
-  // Polling fallback: cada 15s, por si websockets se caen silenciosamente
-  setInterval(scheduleReload, 15000);
+  // Polling fallback: cada 10s, por si websockets se caen silenciosamente.
+  // Evita gap de datos largos en mobile cuando la red es inestable.
+  setInterval(() => {
+    if (document.visibilityState !== 'visible') return; // no consumir batería
+    scheduleReload();
+  }, 10000);
 
-  // Al volver online, recargar y forzar reconexión
+  // Watchdog: si llevamos > 30s sin reload y no estamos visualmente offline,
+  // forzar rebuild del canal (la suscripción puede estar zombie en iOS Safari).
+  setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (Date.now() - _lastReloadAt > 30000 && _liveStatus !== 'offline') {
+      rebuildChannel();
+    }
+  }, 12000);
+
+  // Al volver online, recargar y forzar reconexión (sin marcar offline si reconecta rápido)
   window.addEventListener('online', () => {
     scheduleReload();
-    try { db.removeChannel(_channel); } catch (_) {}
-    _channel = buildChannel();
+    rebuildChannel();
   });
+  // No marcar offline inmediato — dejamos que la tolerancia decida.
   window.addEventListener('offline', () => _setLiveStatus('offline'));
 
-  // Al volver visible la tab, recargar
+  // Al volver visible la tab, recargar Y forzar rebuild (iOS suspende el WS).
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') scheduleReload();
+    if (document.visibilityState !== 'visible') return;
+    scheduleReload();
+    rebuildChannel();
+  });
+  // pageshow (back/forward cache): mismo tratamiento.
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) {
+      scheduleReload();
+      rebuildChannel();
+    }
+  });
+  // focus: en algunos navegadores mobile es la única señal de "app activa"
+  window.addEventListener('focus', () => {
+    scheduleReload();
   });
 }
 
