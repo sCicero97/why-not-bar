@@ -130,9 +130,11 @@ function renderList() {
 
     // Tiene consumo en barra sin pagar
     const hasUnpaidBar = barAcc && !barAcc.is_closed && barAcc.total > 0;
+    // Pay later: el asistente no pagó su entrada todavía
+    const owesEntry    = att.status === 'pay_later';
 
     const card = document.createElement('div');
-    card.className = `att-card ${att.entered ? (alreadyOut ? 'att-exited' : 'att-inside') : 'att-pending'} ${hasUnpaidBar ? 'att-unpaid' : ''} ${att.status === 'crew' ? 'att-crew' : ''}`;
+    card.className = `att-card ${att.entered ? (alreadyOut ? 'att-exited' : 'att-inside') : 'att-pending'} ${(hasUnpaidBar || owesEntry) ? 'att-unpaid' : ''} ${att.status === 'crew' ? 'att-crew' : ''}`;
 
     card.innerHTML = `
       <div class="att-main" data-id="${att.id}">
@@ -140,6 +142,7 @@ function renderList() {
           <div class="att-name">
             <span>${att.name}</span>
             ${att.status === 'crew' ? '<span class="att-tag att-tag-crew">CREW</span>' : ''}
+            ${owesEntry ? `<span class="att-tag att-tag-unpaid" title="Debe pagar acceso"><svg width="11" height="11"><use href="#i-warn"/></svg> Acceso ${formatMoney(att.entry_amount || 0)}</span>` : ''}
             ${hasUnpaidBar ? `<span class="att-tag att-tag-unpaid"><svg width="11" height="11"><use href="#i-warn"/></svg> Debe ${formatMoney(barAcc.total)}</span>` : ''}
           </div>
           <div class="att-meta">
@@ -191,8 +194,19 @@ async function doExit(attendeeId) {
   const db  = getDb();
   const now = new Date().toISOString();
 
-  // Update optimista: actualizar UI antes de esperar respuesta del servidor
+  // Bloqueo: si tiene status='pay_later' debe pagar el acceso antes de salir.
+  // Pero podemos pedir confirmación al portero (ej. cobró cash al portero).
   const i = attendees.findIndex(a => a.id === attendeeId);
+  if (i >= 0 && attendees[i].status === 'pay_later') {
+    const amt = Number(attendees[i].entry_amount || 0);
+    const ok = confirm(`⚠️ ${attendees[i].name} debe pagar el acceso (${formatMoney(amt)}) antes de salir.\n\nSi ya pagó (en efectivo), confirmá para registrar la salida.`);
+    if (!ok) return;
+    // Marcar como paid local + DB
+    attendees[i].status = 'paid';
+    await db.from('attendees').update({ status: 'paid' }).eq('id', attendeeId);
+  }
+
+  // Update optimista: actualizar UI antes de esperar respuesta del servidor
   const prev = i >= 0 ? { ...attendees[i] } : null;
   if (i >= 0) { attendees[i].exit_time = now; }
   renderAll();

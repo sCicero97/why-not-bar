@@ -241,7 +241,6 @@ function showLoginModal(allowedRoles) {
       <div class="login-card">
         <div class="login-logo">
           <img src="./WN%20Logo%20Alpha.png" alt="Why Not" class="brand-logo brand-logo-lg"/>
-          <h1>Why Not</h1>
         </div>
         <p class="login-role">${label}</p>
         <form id="loginForm" autocomplete="off">
@@ -464,11 +463,11 @@ function nowString() {
 }
 
 function statusLabel(s) {
-  return { invited:'Invitado', crew:'Crew', in_process:'En proceso', paid:'Pago', no_show:'No vino' }[s] || s;
+  return { invited:'Invitado', crew:'Crew', pay_later:'Pay later', in_process:'En proceso', paid:'Pago', no_show:'No vino' }[s] || s;
 }
 
 function statusColor(s) {
-  return { invited:'#3b82f6', crew:'#8b5cf6', in_process:'#f59e0b', paid:'#1ed760', no_show:'#6b7280' }[s] || '#a0a0a0';
+  return { invited:'#3b82f6', crew:'#8b5cf6', pay_later:'#ff453a', in_process:'#f59e0b', paid:'#1ed760', no_show:'#6b7280' }[s] || '#a0a0a0';
 }
 
 function toast(msg, type = 'info') {

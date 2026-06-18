@@ -29,13 +29,11 @@
 }
 
 body.admin-body {
-  /* Background.png + bloom rojo + base oscura */
+  /* Bloom rojo + base oscura — sin imagen externa */
   background:
-    url("./Background.png") center / cover no-repeat fixed,
     radial-gradient(1100px 580px at 92% -80px, rgba(255, 69, 58, .14), transparent 70%) fixed,
     radial-gradient(900px 600px at -8% 110%, rgba(255, 69, 58, .06), transparent 70%) fixed,
     #08080a fixed;
-  background-blend-mode: overlay, normal, normal, normal;
   min-height: 100vh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -93,13 +91,14 @@ body.admin-body {
 }
 
 .sidebar-brand {
+  /* Logo arriba centrado + picker debajo centrado bajo el logo */
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 6px 8px 12px;
   margin-bottom: 8px;
   position: relative;
-  /* sin border-bottom: el divider desaparece */
 }
 .sidebar-brand .brand-dot {
   width: 12px; height: 12px; border-radius: 999px;
@@ -114,8 +113,8 @@ body.admin-body {
 .sidebar-brand .brand-logo-circle {
   width: 48px; height: 48px;
 }
-/* Event picker en sidebar — al lado del logo, ocupa el resto del ancho */
-.sidebar-event-picker { flex: 1; min-width: 0; }
+/* Event picker en sidebar — centrado debajo del logo */
+.sidebar-event-picker { width: 100%; min-width: 0; position: relative; display: flex; justify-content: center; }
 .event-picker-btn-prominent {
   display: inline-flex;
   align-items: center;
@@ -1316,51 +1315,78 @@ body.modal-open { overflow: hidden; position: relative; }
     padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(110px + env(safe-area-inset-bottom, 0px));
   }
 
-  /* Dashboard mobile: el panel ocupa toda la pantalla y los contadores
-     se reparten el alto disponible en 2 columnas, todos del mismo tamaño */
+  /* Dashboard mobile: el panel ocupa todo el viewport disponible.
+     El picker + las 3 grids se reparten el alto. El picker mide igual que un card.
+     Sin section headers para máxima densidad. */
   #tab-dashboard.tab-panel.active {
     display: flex;
     flex-direction: column;
-    /* Llenar el viewport menos safe-area top/bottom-tabbar */
-    min-height: calc(100vh - env(safe-area-inset-top, 0px) - 130px - env(safe-area-inset-bottom, 0px));
-    gap: 6px;
+    height: calc(100vh - env(safe-area-inset-top, 0px) - 110px - env(safe-area-inset-bottom, 0px));
+    gap: 8px;
   }
-  #tab-dashboard .dashboard-event-picker { flex-shrink: 0; margin: 0; }
-  #tab-dashboard .admin-section-header {
-    font-size: 10px; margin: 6px 0 2px; letter-spacing: .06em; opacity: .55;
-    flex-shrink: 0;
+  /* Picker y cada grid son filas equi-altas */
+  #tab-dashboard .dashboard-event-picker {
+    flex: 1 1 0;
+    min-height: 0;
+    margin: 0;
   }
-  /* Todas las grids son 2 cols, se reparten el alto */
+  #tab-dashboard .admin-section-header { display: none; }
   #tab-dashboard .summary-grid,
   #tab-dashboard .summary-grid:has(#d-barTotal),
   #tab-dashboard .summary-grid:has(#d-entered),
   #tab-dashboard .summary-grid:has(#d-q160) {
     grid-template-columns: repeat(2, 1fr) !important;
     grid-auto-rows: 1fr;
-    gap: 6px;
-    flex: 1 1 0;
+    gap: 8px;
+    flex: 2 1 0; /* las grids ocupan el doble que el picker (porque tienen más filas) */
     min-height: 0;
   }
+  /* Cuentas: 4 cards = 2x2 → flex 2 */
+  /* Asistentes: 3 cards → flex 2 (cabe en 2 filas, una con 1 card) */
+  /* Tragos: 3 cards → flex 2 */
   #tab-dashboard .stat-card {
-    padding: 10px 12px;
+    padding: 12px 14px;
     min-height: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;
   }
-  #tab-dashboard .stat-card strong { font-size: 18px; line-height: 1.1; }
-  #tab-dashboard .stat-card #d-netTotal { font-size: 22px !important; }
-  #tab-dashboard .stat-card .summary-label { font-size: 10px; margin-bottom: 3px; letter-spacing: .04em; }
+  #tab-dashboard .stat-card strong { font-size: 20px; line-height: 1.1; }
+  #tab-dashboard .stat-card #d-netTotal { font-size: 26px !important; }
+  #tab-dashboard .stat-card .summary-label { font-size: 10.5px; margin-bottom: 4px; letter-spacing: .04em; }
 
-  /* Event picker: sin fondo, alto similar a los cards */
+  /* Event picker: fondo negro redondeado, alto similar a los cards */
   .dashboard-event-picker .event-picker-btn-prominent {
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
+    background: rgba(0, 0, 0, .55) !important;
+    border: 1px solid rgba(255, 255, 255, .08) !important;
+    backdrop-filter: blur(18px) saturate(170%);
+    -webkit-backdrop-filter: blur(18px) saturate(170%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .06),
+      0 6px 16px rgba(0, 0, 0, .35) !important;
     width: 100%;
-    padding: 12px 14px;
+    padding: 0 18px;
+    border-radius: 18px;
     font-size: 15px;
+    font-weight: 600;
     justify-content: center;
+    gap: 10px;
+    min-height: 0;
+    height: 100%;
+  }
+  /* Dot verde + nombre + flecha, juntos centrados */
+  .dashboard-event-picker .event-picker-status {
+    width: 8px; height: 8px;
+  }
+  /* Menú al abrirse: centrado horizontalmente en la pantalla */
+  .dashboard-event-picker .event-picker-menu {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 80px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(360px, calc(100vw - 32px));
+    max-width: none;
+    max-height: 60vh;
   }
 
   .summary-grid-2 { grid-template-columns: repeat(2, 1fr); }

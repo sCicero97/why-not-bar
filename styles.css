@@ -49,14 +49,12 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
   margin: 0; padding: 0;
-  /* Background.png + bloom rojo + base oscura — Apple liquid glass */
+  /* Bloom rojo sutil + base oscura — sin imagen externa */
   background:
-    url("./Background.png") center / cover no-repeat,
     radial-gradient(1100px 580px at 92% -80px, rgba(255, 69, 58, .14), transparent 70%),
     radial-gradient(900px 600px at -8% 110%, rgba(255, 69, 58, .06), transparent 70%),
     var(--bg-base);
-  background-attachment: fixed, fixed, fixed, fixed;
-  background-blend-mode: overlay, normal, normal, normal;
+  background-attachment: fixed;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
                'Helvetica Neue', 'Segoe UI', Arial, sans-serif;
@@ -83,18 +81,50 @@ button {
   width: 100%; max-width: 380px;
   box-shadow: var(--shadow-glass);
 }
-.login-logo { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.login-logo { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 0 0 14px; }
 .login-logo h1 { margin: 0; font-size: 28px; letter-spacing: -.02em; font-weight: 700; }
 .login-logo .brand-dot { width: 14px; height: 14px; border-radius: 999px; background: #ff453a; box-shadow: 0 0 14px rgba(255, 69, 58, .65); }
-/* Realtime: borde rojo de aviso cuando se pierde conexión */
+/* Realtime offline: borde rojo con destello de luz girando en sentido horario.
+   El conic-gradient rota infinitamente y un mask deja sólo el borde visible. */
+@keyframes rt-offline-sweep {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 body.rt-offline .glass-topbar,
 body.rt-offline .bottom-tabbar,
 body.rt-offline .sidebar {
   border-color: rgba(255, 69, 58, .55) !important;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 69, 58, .35),
-    0 0 24px rgba(255, 69, 58, .18) !important;
-  transition: border-color .25s, box-shadow .25s;
+  position: relative;
+}
+body.rt-offline .glass-topbar::after,
+body.rt-offline .bottom-tabbar::after,
+body.rt-offline .sidebar::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 280deg,
+    rgba(255, 69, 58, .35) 320deg,
+    rgba(255, 120, 100, 1) 350deg,
+    rgba(255, 200, 180, 1) 358deg,
+    rgba(255, 120, 100, 1) 6deg,
+    rgba(255, 69, 58, .35) 40deg,
+    transparent 80deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  animation: rt-offline-sweep 2.4s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(255, 69, 58, .55));
+  z-index: 100;
 }
 
 /* Logo image — sin glow, dentro de círculo negro */

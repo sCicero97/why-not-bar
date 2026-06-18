@@ -1075,7 +1075,7 @@ function renderAttendeesTable() {
       <td><div class="att-name-cell" title="Doble click para editar">${att.name}</div></td>
       <td>
         <select class="status-select inline-select status-${att.status}" data-id="${att.id}" data-field="status" onchange="updateAttendeeField('${att.id}','status',this.value)">
-          ${['invited','crew','in_process','paid'].map(s =>
+          ${['invited','crew','pay_later','in_process','paid'].map(s =>
             `<option value="${s}" ${att.status===s?'selected':''} style="background:#1c1c1c">${statusLabel(s)}</option>`
           ).join('')}
         </select>
@@ -1093,6 +1093,8 @@ function renderAttendeesTable() {
       <td>
         <div class="row-actions">
           <button class="btn btn-sm" onclick="openEditAttendee('${att.id}')" title="Editar">${icon('edit',15)}</button>
+          ${att.entered && !att.exit_time ? `<button class="btn btn-sm" onclick="revertAttendeeEntry('${att.id}')" title="Marcar como NO ingresado">↺ Ingreso</button>` : ''}
+          ${att.exit_time ? `<button class="btn btn-sm" onclick="revertAttendeeExit('${att.id}')" title="Marcar como adentro (deshacer salida)">↺ Salida</button>` : ''}
           ${barAcc && !barAcc.is_closed && barAcc.total > 0 ? `<button class="btn btn-sm btn-primary" onclick="adminCloseBarAccount('${barAcc.id}',${barAcc.slot})" title="Cobrar cuenta">${icon('card',15)}</button>` : ''}
           <button class="btn btn-sm btn-danger" onclick="deleteAttendee('${att.id}')" title="Eliminar">${icon('trash',15)}</button>
         </div>
@@ -1664,14 +1666,36 @@ function getNextAvailableBarSlot() {
     ...getBlockedSlots(),
   ]);
   const maxExisting = barAccounts.reduce((m, a) => Math.max(m, a.slot || 0), 0);
-  // Buscar el primer hueco (1..maxExisting+1) saltando bloqueadas y ocupadas
   for (let i = 1; i <= maxExisting + 1; i++) {
     if (!used.has(i)) return i;
   }
-  // Si todas hasta maxExisting están usadas/bloqueadas, buscar más allá
   let next = maxExisting + 1;
   while (used.has(next)) next++;
   return next;
+}
+
+// Versión fresh: consulta la DB para no depender del cache local.
+// Soluciona el bug donde el ID propuesto era el mismo que el del asistente anterior
+// (race entre el insert previo y el realtime/loadAll).
+async function getNextAvailableBarSlotFresh() {
+  const ev = currentEvent();
+  if (!ev) return 1;
+  try {
+    const db = getDb();
+    const { data, error } = await db.from('attendees')
+      .select('bar_account_slot')
+      .eq('event_id', ev.id)
+      .not('bar_account_slot', 'is', null);
+    if (error) throw error;
+    const usedAtt   = new Set((data || []).map(a => Number(a.bar_account_slot)).filter(Boolean));
+    const usedBlock = new Set(getBlockedSlots());
+    let n = 1;
+    while (usedAtt.has(n) || usedBlock.has(n)) n++;
+    return n;
+  } catch (_) {
+    // Fallback al cache local
+    return getNextAvailableBarSlot();
+  }
 }
 
 // ─── Asegurar que exista una bar_account para un slot ─────────────────────────
@@ -1706,8 +1730,11 @@ async function ensureBarAccountSlot(slot, attendeeId = null, eventIdOverride = n
 }
 
 // ─── Add/Edit attendee modal ──────────────────────────────────────────────────
-function openAddAttendee() {
-  const nextSlot = getNextAvailableBarSlot();
+async function openAddAttendee() {
+  // Calculamos el slot consultando la DB fresca (fix bug ID duplicado).
+  const nextSlot = await getNextAvailableBarSlotFresh();
+  // Costo de acceso por defecto del evento (si está configurado), si no 700.
+  const defaultEntry = Number(currentEvent()?.default_entry_amount ?? 700);
   showModal(`
     <h3 style="margin:0 0 18px">Agregar asistente</h3>
     <form id="attForm" autocomplete="off">
@@ -1719,7 +1746,7 @@ function openAddAttendee() {
         </div>
         <div class="form-group"><label>Estado</label>
           <select name="status">
-            <option value="invited">Invitado</option><option value="crew">Crew</option>
+            <option value="invited">Invitado</option><option value="crew">Crew</option><option value="pay_later">Pay later</option>
             <option value="in_process">En proceso</option><option value="paid" selected>Pago</option>
           </select>
         </div>
@@ -1727,7 +1754,7 @@ function openAddAttendee() {
         <div class="form-group"><label>Cédula</label><input name="cedula" autocomplete="off"/></div>
         <div class="form-group"><label>Email</label><input name="email" type="email" autocomplete="off"/></div>
         <div class="form-group"><label>Teléfono</label><input name="phone" autocomplete="off"/></div>
-        <div class="form-group"><label>Pago entrada $</label><input name="entry_amount" type="number" min="0" value="700"/></div>
+        <div class="form-group"><label>Pago entrada $</label><input name="entry_amount" type="number" min="0" value="${defaultEntry}"/></div>
         <div class="form-group"><label>Notas</label><input name="notes" autocomplete="off"/></div>
       </div>
       <!-- Inputs trampa ocultos para despistar a los gestores de contraseñas (Safari/Chrome) -->
@@ -1743,13 +1770,14 @@ function openAddAttendee() {
   // Sugerencias desde Personas (cross-event) al escribir el nombre.
   setupAttendeeNameSuggest();
 
-  // Precio automático según estado
+  // Precio automático según estado — usa el costo del evento si está configurado
   document.querySelector('#attForm [name=status]').addEventListener('change', function () {
     const amountInput = document.querySelector('#attForm [name=entry_amount]');
+    const eventDefault = Number(currentEvent()?.default_entry_amount ?? 700);
     if (this.value === 'invited' || this.value === 'crew') {
       amountInput.value = 0;
     } else if (amountInput.value == 0) {
-      amountInput.value = 700;
+      amountInput.value = eventDefault;
     }
   });
 
@@ -1810,7 +1838,7 @@ function openEditAttendee(id) {
         <div class="form-group"><label>Nombre *</label><input name="name" value="${att.name || ''}" required/></div>
         <div class="form-group"><label>Estado</label>
           <select name="status">
-            ${['invited','crew','in_process','paid'].map(s=>`<option value="${s}" ${att.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
+            ${['invited','crew','pay_later','in_process','paid'].map(s=>`<option value="${s}" ${att.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
           </select>
         </div>
         <div class="form-group"><label>Cuenta barra #</label><input name="bar_account_slot" type="number" value="${att.bar_account_slot||''}"/></div>
@@ -1880,9 +1908,10 @@ function openEditAttendee(id) {
 }
 
 async function deleteAttendee(id) {
-  if (!confirm('¿Eliminar este asistente?')) return;
-  const db  = getDb();
   const att = attendees.find(a => a.id === id);
+  const nm = att?.name || 'este asistente';
+  if (!confirm(`¿Eliminar a "${nm}"?\n\nEsta acción no se puede deshacer.`)) return;
+  const db  = getDb();
 
   // 1. Desvincular la cuenta de barra (attendee_id → null)
   if (att?.bar_account_slot) {
@@ -1917,6 +1946,39 @@ async function deleteAttendee(id) {
 }
 
 // ─── Reopen bar account ──────────────────────────────────────────────────────
+// Revertir ingreso de un asistente (lo marca como NO ingresó). El admin lo usa
+// si el portero confirmó por error.
+async function revertAttendeeEntry(id) {
+  const att = attendees.find(a => a.id === id);
+  if (!att) return;
+  if (!confirm(`Marcar a "${att.name}" como NO ingresado?\n\nEsto borra el registro de entrada y salida.`)) return;
+  const db = getDb();
+  const { error } = await db.from('attendees')
+    .update({ entered: false, entry_time: null, exit_time: null })
+    .eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  const i = attendees.findIndex(a => a.id === id);
+  if (i >= 0) Object.assign(attendees[i], { entered: false, entry_time: null, exit_time: null });
+  toast('Asistente marcado como no ingresado', 'success');
+  renderAttendeesTable();
+}
+window.revertAttendeeEntry = revertAttendeeEntry;
+
+// Revertir salida (lo marca como aún adentro). Útil si el portero registró salida por error.
+async function revertAttendeeExit(id) {
+  const att = attendees.find(a => a.id === id);
+  if (!att) return;
+  if (!confirm(`Marcar a "${att.name}" como que NO salió?\n\nVuelve a aparecer como adentro.`)) return;
+  const db = getDb();
+  const { error } = await db.from('attendees').update({ exit_time: null }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  const i = attendees.findIndex(a => a.id === id);
+  if (i >= 0) attendees[i].exit_time = null;
+  toast('Asistente marcado como adentro', 'success');
+  renderAttendeesTable();
+}
+window.revertAttendeeExit = revertAttendeeExit;
+
 async function reopenBarAccount(accId) {
   if (!confirm('¿Reabrir esta cuenta de barra?')) return;
   const db = getDb();
@@ -2145,6 +2207,10 @@ function openNewEvent() {
           <label>Fecha *</label>
           <input name="date" type="date" value="${new Date().toISOString().slice(0,10)}" required/>
         </div>
+        <div class="form-group">
+          <label>Costo de acceso ($)</label>
+          <input name="default_entry_amount" type="number" min="0" value="700"/>
+        </div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
@@ -2162,8 +2228,14 @@ function openNewEvent() {
     // Desactivar los demás
     await db.from('events').update({ is_active: false }).eq('is_active', true);
     // Crear evento
+    const entryAmount = Number(fd.get('default_entry_amount')) || 700;
     const { data: newEvent, error } = await db.from('events')
-      .insert({ name: fd.get('name'), date: fd.get('date'), is_active: true })
+      .insert({
+        name: fd.get('name'),
+        date: fd.get('date'),
+        is_active: true,
+        default_entry_amount: entryAmount,
+      })
       .select().single();
     if (error) { toast('Error: ' + error.message, 'error'); return; }
 

@@ -15,13 +15,14 @@ create table if not exists profiles (
 
 -- ─── Eventos ──────────────────────────────────────────────────────────────────
 create table if not exists events (
-  id           uuid primary key default gen_random_uuid(),
-  name         text not null,
-  date         date not null default current_date,
-  is_active    boolean default false,
-  opening_cash numeric(10,2) default 0,           -- efectivo en caja al abrir el evento
-  closing_cash numeric(10,2) default null,        -- conteo de efectivo al cerrar (null = no cerrada)
-  created_at   timestamptz default now()
+  id                   uuid primary key default gen_random_uuid(),
+  name                 text not null,
+  date                 date not null default current_date,
+  is_active            boolean default false,
+  opening_cash         numeric(10,2) default 0,           -- efectivo en caja al abrir el evento (deprecated)
+  closing_cash         numeric(10,2) default null,        -- conteo de efectivo al cerrar (deprecated)
+  default_entry_amount numeric(10,2) default 700,         -- costo de acceso por defecto al crear asistentes
+  created_at           timestamptz default now()
 );
 -- Solo un evento activo a la vez
 create unique index if not exists one_active_event on events(is_active) where is_active = true;
@@ -35,7 +36,7 @@ create table if not exists attendees (
   email             text,
   phone             text,
   status            text default 'invited'
-                    check (status in ('invited','crew','in_process','paid','no_show')),
+                    check (status in ('invited','crew','pay_later','in_process','paid','no_show')),
   bar_account_slot  integer,          -- número de cuenta de barra asignada
   entered           boolean default false,
   entry_time        timestamptz,      -- hora de ingreso

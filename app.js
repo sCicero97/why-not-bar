@@ -121,6 +121,7 @@ function renderAccounts() {
   const wrap        = document.getElementById('accountsList');
   const rawSearch   = (document.getElementById('searchInput').value || '').trim();
   const searchDig   = rawSearch.replace(/\D/g, '');
+  // Quitar acentos: NFD descompone, luego eliminar diacríticos (̀-ͯ)
   const searchName  = rawSearch.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   // Mostrar solo cuentas abiertas vinculadas a asistentes
   const list        = accounts.filter(a => !a.is_closed && a.attendee_id);
