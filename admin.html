@@ -459,12 +459,12 @@
 
       <!-- ── Gastos ─────────────────────────────────────────────── -->
       <section id="tab-gastos" class="tab-panel">
-        <div id="expensesCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
-        <div class="admin-toolbar">
-          <button id="addExpenseBtn" class="btn btn-primary btn-sm icon-label-btn">
+        <div class="expenses-header">
+          <button id="addExpenseBtn" class="btn btn-primary icon-label-btn expenses-add-btn">
             <svg width="16" height="16"><use href="#i-plus"/></svg>
             Agregar gasto
           </button>
+          <div id="expensesCounters"></div>
         </div>
         <div class="admin-table-wrap glass-card">
           <table class="admin-table">

@@ -677,6 +677,36 @@ body.admin-body {
 .admin-table td.td-actions { text-align: right; }
 .admin-table td.td-actions .row-actions { justify-content: flex-end; display: inline-flex; }
 
+/* ═══════════ GASTOS: header con botón + contadores en una fila ═══════════ */
+.expenses-header {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.expenses-header .expenses-add-btn {
+  flex: 0 0 auto;
+  align-self: stretch;
+  padding: 0 18px;
+  min-height: 56px; /* mismo alto aprox que los .mini-stat */
+  font-weight: 600;
+}
+.expenses-header #expensesCounters {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+  margin-bottom: 0 !important;
+}
+.expenses-header #expensesCounters .mini-stat { align-self: stretch; min-height: 56px; }
+@media (max-width: 700px) {
+  .expenses-header { flex-direction: column; align-items: stretch; gap: 8px; }
+  .expenses-header .expenses-add-btn { min-height: 44px; align-self: flex-start; }
+  .expenses-header #expensesCounters .mini-stat { min-height: 0; }
+}
+
 /* ═══════════ MINI STATS (contadores de secciones) ═══════════ */
 .mini-stats {
   display: flex !important;

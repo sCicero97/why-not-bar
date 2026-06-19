@@ -47,15 +47,44 @@ async function init() {
     setupNotifChannel('Admin', displayName);
     document.getElementById('app').style.display = 'grid';
 
-    activeEvent = await getActiveEvent();
-    viewingEvent = activeEvent; // arranca viendo el activo
-    if (activeEvent) {
-      document.getElementById('eventName').textContent = activeEvent.name;
+    // SWR: hidratar activeEvent desde cache mientras llega la query fresca
+    const cachedActive = loadActiveEventCache();
+    if (cachedActive) {
+      activeEvent = cachedActive;
+      viewingEvent = activeEvent;
+      const elN = document.getElementById('eventName');
+      if (elN) elN.textContent = activeEvent.name;
+    }
+    setupUI(); // monta tabs antes para que renderAll no falle por elementos faltantes
+
+    // Si hay cache de datos para ese evento, hidratamos y pintamos YA
+    const hydrated = activeEvent?.id ? hydrateAdminFromCache(activeEvent.id) : false;
+    if (hydrated) {
+      try { renderAll(); } catch (_) {}
     }
 
-    await loadAll({ firstLoad: true });
+    // En background: validar/refrescar activeEvent y cargar datos frescos
+    const refreshActive = (async () => {
+      const fresh = await getActiveEvent();
+      if (fresh) {
+        const changed = !activeEvent || fresh.id !== activeEvent.id;
+        activeEvent = fresh;
+        if (!viewingEvent || changed) viewingEvent = fresh;
+        const elN = document.getElementById('eventName');
+        if (elN) elN.textContent = fresh.name;
+        saveActiveEventCache(fresh);
+      }
+    })().catch(() => {});
+
+    if (hydrated) {
+      // Hay cache: refrescamos en background sin bloquear la UI
+      refreshActive.then(() => loadAll({ firstLoad: true })).catch((err) => console.error('loadAll error:', err));
+    } else {
+      // Primera vez: hay que esperar para tener algo que mostrar
+      await refreshActive;
+      await loadAll({ firstLoad: true });
+    }
     setupRealtime();
-    setupUI();
     // Routing por hash: #barra, #tareas, etc. — abrir la pestaña si es válida.
     const applyHashTab = () => {
       const h = (location.hash || '').replace(/^#/, '');
@@ -77,6 +106,67 @@ function currentEvent() {
 // Cache de la última vez que cargamos cross-event (no recargar en cada reload realtime).
 let _crossEventLoadedAt = 0;
 const CROSS_EVENT_TTL_MS = 60_000; // re-cargar si pasó >60s desde última carga
+
+// ─── Cache local SWR (stale-while-revalidate) ────────────────────────────────
+// Guardamos un snapshot del último estado del evento activo en localStorage.
+// Al entrar, hidratamos INSTANTÁNEAMENTE con eso mientras la red trae lo fresco.
+const ADMIN_CACHE_KEY_PREFIX = 'whynot-admin-cache-v2-';
+const ADMIN_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
+
+function _cacheKey(eventId) {
+  return ADMIN_CACHE_KEY_PREFIX + (eventId || 'global');
+}
+
+const ACTIVE_EVENT_CACHE_KEY = 'whynot-admin-active-event-v1';
+function saveActiveEventCache(ev) {
+  try { if (ev) localStorage.setItem(ACTIVE_EVENT_CACHE_KEY, JSON.stringify(ev)); } catch (_) {}
+}
+function loadActiveEventCache() {
+  try {
+    const raw = localStorage.getItem(ACTIVE_EVENT_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) { return null; }
+}
+
+function saveAdminCache(eventId) {
+  try {
+    const payload = {
+      savedAt: Date.now(),
+      events,
+      profiles,
+      attendees,
+      barAccounts,
+      barClosures,
+      expenses,
+      tasks,
+      eventSettings,
+      blockedCards,
+      allEventSettings,
+    };
+    localStorage.setItem(_cacheKey(eventId), JSON.stringify(payload));
+  } catch (_) { /* quota / disabled storage → ignorar */ }
+}
+
+function hydrateAdminFromCache(eventId) {
+  try {
+    const raw = localStorage.getItem(_cacheKey(eventId));
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data || (Date.now() - (data.savedAt || 0) > ADMIN_CACHE_MAX_AGE_MS)) return false;
+    // Hidratar variables globales
+    if (Array.isArray(data.events))          events = data.events;
+    if (Array.isArray(data.profiles))        profiles = data.profiles;
+    if (Array.isArray(data.attendees))       attendees = data.attendees;
+    if (Array.isArray(data.barAccounts))     barAccounts = data.barAccounts;
+    if (Array.isArray(data.barClosures))     barClosures = data.barClosures;
+    if (Array.isArray(data.expenses))        expenses = data.expenses;
+    if (Array.isArray(data.tasks))           tasks = data.tasks;
+    if (data.eventSettings)                  eventSettings = data.eventSettings;
+    if (Array.isArray(data.blockedCards))    blockedCards = data.blockedCards;
+    if (Array.isArray(data.allEventSettings)) allEventSettings = data.allEventSettings;
+    return true;
+  } catch (_) { return false; }
+}
 
 // loadAll: carga RÁPIDA — sólo lo del evento activo + listas que la UI necesita.
 // Las queries cross-event (Estadísticas / Personas) se cargan después en background.
@@ -127,6 +217,9 @@ async function loadAll(opts = {}) {
   }
 
   renderAll();
+
+  // Guardar cache para arranque instantáneo en próximas visitas
+  try { saveAdminCache(eventId); } catch (_) {}
 
   // Cross-event en background — sin bloquear la UI. Sólo refresca si pasó el TTL.
   if (Date.now() - _crossEventLoadedAt > CROSS_EVENT_TTL_MS) {
@@ -1081,10 +1174,12 @@ function renderAttendeesTable() {
     } else if (quickF === 'entered') {
       if (!a.entered) return false;
     } else if (quickF === 'bar_open') {
-      // Tiene cuenta de barra asignada y la cuenta sigue abierta
+      // Tiene cuenta de barra asignada, abierta, y con consumo > 0 (no tiene sentido mostrar
+      // cuentas sin consumir — no había nada que cerrar).
       if (!a.bar_account_slot) return false;
       const acc = barAccounts.find(b => b.slot === a.bar_account_slot && b.attendee_id === a.id);
       if (!acc || acc.is_closed) return false;
+      if (Number(acc.total || 0) <= 0) return false;
     }
     return true;
   });
