@@ -512,8 +512,7 @@ function setupUI() {
   setupTabs();
   setupHoldInteractions();
 
-  document.getElementById('searchInput').addEventListener('input', (e) => {
-    e.target.value = e.target.value.replace(/[^\d]/g, '');
+  document.getElementById('searchInput').addEventListener('input', () => {
     renderAccounts();
   });
   document.getElementById('clearSearchBtn').addEventListener('click', () => {

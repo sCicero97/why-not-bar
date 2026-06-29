@@ -382,7 +382,13 @@
 
       <!-- ── Asistentes ────────────────────────────────────────── -->
       <section id="tab-asistentes" class="tab-panel">
-        <div id="attStatusCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+        <div class="section-header">
+          <button id="addAttendeeBtn" class="btn btn-primary icon-label-btn section-add-btn">
+            <svg width="16" height="16"><use href="#i-plus"/></svg>
+            Agregar
+          </button>
+          <div id="attStatusCounters" class="mini-stats"></div>
+        </div>
 
         <div class="admin-toolbar">
           <div class="search-field">
@@ -402,10 +408,6 @@
             <option value="entered">Ingresaron</option>
             <option value="bar_open">Cuenta barra sin cerrar</option>
           </select>
-          <button id="addAttendeeBtn" class="btn btn-primary btn-sm icon-label-btn">
-            <svg width="16" height="16"><use href="#i-plus"/></svg>
-            Agregar
-          </button>
           <button id="toggleGroupBtn" class="btn btn-sm icon-label-btn">
             <svg width="16" height="16"><use href="#i-sort"/></svg>
             <span id="toggleGroupText">Ordenar por cuenta</span>
@@ -439,9 +441,14 @@
 
       <!-- ── Barra ─────────────────────────────────────────────── -->
       <section id="tab-barra" class="tab-panel">
-        <div id="adminBarCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+        <div class="section-header">
+          <div id="adminBarCounters" class="mini-stats"></div>
+        </div>
         <div class="admin-toolbar">
-          <input id="barSearch" type="text" class="admin-input" placeholder="Buscar por # o nombre..." style="flex:1;max-width:260px">
+          <div class="search-field">
+            <svg width="18" height="18"><use href="#i-search"/></svg>
+            <input id="barSearch" type="text" placeholder="Buscar por # o nombre…"/>
+          </div>
           <select id="barFilter" class="admin-select">
             <option value="all">Todas</option>
             <option value="open">Abiertas con saldo</option>
@@ -459,12 +466,12 @@
 
       <!-- ── Gastos ─────────────────────────────────────────────── -->
       <section id="tab-gastos" class="tab-panel">
-        <div class="expenses-header">
-          <button id="addExpenseBtn" class="btn btn-primary icon-label-btn expenses-add-btn">
+        <div class="section-header">
+          <button id="addExpenseBtn" class="btn btn-primary icon-label-btn section-add-btn">
             <svg width="16" height="16"><use href="#i-plus"/></svg>
             Agregar gasto
           </button>
-          <div id="expensesCounters"></div>
+          <div id="expensesCounters" class="mini-stats"></div>
         </div>
         <div class="admin-table-wrap glass-card">
           <table class="admin-table">
@@ -476,8 +483,8 @@
 
       <!-- ── Evento ─────────────────────────────────────────────── -->
       <section id="tab-evento" class="tab-panel">
-        <div style="margin-bottom:16px">
-          <button id="newEventBtn" class="btn btn-primary icon-label-btn">
+        <div class="section-header no-stats">
+          <button id="newEventBtn" class="btn btn-primary icon-label-btn section-add-btn">
             <svg width="16" height="16"><use href="#i-plus"/></svg>
             Nuevo evento
           </button>
@@ -492,8 +499,8 @@
 
       <!-- ── Tareas ────────────────────────────────────────────────── -->
       <section id="tab-tareas" class="tab-panel">
-        <div class="admin-toolbar">
-          <button id="addTaskBtn" class="btn btn-primary btn-sm icon-label-btn">
+        <div class="section-header no-stats">
+          <button id="addTaskBtn" class="btn btn-primary icon-label-btn section-add-btn">
             <svg width="16" height="16"><use href="#i-plus"/></svg>
             Nueva tarea
           </button>
@@ -504,10 +511,15 @@
 
       <!-- ── Personas (estadísticas cross-event) ─────────────────── -->
       <section id="tab-personas" class="tab-panel">
-        <div class="admin-toolbar">
-          <input id="personasSearch" type="text" class="admin-input" placeholder="Buscar nombre, cédula, email..." style="flex:1;max-width:340px"/>
+        <div class="section-header">
+          <div id="personasCounters" class="mini-stats"></div>
         </div>
-        <div id="personasCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+        <div class="admin-toolbar">
+          <div class="search-field">
+            <svg width="18" height="18"><use href="#i-search"/></svg>
+            <input id="personasSearch" type="text" placeholder="Buscar nombre, cédula, email…"/>
+          </div>
+        </div>
         <div class="admin-table-wrap glass-card">
           <table class="admin-table">
             <thead>
@@ -533,9 +545,14 @@
 
       <!-- ── Blacklist ─────────────────────────────────────────── -->
       <section id="tab-blacklist" class="tab-panel">
-        <div id="blacklistCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+        <div class="section-header">
+          <div id="blacklistCounters" class="mini-stats"></div>
+        </div>
         <div class="admin-toolbar">
-          <input id="blacklistSearch" type="text" class="admin-input" placeholder="Buscar en la black list..." style="flex:1;max-width:340px"/>
+          <div class="search-field">
+            <svg width="18" height="18"><use href="#i-search"/></svg>
+            <input id="blacklistSearch" type="text" placeholder="Buscar en la blacklist…"/>
+          </div>
         </div>
         <div class="admin-table-wrap glass-card">
           <table class="admin-table">
@@ -557,9 +574,11 @@
 
       <!-- ── Tarjetas (bloqueadas) ──────────────────────────────── -->
       <section id="tab-tarjetas" class="tab-panel">
-        <div id="blockedCardsCounters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+        <div class="section-header">
+          <div id="blockedCardsCounters" class="mini-stats"></div>
+        </div>
         <div class="admin-toolbar">
-          <form id="blockCardForm" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <form id="blockCardForm" style="display:contents">
             <input id="blockCardInput" type="number" min="1" placeholder="Número de tarjeta" class="admin-input" style="width:180px" required/>
             <button type="submit" class="btn btn-primary btn-sm icon-label-btn">
               <svg width="16" height="16"><use href="#i-plus"/></svg>
@@ -572,11 +591,13 @@
 
       <!-- ── Usuarios ───────────────────────────────────────────── -->
       <section id="tab-usuarios" class="tab-panel">
-        <div class="admin-toolbar">
-          <button id="addUserBtn" class="btn btn-primary btn-sm icon-label-btn">
+        <div class="section-header no-stats">
+          <button id="addUserBtn" class="btn btn-primary icon-label-btn section-add-btn">
             <svg width="16" height="16"><use href="#i-plus"/></svg>
             Nuevo usuario
           </button>
+        </div>
+        <div class="admin-toolbar">
           <button id="refreshUsersBtn" class="btn btn-sm icon-label-btn ghost-outline">
             <svg width="16" height="16"><use href="#i-refresh"/></svg>
             Actualizar

@@ -677,22 +677,25 @@ body.admin-body {
 .admin-table td.td-actions { text-align: right; }
 .admin-table td.td-actions .row-actions { justify-content: flex-end; display: inline-flex; }
 
-/* ═══════════ GASTOS: header con botón + contadores en una fila ═══════════ */
-.expenses-header {
+/* ═══════════ SECTION HEADER (estándar en todas las pestañas) ═══════════
+   Estructura: [Botón primario opcional] [Contadores que se expanden]
+   Todos los tamaños y posiciones son uniformes en todas las pestañas. */
+.section-header {
   display: flex;
   align-items: stretch;
   gap: 10px;
   margin-bottom: 14px;
   flex-wrap: wrap;
 }
-.expenses-header .expenses-add-btn {
+.section-header > .section-add-btn {
   flex: 0 0 auto;
   align-self: stretch;
   padding: 0 18px;
-  min-height: 56px; /* mismo alto aprox que los .mini-stat */
+  min-height: 56px;
   font-weight: 600;
+  white-space: nowrap;
 }
-.expenses-header #expensesCounters {
+.section-header > .mini-stats {
   flex: 1 1 auto;
   display: flex;
   gap: 10px;
@@ -700,11 +703,30 @@ body.admin-body {
   min-width: 0;
   margin-bottom: 0 !important;
 }
-.expenses-header #expensesCounters .mini-stat { align-self: stretch; min-height: 56px; }
+.section-header > .mini-stats .mini-stat { align-self: stretch; min-height: 56px; }
+/* Sin contadores: el botón solo */
+.section-header.no-stats > .section-add-btn { flex: 0 0 auto; }
 @media (max-width: 700px) {
-  .expenses-header { flex-direction: column; align-items: stretch; gap: 8px; }
-  .expenses-header .expenses-add-btn { min-height: 44px; align-self: flex-start; }
-  .expenses-header #expensesCounters .mini-stat { min-height: 0; }
+  .section-header { flex-direction: column; align-items: stretch; gap: 8px; }
+  .section-header > .section-add-btn { min-height: 44px; align-self: flex-start; }
+  .section-header > .mini-stats .mini-stat { min-height: 0; }
+}
+
+/* ═══════════ ADMIN TOOLBAR (búsqueda + filtros, debajo del section-header) ═══════════
+   Altura estándar 42px en todos los controles. box-sizing border-box global. */
+.admin-body .admin-toolbar { align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.admin-body .admin-toolbar .btn,
+.admin-body .admin-toolbar .admin-select,
+.admin-body .admin-toolbar .admin-input,
+.admin-body .admin-toolbar .search-field {
+  height: 42px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.admin-body .admin-toolbar .search-field { flex: 1 1 220px; max-width: 320px; }
+.admin-body .admin-toolbar .admin-select { min-width: 140px; }
+@media (max-width: 700px) {
+  .admin-body .admin-toolbar .search-field { max-width: none; }
 }
 
 /* ═══════════ MINI STATS (contadores de secciones) ═══════════ */
@@ -877,14 +899,24 @@ body.admin-body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, .5);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(0, 0, 0, .55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
+}
+/* En mobile Safari, demasiados backdrop-filter apilados (sidebar+modal+topbar)
+   pueden romper el renderer y dejar pantalla negra. Quitar el blur del overlay
+   en pantallas chicas — el background semi-opaco ya da suficiente contraste. */
+@media (max-width: 900px) {
+  .modal-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(0, 0, 0, .72);
+  }
 }
 
 /* Evitar scroll del body mientras el modal está abierto (iOS keyboard workaround) */
@@ -924,7 +956,7 @@ body.modal-open { overflow: hidden; position: relative; }
   filter: drop-shadow(0 2px 8px rgba(255,255,255,.18));
 }
 
-/* Counter "Adentro" con barra de progreso de fondo */
+/* Counter "Adentro" con barra de progreso de fondo — encaja en .mini-stats */
 .att-counter-progress {
   position: relative;
   background: #0d1f0d;
@@ -932,9 +964,23 @@ body.modal-open { overflow: hidden; position: relative; }
   border-radius: 12px;
   padding: 10px 16px;
   overflow: hidden;
-  min-width: 180px;
+  flex: 1 1 auto;
+  min-width: 140px;
   display: flex;
   align-items: center;
+  align-self: stretch;
+  min-height: 56px;
+}
+@media (max-width: 700px) {
+  .att-counter-progress {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    padding: 8px 10px;
+    min-height: 0;
+  }
+  .att-counter-progress-num { font-size: 17px; }
+  .att-counter-progress-label { font-size: 10.5px; }
+  .att-counter-progress-pct { font-size: 10px; }
 }
 .att-counter-progress-fill {
   position: absolute;

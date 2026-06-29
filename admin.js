@@ -1135,23 +1135,24 @@ function renderAttendeesTable() {
         </div>
       </div>`;
 
-    // Tarjeta "Faltan"
+    // Tarjeta "Faltan" — mismo formato que mini-stat estándar
     const faltanCard = `
-      <div style="background:#1f1900;border:1px solid #3a2e00;border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
-        <span style="font-size:22px;font-weight:bold;color:#f59e0b">${faltan}</span>
-        <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Faltan</span>
+      <div class="mini-stat" style="background:#1f1900;border:1px solid #3a2e00">
+        <span class="mini-stat-val" style="color:#f59e0b">${faltan}</span>
+        <span class="mini-stat-lbl">Faltan</span>
       </div>`;
 
     const statusCards = cfg.map(c => {
       const n = c.key === '__total'
         ? attendees.length
         : attendees.filter(a => a.status === c.key).length;
-      return `<div style="background:${c.bg};border:1px solid ${c.border};border-radius:12px;padding:10px 16px;display:flex;gap:8px;align-items:center">
-        <span style="font-size:22px;font-weight:bold;color:${c.color}">${n}</span>
-        <span style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${c.label}</span>
+      return `<div class="mini-stat" style="background:${c.bg};border:1px solid ${c.border}">
+        <span class="mini-stat-val" style="color:${c.color}">${n}</span>
+        <span class="mini-stat-lbl">${c.label}</span>
       </div>`;
     }).join('');
 
+    counters.classList.add('mini-stats');
     counters.innerHTML = adentroCard + faltanCard + statusCards;
   }
 
@@ -1936,6 +1937,7 @@ async function openAddAttendee() {
     e.preventDefault();
     if (submitBtn.disabled) return; // Prevent double-submit
     submitBtn.disabled = true;
+    let inserted = false;
     try {
       const fd  = new FormData(e.target);
       const obj = Object.fromEntries(fd.entries());
@@ -1962,18 +1964,26 @@ async function openAddAttendee() {
       if (!ok) return;
       const db = getDb();
       const { data: newAtt, error } = await db.from('attendees').insert(obj).select().single();
-      if (error) toast('Error: ' + error.message, 'error');
-      else {
-        // Vincular (o auto-crear) la cuenta de barra con el asistente
+      if (error) {
+        toast('Error: ' + error.message, 'error');
+      } else {
+        inserted = true;
+        // Vincular (o auto-crear) la cuenta de barra (no bloquea el cierre del modal)
         if (newAtt.bar_account_slot) {
-          await ensureBarAccountSlot(newAtt.bar_account_slot, newAtt.id);
+          ensureBarAccountSlot(newAtt.bar_account_slot, newAtt.id).catch(() => {});
         }
         toast('Asistente agregado', 'success');
-        closeModal();
-        await loadAll();
       }
+    } catch (err) {
+      console.error('Error agregando asistente:', err);
+      toast('Error inesperado: ' + (err?.message || err), 'error');
     } finally {
       submitBtn.disabled = false;
+      // SIEMPRE cerrar el modal después del submit (éxito o error) para evitar
+      // que quede pegado y deje la pantalla negra.
+      if (inserted) closeModal();
+      // Refrescar datos en background (sin bloquear). El realtime también disparará reload.
+      loadAll().catch(() => {});
     }
   });
 }
@@ -2007,53 +2017,61 @@ function openEditAttendee(id) {
   `);
   document.getElementById('editAttForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const fd  = new FormData(e.target);
-    const obj = Object.fromEntries(fd.entries());
-    if (!obj.bar_account_slot) obj.bar_account_slot = null; else obj.bar_account_slot = parseInt(obj.bar_account_slot);
-    obj.entry_amount = parseFloat(obj.entry_amount) || 0;
-    obj.amount_paid  = parseFloat(obj.amount_paid)  || 0;
-    // Validación: tarjeta bloqueada o duplicada
-    if (obj.bar_account_slot) {
-      if (isSlotBlocked(obj.bar_account_slot)) {
-        toast(`La tarjeta ${padId(obj.bar_account_slot)} está bloqueada`, 'error');
-        return;
+    let saved = false;
+    try {
+      const fd  = new FormData(e.target);
+      const obj = Object.fromEntries(fd.entries());
+      if (!obj.bar_account_slot) obj.bar_account_slot = null; else obj.bar_account_slot = parseInt(obj.bar_account_slot);
+      obj.entry_amount = parseFloat(obj.entry_amount) || 0;
+      obj.amount_paid  = parseFloat(obj.amount_paid)  || 0;
+      // Validación: tarjeta bloqueada o duplicada
+      if (obj.bar_account_slot) {
+        if (isSlotBlocked(obj.bar_account_slot)) {
+          toast(`La tarjeta ${padId(obj.bar_account_slot)} está bloqueada`, 'error');
+          return;
+        }
+        const dup = getAttendeeWithSlot(obj.bar_account_slot, id);
+        if (dup) {
+          toast(`La tarjeta ${padId(obj.bar_account_slot)} ya está asignada a ${dup.name}`, 'error');
+          return;
+        }
       }
-      const dup = getAttendeeWithSlot(obj.bar_account_slot, id);
-      if (dup) {
-        toast(`La tarjeta ${padId(obj.bar_account_slot)} ya está asignada a ${dup.name}`, 'error');
-        return;
+      // Chequeo blacklist si cambió algún identificador
+      const changedIdentity = (obj.name !== att.name) || (obj.cedula !== att.cedula) || (obj.email !== att.email) || (obj.phone !== att.phone);
+      if (changedIdentity) {
+        const ok = await confirmIfBlacklisted({ name: obj.name, cedula: obj.cedula, email: obj.email, phone: obj.phone });
+        if (!ok) return;
       }
+      const db = getDb();
+
+      const prevSlot = att.bar_account_slot || null;
+      const newSlot  = obj.bar_account_slot;
+
+      const { error } = await db.from('attendees').update(obj).eq('id', id);
+      if (error) { toast('Error: ' + error.message, 'error'); return; }
+
+      // Si cambió el slot: desvincular el anterior y vincular/crear el nuevo
+      if (prevSlot !== newSlot) {
+        if (prevSlot) {
+          await db.from('bar_accounts')
+            .update({ attendee_id: null })
+            .eq('event_id', currentEvent().id)
+            .eq('slot', prevSlot);
+        }
+        if (newSlot) {
+          await ensureBarAccountSlot(newSlot, id);
+        }
+      }
+
+      toast('Guardado', 'success');
+      saved = true;
+    } catch (err) {
+      console.error('Error editando asistente:', err);
+      toast('Error inesperado: ' + (err?.message || err), 'error');
+    } finally {
+      if (saved) closeModal();
+      loadAll().catch(() => {});
     }
-    // Chequeo blacklist si cambió algún identificador
-    const changedIdentity = (obj.name !== att.name) || (obj.cedula !== att.cedula) || (obj.email !== att.email) || (obj.phone !== att.phone);
-    if (changedIdentity) {
-      const ok = await confirmIfBlacklisted({ name: obj.name, cedula: obj.cedula, email: obj.email, phone: obj.phone });
-      if (!ok) return;
-    }
-    const db = getDb();
-
-    const prevSlot = att.bar_account_slot || null;
-    const newSlot  = obj.bar_account_slot;
-
-    const { error } = await db.from('attendees').update(obj).eq('id', id);
-    if (error) { toast('Error: ' + error.message, 'error'); return; }
-
-    // Si cambió el slot: desvincular el anterior y vincular/crear el nuevo
-    if (prevSlot !== newSlot) {
-      if (prevSlot) {
-        await db.from('bar_accounts')
-          .update({ attendee_id: null })
-          .eq('event_id', currentEvent().id)
-          .eq('slot', prevSlot);
-      }
-      if (newSlot) {
-        await ensureBarAccountSlot(newSlot, id);
-      }
-    }
-
-    toast('Guardado', 'success');
-    closeModal();
-    await loadAll();
   });
 }
 
@@ -2917,19 +2935,53 @@ function showModal(html) {
   });
 }
 function closeModal() {
-  document.getElementById('modalOverlay').classList.add('hidden');
-  document.body.classList.remove('modal-open');
-  // Workaround iOS: restaurar scroll/viewport después del teclado del modal.
-  // A veces la página queda desplazada hacia arriba y la barra superior queda oculta
-  // por la status bar. Forzamos scroll al tope del área principal.
   try {
-    const scroll = document.querySelector('.main-scroll');
-    if (scroll) scroll.scrollTop = Math.min(scroll.scrollTop, scroll.scrollTop); // no-op
+    const overlay = document.getElementById('modalOverlay');
+    if (overlay) overlay.classList.add('hidden');
+    document.body.classList.remove('modal-open');
+    // Vaciar el body del modal para que si por algún motivo el overlay queda
+    // visible, al menos no haya un form fantasma capturando inputs.
+    const body = document.getElementById('modalBody');
+    if (body) body.innerHTML = '';
+  } catch (_) {}
+  // Workaround iOS: restaurar scroll/viewport después del teclado del modal.
+  try {
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
   } catch (_) {}
 }
+window.closeModal = closeModal;
+
+// Safety net global: ESC siempre cierra el modal (cualquier estado).
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' || e.key === 'Esc') {
+    const overlay = document.getElementById('modalOverlay');
+    if (overlay && !overlay.classList.contains('hidden')) closeModal();
+  }
+});
+// Safety net global: si un error JS no controlado deja el modal abierto sin
+// contenido, lo cerramos automáticamente. Esto evita "pantalla negra pegada".
+function _modalSafetyCleanup() {
+  try {
+    const overlay = document.getElementById('modalOverlay');
+    const body = document.getElementById('modalBody');
+    if (overlay && !overlay.classList.contains('hidden') && body && !body.innerHTML.trim()) {
+      closeModal();
+    }
+  } catch (_) {}
+}
+window.addEventListener('error', _modalSafetyCleanup);
+window.addEventListener('unhandledrejection', _modalSafetyCleanup);
+// Safety net global: si la pestaña vuelve visible y modal-open quedó pegado
+// SIN overlay visible, limpiar (caso bug iOS Safari).
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  const overlay = document.getElementById('modalOverlay');
+  if (overlay && overlay.classList.contains('hidden') && document.body.classList.contains('modal-open')) {
+    document.body.classList.remove('modal-open');
+  }
+});
 
 // ─── Photo viewer ─────────────────────────────────────────────────────────────
 function viewPhoto(url) { viewPhotos([url]); }

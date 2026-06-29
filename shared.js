@@ -98,21 +98,37 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
   _setLiveStatus('connecting');
   _channel = buildChannel();
 
-  // Polling fallback: cada 10s, por si websockets se caen silenciosamente.
-  // Evita gap de datos largos en mobile cuando la red es inestable.
-  setInterval(() => {
-    if (document.visibilityState !== 'visible') return; // no consumir batería
-    scheduleReload();
-  }, 10000);
-
-  // Watchdog: si llevamos > 30s sin reload y no estamos visualmente offline,
-  // forzar rebuild del canal (la suscripción puede estar zombie en iOS Safari).
-  setInterval(() => {
-    if (document.visibilityState !== 'visible') return;
-    if (Date.now() - _lastReloadAt > 30000 && _liveStatus !== 'offline') {
-      rebuildChannel();
+  // Polling fallback: cada 15s mientras la tab está visible.
+  // Cuando está oculta no consumimos batería ni memoria.
+  let _pollTimer = null;
+  let _watchdogTimer = null;
+  function startTimers() {
+    if (!_pollTimer) {
+      _pollTimer = setInterval(() => {
+        if (document.visibilityState !== 'visible') return;
+        scheduleReload();
+      }, 15000);
     }
-  }, 12000);
+    if (!_watchdogTimer) {
+      _watchdogTimer = setInterval(() => {
+        if (document.visibilityState !== 'visible') return;
+        if (Date.now() - _lastReloadAt > 45000 && _liveStatus !== 'offline') {
+          rebuildChannel();
+        }
+      }, 15000);
+    }
+  }
+  function stopTimers() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+    if (_watchdogTimer) { clearInterval(_watchdogTimer); _watchdogTimer = null; }
+  }
+  startTimers();
+  // Pausar timers cuando la tab pasa a oculta — Safari iOS mata la app rápido si
+  // hay JS corriendo en background (puede dejar la pantalla negra al volver).
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') startTimers();
+    else stopTimers();
+  });
 
   // Al volver online, recargar y forzar reconexión (sin marcar offline si reconecta rápido)
   window.addEventListener('online', () => {
