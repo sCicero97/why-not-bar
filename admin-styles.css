@@ -690,10 +690,13 @@ body.admin-body {
 .section-header > .section-add-btn {
   flex: 0 0 auto;
   align-self: stretch;
-  padding: 0 18px;
+  padding: 0 20px;
   min-height: 56px;
   font-weight: 600;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .section-header > .mini-stats {
   flex: 1 1 auto;
@@ -725,8 +728,33 @@ body.admin-body {
 }
 .admin-body .admin-toolbar .search-field { flex: 1 1 220px; max-width: 320px; }
 .admin-body .admin-toolbar .admin-select { min-width: 140px; }
-@media (max-width: 700px) {
-  .admin-body .admin-toolbar .search-field { max-width: none; }
+/* Mobile/tablet: toolbar en columna. Cada control debe tener altura fija y no
+   crecer verticalmente — sin esto el search-field crecía a una esfera gigante
+   porque flex-basis 220px en column layout se aplica al eje vertical. */
+@media (max-width: 900px) {
+  .admin-body .admin-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .admin-body .admin-toolbar .search-field,
+  .admin-body .admin-toolbar .admin-input,
+  .admin-body .admin-toolbar .admin-select,
+  .admin-body .admin-toolbar .btn {
+    flex: 0 0 auto !important;
+    height: 44px !important;
+    max-height: 44px !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+  .admin-body .admin-toolbar .search-field {
+    padding: 0 14px !important;
+  }
+  .admin-body .admin-toolbar .search-field input {
+    height: 100%;
+    padding: 0;
+  }
 }
 
 /* ═══════════ MINI STATS (contadores de secciones) ═══════════ */
@@ -756,19 +784,33 @@ body.admin-body {
   text-transform: uppercase;
   letter-spacing: .05em;
 }
-/* Mobile: dos por fila, más compacto */
-@media (max-width: 700px) {
-  .mini-stats { gap: 8px; }
-  .mini-stats .mini-stat {
-    flex: 1 1 calc(50% - 4px);
-    min-width: 0;
-    padding: 8px 10px;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
+/* Mobile/tablet: EXACTAMENTE dos por fila con grid (infalible frente a
+   especificidad flex). .att-counter-progress también entra en el grid. */
+@media (max-width: 900px) {
+  .mini-stats,
+  .section-header > .mini-stats {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    flex-wrap: unset;
   }
-  .mini-stats .mini-stat-val { font-size: 17px; }
-  .mini-stats .mini-stat-lbl { font-size: 10.5px; letter-spacing: .04em; }
+  .mini-stats > .mini-stat,
+  .mini-stats > .att-counter-progress,
+  .section-header > .mini-stats > .mini-stat,
+  .section-header > .mini-stats > .att-counter-progress {
+    min-width: 0 !important;
+    padding: 8px 10px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 2px !important;
+    min-height: 0 !important;
+    align-self: auto !important;
+    flex: unset !important;
+  }
+  .mini-stats .mini-stat-val,
+  .mini-stats .att-counter-progress-num { font-size: 17px; }
+  .mini-stats .mini-stat-lbl,
+  .mini-stats .att-counter-progress-label { font-size: 10.5px; letter-spacing: .04em; }
 }
 
 /* Hold-to-close: sólo touch. Anillo que se cierra alrededor del dedo. */
