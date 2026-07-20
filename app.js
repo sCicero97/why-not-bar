@@ -455,7 +455,11 @@ async function doCloseAccount(accountId, slot) {
     photoUrl = await uploadPaymentPhoto(photoBlob, activeEvent.id, slot);
   }
 
-  // 5. Cerrar cuenta principal — pero SOLO si hay tragos (sino sólo cobramos entrada)
+  // 5. Cerrar cuenta principal
+  //    - Si hay tragos: llamamos al RPC que crea bar_closures + marca is_closed=true.
+  //    - Si NO hay tragos (sólo entrada pay_later): marcamos is_closed=true a mano
+  //      para que la cuenta salga de "cuentas abiertas". No creamos bar_closures
+  //      porque no hubo consumo en la barra.
   const db = getDb();
   if (drinksTotal > 0) {
     const { data, error } = await db.rpc('close_bar_account', {
@@ -466,6 +470,12 @@ async function doCloseAccount(accountId, slot) {
     await db.from('bar_closures')
       .update({ payment_method: methodResult.method, cash_received: cashReceived, change_given: changeGiven })
       .eq('event_id', activeEvent.id).eq('slot', slot);
+  } else {
+    // Sólo cobramos entrada: cerramos la cuenta directamente (sin bar_closures)
+    const { error: closeErr } = await db.from('bar_accounts')
+      .update({ is_closed: true })
+      .eq('id', accountId);
+    if (closeErr) { toast('Error al cerrar cuenta: ' + closeErr.message, 'error'); return; }
   }
 
   // 5b. Si tenía entrada pendiente (pay_later) → marcar al asistente como paid
@@ -489,8 +499,8 @@ async function doCloseAccount(accountId, slot) {
       .eq('event_id', activeEvent.id).eq('slot', other.slot);
   }
 
-  // 7. UI
-  const closedSlots = drinksTotal > 0 ? [slot, ...coveredAccounts.map(a => a.slot)] : coveredAccounts.map(a => a.slot);
+  // 7. UI — ambos casos (con o sin tragos) ya cerraron la cuenta principal
+  const closedSlots = [slot, ...coveredAccounts.map(a => a.slot)];
   closedSlots.forEach(s => { const i = accounts.findIndex(a => a.slot === s); if (i >= 0) accounts[i].is_closed = true; });
   const extra = coveredAccounts.length ? ` + ${coveredAccounts.length} cuenta${coveredAccounts.length > 1 ? 's' : ''} ajena${coveredAccounts.length > 1 ? 's' : ''}` : '';
   const entryNote = entryDue > 0 ? ` (incluye entrada ${formatMoney(entryDue)})` : '';
