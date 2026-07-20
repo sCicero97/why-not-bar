@@ -402,6 +402,31 @@ body.rt-offline .sidebar {
   border-color: rgba(48, 209, 88, .30);
   box-shadow: 0 10px 30px rgba(48, 209, 88, .06), inset 0 1px 0 rgba(255, 255, 255, .04);
 }
+/* Pay later: cuenta con entrada pendiente — borde rojo suave */
+.account-card.has-entry-due {
+  border-color: rgba(255, 69, 58, .35);
+  box-shadow: 0 10px 30px rgba(255, 69, 58, .08), inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+.entry-due-badge {
+  display: inline-block;
+  margin-top: 6px;
+  background: rgba(255, 69, 58, .18);
+  color: #ffb0a6;
+  border: 1px solid rgba(255, 69, 58, .38);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.account-total-breakdown {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+  margin-top: 4px;
+  letter-spacing: .01em;
+}
 .account-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; gap: 12px; }
 .account-id { font-size: 22px; font-weight: 700; letter-spacing: -.01em; line-height: 1.1; }
 .account-name { font-size: 13px; color: var(--muted); margin-top: 3px; }

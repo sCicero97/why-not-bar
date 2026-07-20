@@ -50,7 +50,7 @@ async function init() {
 async function loadData() {
   const db = getDb();
   const [accsRes, closRes] = await Promise.all([
-    db.from('bar_accounts').select('*, attendees(name,status)').eq('event_id', activeEvent.id).order('slot'),
+    db.from('bar_accounts').select('*, attendees(name,status,entry_amount,amount_paid)').eq('event_id', activeEvent.id).order('slot'),
     db.from('bar_closures').select('*, attendees(name)').eq('event_id', activeEvent.id).order('closed_at', { ascending: false }),
   ]);
   if (accsRes.data) accounts = accsRes.data;
@@ -64,7 +64,7 @@ async function loadData() {
 async function reloadFromDB() {
   const db = getDb();
   const [accsRes, closRes] = await Promise.all([
-    db.from('bar_accounts').select('*, attendees(name,status)').eq('event_id', activeEvent.id).order('slot'),
+    db.from('bar_accounts').select('*, attendees(name,status,entry_amount,amount_paid)').eq('event_id', activeEvent.id).order('slot'),
     db.from('bar_closures').select('*, attendees(name)').eq('event_id', activeEvent.id).order('closed_at', { ascending: false }),
   ]);
   if (accsRes.data) accounts = accsRes.data;
@@ -168,20 +168,30 @@ function renderAccounts() {
   for (const acc of filtered) {
     const id      = padId(acc.slot);
     const name    = acc.attendees?.name || '';
+    const status  = acc.attendees?.status || '';
+    // Si el asistente es "pay_later", debe también la entrada. Sumamos al total.
+    const entryDue = status === 'pay_later' ? Number(acc.attendees?.entry_amount || 0) : 0;
+    const drinksTotal = Number(acc.total || 0);
+    const combined = drinksTotal + entryDue;
     // Buscar el cierre correspondiente para mostrar foto de pago
     const closure = acc.is_closed ? closures.find(c => c.slot === acc.slot) : null;
     const photoUrl = closure?.payment_photo_url || null;
+    const canClose = combined > 0;
 
     const card = document.createElement('article');
-    card.className = `account-card ${acc.is_closed ? 'is-closed' : ''} ${!acc.is_closed && acc.total > 0 ? 'has-balance' : ''}`;
+    card.className = `account-card ${acc.is_closed ? 'is-closed' : ''} ${!acc.is_closed && combined > 0 ? 'has-balance' : ''} ${entryDue > 0 ? 'has-entry-due' : ''}`;
     card.innerHTML = `
       <div class="account-top">
         <div>
           <div class="account-id">ID ${id}</div>
           ${name ? `<div class="account-name">${name}</div>` : ''}
           ${acc.is_closed ? '<span class="closed-badge">cerrada</span>' : ''}
+          ${entryDue > 0 && !acc.is_closed ? `<span class="entry-due-badge">Debe entrada ${formatMoney(entryDue)}</span>` : ''}
         </div>
-        <div class="account-total">${formatMoney(acc.total)}</div>
+        <div class="account-total">
+          ${formatMoney(combined)}
+          ${entryDue > 0 && drinksTotal > 0 ? `<div class="account-total-breakdown">${formatMoney(drinksTotal)} tragos + ${formatMoney(entryDue)} entrada</div>` : ''}
+        </div>
       </div>
       <div class="account-stats">
         <div class="pill">${p1}: <strong>${acc.qty160}</strong></div>
@@ -201,7 +211,7 @@ function renderAccounts() {
              <button class="action-btn btn-160" data-id="${acc.id}" data-slot="${acc.slot}" data-range="1" data-amount="${p1}">+${p1}<span class="hold-bar"></span><span class="subtract-bar"></span></button>
              <button class="action-btn btn-260" data-id="${acc.id}" data-slot="${acc.slot}" data-range="2" data-amount="${p2}">+${p2}<span class="hold-bar"></span><span class="subtract-bar"></span></button>
              <button class="action-btn btn-360" data-id="${acc.id}" data-slot="${acc.slot}" data-range="3" data-amount="${p3}">+${p3}<span class="hold-bar"></span><span class="subtract-bar"></span></button>
-             <button class="action-btn btn-close ${acc.total === 0 ? 'hidden' : ''}" onclick="doCloseAccount('${acc.id}',${acc.slot})">Cerrar</button>
+             <button class="action-btn btn-close ${canClose ? '' : 'hidden'}" onclick="doCloseAccount('${acc.id}',${acc.slot})">Cerrar</button>
            </div>`
       }
     `;
@@ -398,7 +408,13 @@ async function doSubtractDrink(accountId, range, price) {
 
 async function doCloseAccount(accountId, slot) {
   const acc      = accounts.find(a => a.id === accountId);
-  const ownTotal = Number(acc?.total || 0);
+  const drinksTotal = Number(acc?.total || 0);
+  // Si el asistente vinculado es pay_later, agregamos la entrada al total a cobrar.
+  const attStatus  = acc?.attendees?.status || '';
+  const entryDue   = attStatus === 'pay_later' ? Number(acc?.attendees?.entry_amount || 0) : 0;
+  const ownTotal   = drinksTotal + entryDue;
+
+  if (ownTotal <= 0) { toast('No hay saldo para cobrar', 'error'); return; }
 
   // 1. Seleccionar método + checkbox "pagar por otros"
   const methodResult = await showPaymentMethodSelector(ownTotal, true);
@@ -439,16 +455,31 @@ async function doCloseAccount(accountId, slot) {
     photoUrl = await uploadPaymentPhoto(photoBlob, activeEvent.id, slot);
   }
 
-  // 5. Cerrar cuenta principal
+  // 5. Cerrar cuenta principal — pero SOLO si hay tragos (sino sólo cobramos entrada)
   const db = getDb();
-  const { data, error } = await db.rpc('close_bar_account', {
-    p_account_id: accountId, p_closed_by: 'bar', p_photo_url: photoUrl,
-  });
-  if (error || !data?.ok) { toast(data?.error || error?.message || 'Error al cerrar', 'error'); return; }
+  if (drinksTotal > 0) {
+    const { data, error } = await db.rpc('close_bar_account', {
+      p_account_id: accountId, p_closed_by: 'bar', p_photo_url: photoUrl,
+    });
+    if (error || !data?.ok) { toast(data?.error || error?.message || 'Error al cerrar', 'error'); return; }
 
-  await db.from('bar_closures')
-    .update({ payment_method: methodResult.method, cash_received: cashReceived, change_given: changeGiven })
-    .eq('event_id', activeEvent.id).eq('slot', slot);
+    await db.from('bar_closures')
+      .update({ payment_method: methodResult.method, cash_received: cashReceived, change_given: changeGiven })
+      .eq('event_id', activeEvent.id).eq('slot', slot);
+  }
+
+  // 5b. Si tenía entrada pendiente (pay_later) → marcar al asistente como paid
+  //     y guardar la foto de comprobante también en el asistente.
+  if (entryDue > 0 && acc?.attendee_id) {
+    const prevPaid = Number(acc.attendees?.amount_paid || 0);
+    const updates = {
+      status: 'paid',
+      amount_paid: prevPaid + entryDue,
+    };
+    if (photoUrl) updates.payment_photo_url = photoUrl;
+    const { error: attErr } = await db.from('attendees').update(updates).eq('id', acc.attendee_id);
+    if (attErr) toast('Cuenta cobrada pero no pude actualizar el estado del asistente: ' + attErr.message, 'error');
+  }
 
   // 6. Cerrar cuentas de otros
   for (const other of coveredAccounts) {
@@ -459,10 +490,11 @@ async function doCloseAccount(accountId, slot) {
   }
 
   // 7. UI
-  const closedSlots = [slot, ...coveredAccounts.map(a => a.slot)];
+  const closedSlots = drinksTotal > 0 ? [slot, ...coveredAccounts.map(a => a.slot)] : coveredAccounts.map(a => a.slot);
   closedSlots.forEach(s => { const i = accounts.findIndex(a => a.slot === s); if (i >= 0) accounts[i].is_closed = true; });
   const extra = coveredAccounts.length ? ` + ${coveredAccounts.length} cuenta${coveredAccounts.length > 1 ? 's' : ''} ajena${coveredAccounts.length > 1 ? 's' : ''}` : '';
-  toast(`Cuenta ${padId(slot)} cerrada — ${formatMoney(combinedTotal)}${extra}`, 'success');
+  const entryNote = entryDue > 0 ? ` (incluye entrada ${formatMoney(entryDue)})` : '';
+  toast(`Cuenta ${padId(slot)} cerrada — ${formatMoney(combinedTotal)}${entryNote}${extra}`, 'success');
   await loadData();
 }
 
