@@ -1225,16 +1225,23 @@ function renderAttendeesTable() {
       <td class="editable-cell" data-id="${att.id}" data-field="entry_amount">${att.entry_amount > 0 ? formatMoney(att.entry_amount) : '<span class="empty-val">—</span>'}</td>
       <td>${consumption > 0 ? formatMoney(consumption) : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${(() => {
-        // Total = lo que pagó por entrada (si pagó) + consumición de barra.
-        const entryPaid = att.status === 'paid' ? Number(att.entry_amount || 0) : 0;
-        const totalDeb  = entryPaid + Number(consumption || 0);
-        const owesEntry = att.status === 'in_process' || att.status === 'pay_later';
+        // Un asistente pay_later/in_process debe la entrada MIENTRAS amount_paid < entry_amount.
+        // Una vez cobrada (amount_paid >= entry_amount) ya está paga aunque el status
+        // todavía no se haya actualizado a 'paid' por sync tardío.
+        const entryAmount = Number(att.entry_amount || 0);
+        const amountPaid  = Number(att.amount_paid || 0);
+        const entryIsPaid = att.status === 'paid' || amountPaid >= entryAmount;
+        const entryPaid   = entryIsPaid ? entryAmount : 0;
+        const totalDeb    = entryPaid + Number(consumption || 0);
+        const owesEntry   = !entryIsPaid && (att.status === 'in_process' || att.status === 'pay_later');
         if (totalDeb > 0) {
           let html = `<strong>${formatMoney(totalDeb)}</strong>`;
-          if (owesEntry) html += ` <span style="color:#ff453a;font-size:11px">(+${formatMoney(att.entry_amount || 0)} entrada pendiente)</span>`;
+          if (owesEntry) html += ` <span style="color:#ff453a;font-size:11px">(+${formatMoney(entryAmount)} entrada pendiente)</span>`;
+          else if (entryIsPaid && entryAmount > 0) html += ` <span style="color:#30d158;font-size:11px">✓ paga</span>`;
           return html;
         }
-        if (owesEntry) return `<span style="color:#ff453a;font-weight:600">Pendiente ${formatMoney(att.entry_amount || 0)}</span>`;
+        if (owesEntry) return `<span style="color:#ff453a;font-weight:600">Pendiente ${formatMoney(entryAmount)}</span>`;
+        if (entryIsPaid && entryAmount > 0) return `<span style="color:#30d158;font-weight:600">✓ ${formatMoney(entryAmount)} paga</span>`;
         return '<span style="color:var(--muted)">—</span>';
       })()}</td>
       <td style="font-size:12px;color:var(--muted)">${att.entry_time ? new Date(att.entry_time).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>

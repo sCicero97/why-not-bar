@@ -51,7 +51,7 @@ async function loadData() {
   const db = getDb();
   const [accsRes, closRes] = await Promise.all([
     db.from('bar_accounts').select('*, attendees(name,status,entry_amount,amount_paid)').eq('event_id', activeEvent.id).order('slot'),
-    db.from('bar_closures').select('*, attendees(name)').eq('event_id', activeEvent.id).order('closed_at', { ascending: false }),
+    db.from('bar_closures').select('*, attendees(name,entry_amount,amount_paid,status)').eq('event_id', activeEvent.id).order('closed_at', { ascending: false }),
   ]);
   if (accsRes.data) accounts = accsRes.data;
   if (closRes.data) closures = closRes.data;
@@ -65,7 +65,7 @@ async function reloadFromDB() {
   const db = getDb();
   const [accsRes, closRes] = await Promise.all([
     db.from('bar_accounts').select('*, attendees(name,status,entry_amount,amount_paid)').eq('event_id', activeEvent.id).order('slot'),
-    db.from('bar_closures').select('*, attendees(name)').eq('event_id', activeEvent.id).order('closed_at', { ascending: false }),
+    db.from('bar_closures').select('*, attendees(name,entry_amount,amount_paid,status)').eq('event_id', activeEvent.id).order('closed_at', { ascending: false }),
   ]);
   if (accsRes.data) accounts = accsRes.data;
   if (closRes.data) closures = closRes.data;
@@ -231,12 +231,43 @@ function renderPaidTable() {
     tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Sin cuentas cobradas todavía.</td></tr>';
     return;
   }
+  // Pre-cálculo: identificar qué cierre "cobró" la entrada de cada asistente.
+  // La entrada se cobra UNA sola vez; se la atribuimos al cierre más reciente
+  // del asistente donde amount_paid ya cubre entry_amount.
+  const closureOwnsEntry = new Map(); // closure.id → entry_amount cobrada acá
+  const seenAttendees = new Set();
+  for (const c of closures) { // closures viene ordenado desc por closed_at
+    if (!c.attendee_id || seenAttendees.has(c.attendee_id)) continue;
+    seenAttendees.add(c.attendee_id);
+    const entryAmt = Number(c.attendees?.entry_amount || 0);
+    const amtPaid  = Number(c.attendees?.amount_paid  || 0);
+    if (entryAmt > 0 && amtPaid >= entryAmt) {
+      closureOwnsEntry.set(c.id, entryAmt);
+    }
+  }
+
   for (const c of closures) {
     const tr = document.createElement('tr');
-    const isEntryOnly = Number(c.total || 0) === 0 && (c.qty160 + c.qty260 + c.qty360) === 0;
-    const totalCell = isEntryOnly
-      ? '<span style="color:var(--muted);font-size:12px">Solo entrada</span>'
-      : `<strong>${formatMoney(c.total)}</strong>`;
+    const drinkTotal = Number(c.total || 0);
+    const entryInClosure = closureOwnsEntry.get(c.id) || 0;
+    const combined = drinkTotal + entryInClosure;
+    const isEntryOnly = drinkTotal === 0 && (c.qty160 + c.qty260 + c.qty360) === 0;
+
+    let totalCell;
+    if (isEntryOnly && entryInClosure > 0) {
+      // Sólo se cobró entrada, sin tragos
+      totalCell = `<strong>${formatMoney(entryInClosure)}</strong> <span style="color:var(--muted);font-size:11px">(solo entrada)</span>`;
+    } else if (isEntryOnly) {
+      // Cierre vacío sin datos de entrada — no debería pasar pero lo cubrimos
+      totalCell = '<span style="color:var(--muted);font-size:12px">Solo entrada</span>';
+    } else if (entryInClosure > 0) {
+      // Tragos + entrada cobrados juntos
+      totalCell = `<strong>${formatMoney(combined)}</strong>
+        <div style="font-size:11px;color:var(--muted);font-weight:500">${formatMoney(drinkTotal)} tragos + ${formatMoney(entryInClosure)} entrada</div>`;
+    } else {
+      // Sólo tragos
+      totalCell = `<strong>${formatMoney(drinkTotal)}</strong>`;
+    }
     tr.innerHTML = `
       <td><strong>${padId(c.slot)}</strong></td>
       <td>${c.attendees?.name || '—'}</td>
