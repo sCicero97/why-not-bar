@@ -215,6 +215,9 @@ async function loadAll(opts = {}) {
   if (opts.firstLoad) {
     await healDanglingBarAccountLinks();
   }
+  // Auto-fix pay_later con cuenta ya cerrada — corre en cada loadAll para captar
+  // casos nuevos que la barra cerró sin poder actualizar el status del asistente.
+  await healPayLaterWithClosedBar().catch(() => {});
 
   renderAll();
 
@@ -271,6 +274,35 @@ async function healDanglingBarAccountLinks() {
     // Actualizar estado local
     const acc = barAccounts.find(b => b.slot === a.bar_account_slot);
     if (acc) { acc.attendee_id = a.id; acc.attendees = { name: a.name }; }
+  }
+}
+
+// Auto-fix retroactivo: si hay pay_later con la cuenta de barra ya cerrada,
+// significa que el bar ya cobró (o intentó cobrar) pero no pudo actualizar el
+// estado del asistente (por el bug de RLS). Marcamos como pago acá desde admin
+// (que sí tiene permiso). Corre en cada loadAll para captar casos nuevos.
+async function healPayLaterWithClosedBar() {
+  if (!currentEvent()) return;
+  const db = getDb();
+  const toFix = attendees.filter(a => {
+    if (a.status !== 'pay_later') return false;
+    if (!a.bar_account_slot) return false;
+    const acc = barAccounts.find(b => b.slot === a.bar_account_slot && b.attendee_id === a.id);
+    // La cuenta debe estar cerrada Y sin amount_paid registrado
+    return acc && acc.is_closed && Number(a.amount_paid || 0) < Number(a.entry_amount || 0);
+  });
+  if (!toFix.length) return;
+  for (const a of toFix) {
+    const entryAmount = Number(a.entry_amount || 0);
+    if (entryAmount <= 0) continue;
+    const { error } = await db.from('attendees')
+      .update({ status: 'paid', amount_paid: entryAmount })
+      .eq('id', a.id);
+    if (!error) {
+      // Actualizar estado local para render inmediato
+      a.status = 'paid';
+      a.amount_paid = entryAmount;
+    }
   }
 }
 

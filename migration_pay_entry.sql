@@ -1,10 +1,21 @@
--- Migración: RPC para que el bar cobre la entrada de un pay_later.
--- El rol 'bar' no puede hacer UPDATE directo sobre attendees (RLS lo bloquea),
--- así que necesitamos un security-definer que haga la actualización de status,
--- amount_paid y payment_photo_url.
+-- Migración: permitir al bar cobrar la entrada de un pay_later.
+--
+-- Hay DOS cambios:
+--   1. RLS: el rol 'bar' ahora puede hacer UPDATE sobre attendees (antes sólo
+--      door y admin). Bar es staff de confianza — necesita cobrar la entrada
+--      cuando cierra la cuenta de un pay_later.
+--   2. RPC pay_attendee_entry (backup): security-definer que hace la actualización
+--      atómicamente. Se usa si el update directo falla por cualquier razón.
 --
 -- Corré este script una sola vez en Supabase (SQL editor).
 
+-- ─── 1. Actualizar RLS de attendees ──────────────────────────────────────────
+drop policy if exists "Door+admin updates attendees" on attendees;
+drop policy if exists "Staff updates attendees" on attendees;
+create policy "Staff updates attendees" on attendees for update to authenticated
+  using (get_user_role() in ('door','admin','bar'));
+
+-- ─── 2. RPC pay_attendee_entry ───────────────────────────────────────────────
 drop function if exists pay_attendee_entry(uuid, numeric, text);
 create or replace function pay_attendee_entry(
   p_attendee_id uuid,
