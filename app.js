@@ -233,10 +233,14 @@ function renderPaidTable() {
   }
   for (const c of closures) {
     const tr = document.createElement('tr');
+    const isEntryOnly = Number(c.total || 0) === 0 && (c.qty160 + c.qty260 + c.qty360) === 0;
+    const totalCell = isEntryOnly
+      ? '<span style="color:var(--muted);font-size:12px">Solo entrada</span>'
+      : `<strong>${formatMoney(c.total)}</strong>`;
     tr.innerHTML = `
       <td><strong>${padId(c.slot)}</strong></td>
       <td>${c.attendees?.name || '—'}</td>
-      <td><strong>${formatMoney(c.total)}</strong></td>
+      <td>${totalCell}</td>
       <td>${c.qty160}</td><td>${c.qty260}</td><td>${c.qty360}</td>
       <td>${c.closed_by || '—'}</td>
       <td>${c.closed_at ? new Date(c.closed_at).toLocaleString('es-UY') : '—'}</td>
@@ -471,11 +475,28 @@ async function doCloseAccount(accountId, slot) {
       .update({ payment_method: methodResult.method, cash_received: cashReceived, change_given: changeGiven })
       .eq('event_id', activeEvent.id).eq('slot', slot);
   } else {
-    // Sólo cobramos entrada: cerramos la cuenta directamente (sin bar_closures)
+    // Sólo cobramos entrada (pay_later sin tragos): cerramos la cuenta Y creamos
+    // un registro en bar_closures para que aparezca en "cuentas cerradas". El
+    // total del cierre es 0 (no hubo consumo de tragos) — la plata cobrada por
+    // la entrada queda registrada en attendees.amount_paid.
     const { error: closeErr } = await db.from('bar_accounts')
       .update({ is_closed: true })
       .eq('id', accountId);
     if (closeErr) { toast('Error al cerrar cuenta: ' + closeErr.message, 'error'); return; }
+
+    const { error: closureErr } = await db.from('bar_closures').insert({
+      event_id: activeEvent.id,
+      slot: slot,
+      attendee_id: acc.attendee_id || null,
+      total: 0,
+      qty160: 0, qty260: 0, qty360: 0,
+      closed_by: 'bar',
+      payment_photo_url: photoUrl,
+      payment_method: methodResult.method,
+      cash_received: cashReceived,
+      change_given: changeGiven,
+    });
+    if (closureErr) console.warn('No se pudo crear el registro de cierre:', closureErr.message);
   }
 
   // 5b. Si tenía entrada pendiente (pay_later) → marcar al asistente como paid
