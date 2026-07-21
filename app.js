@@ -532,15 +532,25 @@ async function doCloseAccount(accountId, slot) {
 
   // 5b. Si tenía entrada pendiente (pay_later) → marcar al asistente como paid
   //     y guardar la foto de comprobante también en el asistente.
+  //     Uso RPC porque el rol 'bar' no tiene permiso directo de UPDATE sobre
+  //     attendees (bloqueado por RLS). El RPC es security definer y suma
+  //     amount_paid + entryDue, marca status='paid'.
   if (entryDue > 0 && acc?.attendee_id) {
-    const prevPaid = Number(acc.attendees?.amount_paid || 0);
-    const updates = {
-      status: 'paid',
-      amount_paid: prevPaid + entryDue,
-    };
-    if (photoUrl) updates.payment_photo_url = photoUrl;
-    const { error: attErr } = await db.from('attendees').update(updates).eq('id', acc.attendee_id);
-    if (attErr) toast('Cuenta cobrada pero no pude actualizar el estado del asistente: ' + attErr.message, 'error');
+    const { data: payData, error: payErr } = await db.rpc('pay_attendee_entry', {
+      p_attendee_id: acc.attendee_id,
+      p_amount: entryDue,
+      p_photo_url: photoUrl,
+    });
+    if (payErr || !payData?.ok) {
+      // Fallback: intentar update directo (por si el RPC todavía no fue creado)
+      const prevPaid = Number(acc.attendees?.amount_paid || 0);
+      const updates = { status: 'paid', amount_paid: prevPaid + entryDue };
+      if (photoUrl) updates.payment_photo_url = photoUrl;
+      const { error: attErr } = await db.from('attendees').update(updates).eq('id', acc.attendee_id);
+      if (attErr) {
+        toast('Cuenta cobrada pero no pude marcar la entrada como paga: ' + (payData?.error || payErr?.message || attErr.message), 'error');
+      }
+    }
   }
 
   // 6. Cerrar cuentas de otros
