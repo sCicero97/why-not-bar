@@ -2187,11 +2187,22 @@ async function revertAttendeeExit(id) {
 window.revertAttendeeExit = revertAttendeeExit;
 
 async function reopenBarAccount(accId) {
-  if (!confirm('¿Reabrir esta cuenta de barra?')) return;
+  const acc = barAccounts.find(a => a.id === accId);
+  const nm  = acc?.attendees?.name || `slot ${padId(acc?.slot || 0)}`;
+  if (!confirm(
+    `¿Reabrir la cuenta de ${nm}?\n\n` +
+    `Los tragos anteriores YA FUERON COBRADOS (quedan registrados en el historial).\n` +
+    `La cuenta se abre EN CERO para que puedan consumir más.\n\n` +
+    `Si el asistente ya pagó la entrada, no la vuelve a deber.`
+  )) return;
   const db = getDb();
-  const { error } = await db.from('bar_accounts').update({ is_closed: false }).eq('id', accId);
+  // Reabrir + resetear saldo. Los tragos anteriores están en bar_closures y ya
+  // fueron cobrados: si dejáramos el total viejo acá se cobraría dos veces.
+  const { error } = await db.from('bar_accounts')
+    .update({ is_closed: false, total: 0, qty160: 0, qty260: 0, qty360: 0 })
+    .eq('id', accId);
   if (error) toast('Error: ' + error.message, 'error');
-  else { toast('Cuenta reabierta', 'success'); await loadAll(); }
+  else { toast(`Cuenta de ${nm} reabierta en cero`, 'success'); await loadAll(); }
 }
 
 // ─── Reset total de un evento ────────────────────────────────────────────────
