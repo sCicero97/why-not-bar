@@ -341,21 +341,36 @@ function _hasActiveEdit(entity) {
   return _activeInlineEdit && _activeInlineEdit.entity === entity;
 }
 
+// Cuando hay un modal abierto, evitamos re-renderizar la tabla de asistentes
+// grande. Los re-renders pesados durante escritura en el modal causan freezes.
+function _isModalOpen() {
+  const ov = document.getElementById('modalOverlay');
+  return ov && !ov.classList.contains('hidden');
+}
+
 function renderAll() {
+  const modalOpen = _isModalOpen();
   renderDashboard();
-  renderAttendeesTable();
-  renderBarTable();
+  // Skip renders pesados si hay modal abierto — evita freezes por churn del DOM
+  // mientras el usuario está escribiendo en un input del modal.
+  if (!modalOpen) {
+    renderAttendeesTable();
+    renderBarTable();
+    renderPersonas();
+  }
   renderAdminBarCounters();
   renderExpenses();
   renderEvents();
   renderTasks();
   renderBlockedCards();
   renderEventPicker();
-  renderPersonas();
   renderBlacklist();
   renderEventsStats();
   syncDrinkPriceHeaders();
+  // Al cerrar el modal se vuelve a llamar renderAll para poner al día lo que
+  // salteamos. Esto se activa en closeModal más abajo.
 }
+window._renderAllDeferred = renderAll;
 
 // Sincroniza los headers de la tabla Barra con los precios configurados en el evento.
 function syncDrinkPriceHeaders() {
@@ -982,9 +997,21 @@ function setupAttendeeNameSuggest() {
   const list  = document.getElementById('attNameSuggest');
   if (!input || !list) return;
 
-  const personas = aggregatePersonas();
+  // Sólo calculamos personas una vez y sólo si hay datos cross-event cargados.
+  // Si allAttendeesXE es grande (miles), aggregatePersonas puede ser costoso —
+  // lo hacemos "lazy" al primer input real.
+  let personas = null;
+  const getPersonas = () => {
+    if (personas === null) {
+      try { personas = aggregatePersonas() || []; }
+      catch (_) { personas = []; }
+    }
+    return personas;
+  };
+
   let active = -1;
   let current = [];
+  let debounceTimer = null;
 
   const hide = () => { list.hidden = true; list.innerHTML = ''; active = -1; current = []; };
   const fill = (p) => {
@@ -1011,12 +1038,19 @@ function setupAttendeeNameSuggest() {
     });
   };
 
-  input.addEventListener('input', () => {
+  const doSearch = () => {
     const q = input.value.trim().toLowerCase();
     if (q.length < 2) { hide(); return; }
-    current = personas.filter(p => (p.name || '').toLowerCase().includes(q)).slice(0, 6);
+    const all = getPersonas();
+    current = all.filter(p => (p.name || '').toLowerCase().includes(q)).slice(0, 6);
     active = -1;
     render();
+  };
+
+  input.addEventListener('input', () => {
+    // Debounce 180ms para no filtrar en cada tecla — reduce jank en mobile.
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(doSearch, 180);
   });
 
   input.addEventListener('keydown', (ev) => {
@@ -1700,6 +1734,15 @@ document.addEventListener('click', async (e) => {
 
   // Marcar edición activa para que loadAll/realtime no destruyan el input
   _activeInlineEdit = { entity, id, field };
+  // Safety: si el input pierde el foco por > 60s sin guardar, auto-limpiar el
+  // guard para que los renders vuelvan a funcionar (evita freeze permanente).
+  if (window._activeEditWatchdog) clearTimeout(window._activeEditWatchdog);
+  window._activeEditWatchdog = setTimeout(() => {
+    if (_activeInlineEdit && _activeInlineEdit.id === id) {
+      _activeInlineEdit = null;
+      try { renderAll(); } catch (_) {}
+    }
+  }, 60000);
 
   let saved = false;
   const renderForEntity = () => {
@@ -1920,7 +1963,19 @@ async function ensureBarAccountSlot(slot, attendeeId = null, eventIdOverride = n
 }
 
 // ─── Add/Edit attendee modal ──────────────────────────────────────────────────
+let _openingAddAttendee = false;
 async function openAddAttendee() {
+  // Prevenir doble apertura si el user tocó rápido dos veces
+  if (_openingAddAttendee || _isModalOpen()) return;
+  _openingAddAttendee = true;
+  try {
+    return await _openAddAttendeeInner();
+  } finally {
+    _openingAddAttendee = false;
+  }
+}
+
+async function _openAddAttendeeInner() {
   // Calculamos el slot consultando la DB fresca (fix bug ID duplicado).
   const nextSlot = await getNextAvailableBarSlotFresh();
   // Costo de acceso por defecto del evento (si está configurado), si no 700.
@@ -3000,6 +3055,8 @@ function closeModal() {
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
   } catch (_) {}
+  // Re-render lo que salteamos mientras el modal estaba abierto (tabla asist., bar, personas)
+  try { renderAll(); } catch (_) {}
 }
 window.closeModal = closeModal;
 
