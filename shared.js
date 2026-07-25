@@ -22,16 +22,37 @@ const STORAGE_BUCKET = 'payment-photos';
 // online o cambiar de tab, y un fallback de polling ligero cada 15s.
 let _liveStatus = 'connecting'; // 'connecting' | 'live' | 'offline'
 let _offlinePendingTimer = null;
-// Tolerancia generosa para mobile: redes celulares y wifi débil tienen
-// microcortes (1-10s) constantes. No queremos parpadear el indicador.
-const OFFLINE_TOLERANCE_MS = 15000;
+let _lastVisibleAt = Date.now();
+// Tolerancia MUY generosa para mobile: redes celulares y wifi débil tienen
+// microcortes (1-10s) constantes. iOS Safari además suspende websockets al
+// pasar la app a background y demora varios segundos en reconectar al volver.
+const OFFLINE_TOLERANCE_MS = 30000;
+// Al volver visible, damos 20s de gracia extra antes de considerar offline.
+const RESUME_GRACE_MS = 20000;
 function _setLiveStatus(s) {
+  // Nunca marcamos offline mientras la tab está oculta — no tiene sentido
+  // molestar al usuario con un indicador rojo cuando no está mirando.
+  if (s === 'offline' && document.visibilityState !== 'visible') return;
+  // Gracia después de volver visible: no marcar offline en los primeros 20s.
+  if (s === 'offline' && (Date.now() - _lastVisibleAt) < RESUME_GRACE_MS) {
+    // Reagendar el chequeo para cuando termine la gracia
+    if (!_offlinePendingTimer) {
+      _offlinePendingTimer = setTimeout(() => {
+        _offlinePendingTimer = null;
+        if (_liveStatus !== 'live') _setLiveStatus('offline');
+      }, RESUME_GRACE_MS - (Date.now() - _lastVisibleAt) + 500);
+    }
+    return;
+  }
   // Tolerancia: no marcar offline si la desconexión dura < OFFLINE_TOLERANCE_MS.
   if (s === 'offline') {
     if (_liveStatus === 'offline') return;          // ya marcado
     if (_offlinePendingTimer) return;               // ya hay un timer pendiente
     _offlinePendingTimer = setTimeout(() => {
       _offlinePendingTimer = null;
+      // Verificar de nuevo antes de commit: puede haberse reconectado
+      if (_liveStatus === 'live') return;
+      if (document.visibilityState !== 'visible') return;
       _liveStatus = 'offline';
       document.body.classList.add('rt-offline');
       document.body.classList.remove('rt-connecting');
@@ -123,38 +144,51 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
     if (_watchdogTimer) { clearInterval(_watchdogTimer); _watchdogTimer = null; }
   }
   startTimers();
-  // Pausar timers cuando la tab pasa a oculta — Safari iOS mata la app rápido si
-  // hay JS corriendo en background (puede dejar la pantalla negra al volver).
+
+  // Handler unificado para "app volvió a estar visible" (iOS Safari suspende
+  // agresivamente). Fuerza repaint + reconexión + reload de datos.
+  function onResume() {
+    _lastVisibleAt = Date.now();
+    startTimers();
+    // Mostrar "connecting" mientras reconectamos (no offline)
+    if (_liveStatus === 'offline') {
+      document.body.classList.remove('rt-offline');
+      document.body.classList.add('rt-connecting');
+      _liveStatus = 'connecting';
+    }
+    // Force repaint iOS Safari: a veces el renderer se queda "congelado" con
+    // la pantalla negra al despertar. Tocamos un layout property + rAF.
+    try {
+      document.documentElement.style.transform = 'translateZ(0)';
+      requestAnimationFrame(() => {
+        document.documentElement.style.transform = '';
+      });
+    } catch (_) {}
+    scheduleReload();
+    rebuildChannel();
+  }
+
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') startTimers();
+    if (document.visibilityState === 'visible') onResume();
     else stopTimers();
   });
+  // pageshow (back/forward cache o wake-up de la PWA)
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted || document.visibilityState === 'visible') onResume();
+  });
+  // focus: en algunos navegadores mobile es la única señal de "app activa"
+  window.addEventListener('focus', () => {
+    if (document.visibilityState === 'visible') onResume();
+  });
 
-  // Al volver online, recargar y forzar reconexión (sin marcar offline si reconecta rápido)
+  // Al volver online, recargar y forzar reconexión
   window.addEventListener('online', () => {
+    _lastVisibleAt = Date.now(); // reiniciar la gracia
     scheduleReload();
     rebuildChannel();
   });
   // No marcar offline inmediato — dejamos que la tolerancia decida.
   window.addEventListener('offline', () => _setLiveStatus('offline'));
-
-  // Al volver visible la tab, recargar Y forzar rebuild (iOS suspende el WS).
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
-    scheduleReload();
-    rebuildChannel();
-  });
-  // pageshow (back/forward cache): mismo tratamiento.
-  window.addEventListener('pageshow', (e) => {
-    if (e.persisted) {
-      scheduleReload();
-      rebuildChannel();
-    }
-  });
-  // focus: en algunos navegadores mobile es la única señal de "app activa"
-  window.addEventListener('focus', () => {
-    scheduleReload();
-  });
 }
 
 // ─── Supabase client ──────────────────────────────────────────────────────────

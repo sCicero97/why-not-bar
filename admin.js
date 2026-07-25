@@ -3082,12 +3082,33 @@ window.addEventListener('error', _modalSafetyCleanup);
 window.addEventListener('unhandledrejection', _modalSafetyCleanup);
 // Safety net global: si la pestaña vuelve visible y modal-open quedó pegado
 // SIN overlay visible, limpiar (caso bug iOS Safari).
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
+// También: force-repaint del DOM para evitar la "pantalla negra" con la que a
+// veces iOS Safari despierta la app (buffer del compositor queda congelado).
+function _onAdminResume() {
   const overlay = document.getElementById('modalOverlay');
   if (overlay && overlay.classList.contains('hidden') && document.body.classList.contains('modal-open')) {
     document.body.classList.remove('modal-open');
   }
+  // Force repaint: tocar layout property + rAF. En iOS esto suele resucitar el
+  // compositor cuando quedó negro tras suspender la PWA.
+  try {
+    const app = document.getElementById('app') || document.body;
+    app.style.transform = 'translateZ(0)';
+    requestAnimationFrame(() => {
+      app.style.transform = '';
+      // Segundo toque después de un frame para casos difíciles
+      requestAnimationFrame(() => {
+        document.body.style.willChange = 'transform';
+        setTimeout(() => { document.body.style.willChange = ''; }, 50);
+      });
+    });
+  } catch (_) {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') _onAdminResume();
+});
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted || document.visibilityState === 'visible') _onAdminResume();
 });
 
 // ─── Photo viewer ─────────────────────────────────────────────────────────────
