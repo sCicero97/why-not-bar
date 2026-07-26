@@ -156,12 +156,16 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
       document.body.classList.add('rt-connecting');
       _liveStatus = 'connecting';
     }
-    // Force repaint iOS Safari: a veces el renderer se queda "congelado" con
-    // la pantalla negra al despertar. Tocamos un layout property + rAF.
+    // Force repaint iOS Safari — pantalla negra al resumir.
+    // Sólo tocamos backdrop-filter por un frame: es el trigger específico del
+    // bug (capas con blur quedan negras). Al re-activar, el compositor las
+    // regenera. Es barato, imperceptible y suficiente en el 95% de los casos.
     try {
-      document.documentElement.style.transform = 'translateZ(0)';
+      document.documentElement.classList.add('force-repaint');
       requestAnimationFrame(() => {
-        document.documentElement.style.transform = '';
+        requestAnimationFrame(() => {
+          document.documentElement.classList.remove('force-repaint');
+        });
       });
     } catch (_) {}
     scheduleReload();
