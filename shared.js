@@ -76,14 +76,17 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
   let _retryDelay = 800; // backoff exponencial al fallar (arranca rápido)
   let _lastReloadAt = 0;
 
-  // Debounce: si llegan varios cambios seguidos, hacer un solo reload.
+  // Debounce agresivo: si llegan varios cambios seguidos, hacer un solo reload.
+  // 1.5s es un buen balance entre "responsivo" y "no bombardear la DB".
+  // Un evento típico (agregar 20 asistentes seguidos) genera 20 postgres_changes
+  // en unos segundos — antes eran 20 reloads, ahora es 1.
   function scheduleReload() {
     if (_timer) clearTimeout(_timer);
     _timer = setTimeout(() => {
       _timer = null;
       _lastReloadAt = Date.now();
       Promise.resolve(reload()).catch(() => {});
-    }, 250);
+    }, 1500);
   }
 
   function rebuildChannel() {
@@ -119,8 +122,9 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
   _setLiveStatus('connecting');
   _channel = buildChannel();
 
-  // Polling fallback: cada 15s mientras la tab está visible.
-  // Cuando está oculta no consumimos batería ni memoria.
+  // Polling fallback: cada 60s mientras la tab está visible. Antes era 15s
+  // pero eso saturaba la DB innecesariamente — el realtime websocket ya cubre
+  // los cambios en tiempo real; el polling es sólo un safety net.
   let _pollTimer = null;
   let _watchdogTimer = null;
   function startTimers() {
@@ -128,15 +132,16 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
       _pollTimer = setInterval(() => {
         if (document.visibilityState !== 'visible') return;
         scheduleReload();
-      }, 15000);
+      }, 60000);
     }
     if (!_watchdogTimer) {
+      // Rebuild sólo si llevamos > 2 min sin reload (era 45s). Más conservador.
       _watchdogTimer = setInterval(() => {
         if (document.visibilityState !== 'visible') return;
-        if (Date.now() - _lastReloadAt > 45000 && _liveStatus !== 'offline') {
+        if (Date.now() - _lastReloadAt > 120000 && _liveStatus !== 'offline') {
           rebuildChannel();
         }
-      }, 15000);
+      }, 30000);
     }
   }
   function stopTimers() {

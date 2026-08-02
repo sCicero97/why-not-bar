@@ -105,7 +105,7 @@ function currentEvent() {
 
 // Cache de la última vez que cargamos cross-event (no recargar en cada reload realtime).
 let _crossEventLoadedAt = 0;
-const CROSS_EVENT_TTL_MS = 60_000; // re-cargar si pasó >60s desde última carga
+const CROSS_EVENT_TTL_MS = 300_000; // 5 min — reduce carga de DB significativamente
 
 // ─── Cache local SWR (stale-while-revalidate) ────────────────────────────────
 // Guardamos un snapshot del último estado del evento activo en localStorage.
@@ -234,13 +234,30 @@ async function loadAll(opts = {}) {
 // Se cargan en background y se cachean. NO bloquean el primer pintado.
 async function loadCrossEventStats() {
   const db = getDb();
+  // Limitar a los últimos 12 meses de historia para no traer TODO desde el
+  // comienzo del proyecto. Reduce carga de DB dramáticamente en eventos viejos.
+  const yearAgo = new Date();
+  yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+  const cutoff = yearAgo.toISOString();
   const queries = [
-    db.from('blacklist').select('*').order('created_at', { ascending: false }),
-    db.from('attendees').select('id,event_id,name,cedula,email,phone,entry_amount,amount_paid,bar_account_slot,entered,entry_time,exit_time,created_at'),
-    db.from('bar_closures').select('id,event_id,slot,total,qty160,qty260,qty360,payment_method,closed_at,closed_by'),
-    db.from('expenses').select('id,event_id,amount,description,created_at'),
-    // bar_drinks puede ser MUY grande — limitar a últimas 5000 filas (suficiente para stats)
-    db.from('bar_drinks').select('event_id,slot,amount,created_at').order('created_at', { ascending: false }).limit(5000),
+    db.from('blacklist').select('*').order('created_at', { ascending: false }).limit(500),
+    db.from('attendees')
+      .select('id,event_id,name,cedula,email,phone,entry_amount,amount_paid,bar_account_slot,entered,entry_time,exit_time,created_at')
+      .gte('created_at', cutoff)
+      .limit(5000),
+    db.from('bar_closures')
+      .select('id,event_id,slot,total,qty160,qty260,qty360,payment_method,closed_at,closed_by')
+      .gte('closed_at', cutoff)
+      .limit(5000),
+    db.from('expenses')
+      .select('id,event_id,amount,description,created_at')
+      .gte('created_at', cutoff)
+      .limit(2000),
+    // bar_drinks — sólo últimas 2000 filas (suficiente para stats de últimos eventos)
+    db.from('bar_drinks')
+      .select('event_id,slot,amount,created_at')
+      .order('created_at', { ascending: false })
+      .limit(2000),
   ];
   const r = await Promise.all(queries);
   if (r[0] && !r[0].error && r[0].data) blacklist = r[0].data;
@@ -279,16 +296,19 @@ async function healDanglingBarAccountLinks() {
 
 // Auto-fix retroactivo: si hay pay_later con la cuenta de barra ya cerrada,
 // significa que el bar ya cobró (o intentó cobrar) pero no pudo actualizar el
-// estado del asistente (por el bug de RLS). Marcamos como pago acá desde admin
-// (que sí tiene permiso). Corre en cada loadAll para captar casos nuevos.
+// estado del asistente. Marcamos como pago acá desde admin (que sí tiene
+// permiso). Ahora que el RPC pay_attendee_entry existe, esto rara vez tendrá
+// trabajo — sólo casos legacy. Skip barato si no hay pay_later.
 async function healPayLaterWithClosedBar() {
   if (!currentEvent()) return;
+  // Early exit rápido: si no hay ningún pay_later, ni siquiera iteramos.
+  const hasPayLater = attendees.some(a => a.status === 'pay_later');
+  if (!hasPayLater) return;
   const db = getDb();
   const toFix = attendees.filter(a => {
     if (a.status !== 'pay_later') return false;
     if (!a.bar_account_slot) return false;
     const acc = barAccounts.find(b => b.slot === a.bar_account_slot && b.attendee_id === a.id);
-    // La cuenta debe estar cerrada Y sin amount_paid registrado
     return acc && acc.is_closed && Number(a.amount_paid || 0) < Number(a.entry_amount || 0);
   });
   if (!toFix.length) return;
@@ -299,7 +319,6 @@ async function healPayLaterWithClosedBar() {
       .update({ status: 'paid', amount_paid: entryAmount })
       .eq('id', a.id);
     if (!error) {
-      // Actualizar estado local para render inmediato
       a.status = 'paid';
       a.amount_paid = entryAmount;
     }
