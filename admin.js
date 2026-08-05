@@ -1292,7 +1292,13 @@ function renderAttendeesTable() {
 
   tbody.innerHTML = list.map(att => {
     const barAcc = att.bar_account_slot ? barAccounts.find(b => b.slot === att.bar_account_slot) : null;
-    const consumption = barAcc ? barAcc.total + barClosures.filter(c => c.slot === att.bar_account_slot).reduce((s,c)=>s+Number(c.total),0) : 0;
+    // Consumo = suma de los cierres de este slot + (si la cuenta está ABIERTA) su
+    // total actual. Si está cerrada, ese total ya pasó a los cierres: sumarlo sería
+    // doble conteo (era el bug que mostraba 320 por un solo trago de 160).
+    const consumption = barAcc
+      ? barClosures.filter(c => c.slot === att.bar_account_slot).reduce((s,c)=>s+Number(c.total),0)
+        + (!barAcc.is_closed ? Number(barAcc.total || 0) : 0)
+      : 0;
 
     return `<tr data-id="${att.id}" class="row-${att.status}">
       <td><div class="att-name-cell" title="Doble click para editar">${att.name}</div></td>
@@ -1338,7 +1344,7 @@ function renderAttendeesTable() {
           <button class="btn btn-sm" onclick="openEditAttendee('${att.id}')" title="Editar">${icon('edit',15)}</button>
           ${att.entered && !att.exit_time ? `<button class="btn btn-sm" onclick="revertAttendeeEntry('${att.id}')" title="Marcar como NO ingresado">↺ Ingreso</button>` : ''}
           ${att.exit_time ? `<button class="btn btn-sm" onclick="revertAttendeeExit('${att.id}')" title="Marcar como adentro (deshacer salida)">↺ Salida</button>` : ''}
-          ${barAcc && !barAcc.is_closed && barAcc.total > 0 ? `<button class="btn btn-sm btn-primary" onclick="adminCloseBarAccount('${barAcc.id}',${barAcc.slot})" title="Cobrar cuenta">${icon('card',15)}</button>` : ''}
+          ${barAcc && !barAcc.is_closed && (barAcc.total > 0 || (att.status === 'pay_later' && Number(att.entry_amount||0) > Number(att.amount_paid||0))) ? `<button class="btn btn-sm btn-primary" onclick="adminCloseBarAccount('${barAcc.id}',${barAcc.slot})" title="Cobrar cuenta">${icon('card',15)}</button>` : ''}
           <button class="btn btn-sm btn-danger" onclick="deleteAttendee('${att.id}')" title="Eliminar">${icon('trash',15)}</button>
         </div>
       </td>
@@ -1462,7 +1468,7 @@ function renderBarTable() {
       <td style="font-size:13px">${closure?.closed_by || '—'}</td>
       <td style="font-size:12px;color:var(--muted)">${closure?.closed_at ? new Date(closure.closed_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td style="font-size:13px">${paymentCellHtml}</td>
-      <td>${!acc.is_closed && acc.total > 0
+      <td>${!acc.is_closed && (acc.total > 0 || (acc.attendees?.status === 'pay_later' && Number(acc.attendees?.entry_amount||0) > Number(acc.attendees?.amount_paid||0)))
         ? `<button class="btn btn-sm btn-primary icon-label-btn" onclick="adminCloseBarAccount('${acc.id}',${acc.slot})">${icon('card',14)}Cobrar</button>`
         : acc.is_closed
           ? `<button class="btn btn-sm" onclick="reopenBarAccount('${acc.id}')">Reabrir</button>`
@@ -2194,10 +2200,11 @@ async function deleteAttendee(id) {
   if (!confirm(`¿Eliminar a "${nm}"?\n\nEsta acción no se puede deshacer.`)) return;
   const db  = getDb();
 
-  // 1. Desvincular la cuenta de barra (attendee_id → null)
+  // 1. Desvincular Y resetear la cuenta de barra: queda libre y en cero para
+  //    quien reuse ese slot. El historial de cobros ya está en bar_closures.
   if (att?.bar_account_slot) {
     const { error: accErr } = await db.from('bar_accounts')
-      .update({ attendee_id: null })
+      .update({ attendee_id: null, is_closed: false, total: 0, qty160: 0, qty260: 0, qty360: 0 })
       .eq('event_id', currentEvent().id)
       .eq('slot', att.bar_account_slot);
     if (accErr) { toast('Error al desvincular cuenta: ' + accErr.message, 'error'); return; }
