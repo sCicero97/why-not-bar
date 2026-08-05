@@ -1173,9 +1173,11 @@ function renderDashboard() {
   const entryTotal   = attendees.reduce((s, a) => s + Number(a.entry_amount || 0), 0);
   const expTotal     = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const netTotal     = barTotal + entryTotal - expTotal;
-  const q160 = barAccounts.reduce((s,a)=>s+a.qty160,0) + barClosures.reduce((s,c)=>s+c.qty160,0);
-  const q260 = barAccounts.reduce((s,a)=>s+a.qty260,0) + barClosures.reduce((s,c)=>s+c.qty260,0);
-  const q360 = barAccounts.reduce((s,a)=>s+a.qty360,0) + barClosures.reduce((s,c)=>s+c.qty360,0);
+  // Solo cuentas ABIERTAS + los cierres (las cerradas ya están en los cierres;
+  // sumarlas sería doble conteo, igual que el total de plata de arriba).
+  const q160 = openAccounts.reduce((s,a)=>s+a.qty160,0) + barClosures.reduce((s,c)=>s+c.qty160,0);
+  const q260 = openAccounts.reduce((s,a)=>s+a.qty260,0) + barClosures.reduce((s,c)=>s+c.qty260,0);
+  const q360 = openAccounts.reduce((s,a)=>s+a.qty360,0) + barClosures.reduce((s,c)=>s+c.qty360,0);
 
   setText('d-barTotal',    formatMoney(barTotal));
   setText('d-entryTotal',  formatMoney(entryTotal));
@@ -2293,11 +2295,21 @@ async function reopenBarAccount(accId) {
   const db = getDb();
   // Reabrir + resetear saldo. Los tragos anteriores están en bar_closures y ya
   // fueron cobrados: si dejáramos el total viejo acá se cobraría dos veces.
-  const { error } = await db.from('bar_accounts')
+  // Guard `is_closed=true`: si otro dispositivo ya la reabrió y le cargó tragos
+  // nuevos (y esta vista está desfasada), el update NO matchea y no borra nada.
+  const { data, error } = await db.from('bar_accounts')
     .update({ is_closed: false, total: 0, qty160: 0, qty260: 0, qty360: 0 })
-    .eq('id', accId);
-  if (error) toast('Error: ' + error.message, 'error');
-  else { toast(`Cuenta de ${nm} reabierta en cero`, 'success'); await loadAll(); }
+    .eq('id', accId)
+    .eq('is_closed', true)
+    .select();
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  if (!data || !data.length) {
+    toast('La cuenta ya estaba abierta — no se tocó nada', 'warning');
+    await loadAll();
+    return;
+  }
+  toast(`Cuenta de ${nm} reabierta en cero`, 'success');
+  await loadAll();
 }
 
 // ─── Reset total de un evento ────────────────────────────────────────────────

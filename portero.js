@@ -120,15 +120,12 @@ function renderList() {
 
   for (const att of list) {
     const barAcc = att.bar_account_slot ? barAccounts.find(b => b.slot === att.bar_account_slot) : null;
-    const canCharge   = eventSettings.door_can_charge;
-    const hasBalance  = barAcc && !barAcc.is_closed && barAcc.total > 0;
-    const barClosed   = barAcc?.is_closed;
     const organizer   = isOrganizer(att);
-    // Si portero no puede cobrar → puede dejar salir con saldo abierto.
-    const canExit     = att.entered && !att.exit_time && (!hasBalance || !canCharge);
+    const canExit     = att.entered && !att.exit_time;
     const alreadyOut  = !!att.exit_time;
 
-    // Tiene consumo en barra sin pagar
+    // Tiene consumo en barra sin pagar (informativo: el portero no cobra, pero
+    // conviene que vea que la persona tiene una cuenta abierta).
     const hasUnpaidBar = barAcc && !barAcc.is_closed && barAcc.total > 0;
     // Pay later: el asistente no pagó su entrada todavía
     const owesEntry    = att.status === 'pay_later';
@@ -149,15 +146,10 @@ function renderList() {
             ${att.bar_account_slot ? `<span class="att-bar-num">#${padId(att.bar_account_slot)}</span>` : ''}
             ${alreadyOut ? '<span class="att-tag att-tag-out">Salió</span>' : att.entered ? '<span class="att-tag att-tag-in"><svg width="11" height="11"><use href="#i-check"/></svg> Adentro</span>' : ''}
           </div>
-          ${canCharge && barAcc ? `<div class="att-consumption">
-            Barra: <strong>${formatMoney(barAcc.total)}</strong>
-            ${barClosed ? '<span class="att-tag att-tag-paid"><svg width="11" height="11"><use href="#i-check"/></svg> Cobrado</span>' : hasBalance ? '<span class="att-tag att-tag-open">Abierta</span>' : ''}
-          </div>` : ''}
         </div>
         <div class="att-actions" onclick="event.stopPropagation()">
           ${!organizer && !att.entered && !alreadyOut ? `<button class="att-btn att-btn-enter" onclick="doCheckIn('${att.id}')"><svg width="14" height="14"><use href="#i-check"/></svg> Ingresar</button>` : ''}
           ${!organizer && canExit ? `<button class="att-btn att-btn-exit" onclick="doExit('${att.id}')"><svg width="14" height="14"><use href="#i-door-out"/></svg> Salida</button>` : ''}
-          ${!organizer && canCharge && hasBalance && att.entered && !alreadyOut ? `<button class="att-btn att-btn-close" onclick="openPersonModal('${att.id}')"><svg width="14" height="14"><use href="#i-card"/></svg> Cobrar</button>` : ''}
         </div>
       </div>
     `;
@@ -194,17 +186,9 @@ async function doExit(attendeeId) {
   const db  = getDb();
   const now = new Date().toISOString();
 
-  // Bloqueo: si tiene status='pay_later' debe pagar el acceso antes de salir.
-  // Pero podemos pedir confirmación al portero (ej. cobró cash al portero).
+  // El portero NO cobra: solo registra la salida. (El servidor, vía mark_exit,
+  // impide salir si tiene una cuenta de barra abierta con saldo.)
   const i = attendees.findIndex(a => a.id === attendeeId);
-  if (i >= 0 && attendees[i].status === 'pay_later') {
-    const amt = Number(attendees[i].entry_amount || 0);
-    const ok = confirm(`⚠️ ${attendees[i].name} debe pagar el acceso (${formatMoney(amt)}) antes de salir.\n\nSi ya pagó (en efectivo), confirmá para registrar la salida.`);
-    if (!ok) return;
-    // Marcar como paid local + DB
-    attendees[i].status = 'paid';
-    await db.from('attendees').update({ status: 'paid' }).eq('id', attendeeId);
-  }
 
   // Update optimista: actualizar UI antes de esperar respuesta del servidor
   const prev = i >= 0 ? { ...attendees[i] } : null;
@@ -228,47 +212,6 @@ async function doExit(attendeeId) {
   }
 }
 
-// ─── Close bar account (from door) ───────────────────────────────────────────
-async function doCloseBarAccount(barAccountId, slot) {
-  const barAcc = barAccounts.find(b => b.id === barAccountId);
-  const total  = Number(barAcc?.total || 0);
-
-  const payment = await showPaymentMethodSelector(total);
-  if (!payment) return;
-
-  let photoUrl = null;
-  if (payment.method === 'transfer') {
-    const photoBlob = await openCamera();
-    if (photoBlob) photoUrl = await uploadPaymentPhoto(photoBlob, activeEvent.id, slot);
-  }
-
-  const db = getDb();
-  const { data, error } = await db.rpc('close_bar_account', {
-    p_account_id: barAccountId,
-    p_closed_by:  'door',
-    p_photo_url:  photoUrl,
-    p_payment_method: payment.method,
-    p_cash_received:  payment.cashReceived,
-    p_change_given:   payment.changeGiven,
-  });
-
-  if (error || !data?.ok) {
-    toast(data?.error || error?.message || 'Error al cobrar', 'error');
-    return;
-  }
-
-  toast(`Cuenta ${padId(slot)} cobrada — ${formatMoney(data.total)}`, 'success');
-
-  // Auto-registrar salida si la persona estaba adentro
-  if (selectedPersonId) {
-    const att = attendees.find(a => a.id === selectedPersonId);
-    if (att && att.entered && !att.exit_time) {
-      await doExit(selectedPersonId);
-    }
-  }
-  closeModal();
-}
-
 // ─── Person modal ─────────────────────────────────────────────────────────────
 function openPersonModal(id) {
   selectedPersonId = id;
@@ -279,10 +222,6 @@ function openPersonModal(id) {
 function renderModal(id) {
   const att    = attendees.find(a => a.id === id);
   if (!att) return;
-  const barAcc = att.bar_account_slot ? barAccounts.find(b => b.slot === att.bar_account_slot) : null;
-  const hasBalance = barAcc && !barAcc.is_closed && barAcc.total > 0;
-  const canCharge  = eventSettings.door_can_charge;
-
   document.getElementById('modalContent').innerHTML = `
     <div class="modal-person-header">
       <div class="modal-person-name">${att.name}</div>
@@ -298,27 +237,10 @@ function renderModal(id) {
       ${att.entry_amount > 0 ? `<div class="modal-info-item"><span>Pago entrada</span><strong>${formatMoney(att.entry_amount)}</strong></div>` : ''}
     </div>
 
-    ${canCharge && barAcc ? `
-    <div class="modal-bar-section">
-      <div class="modal-bar-header">
-        <span>Cuenta barra #${padId(barAcc.slot)}</span>
-        ${barAcc.is_closed ? '<span class="att-tag att-tag-paid"><svg width="11" height="11"><use href="#i-check"/></svg> Cobrada</span>' : '<span class="att-tag att-tag-open">Abierta</span>'}
-      </div>
-      <div class="modal-bar-total">${formatMoney(barAcc.total)}</div>
-      <div class="modal-bar-pills">
-        <span class="pill">160: <strong>${barAcc.qty160}</strong></span>
-        <span class="pill">260: <strong>${barAcc.qty260}</strong></span>
-        <span class="pill">360: <strong>${barAcc.qty360}</strong></span>
-      </div>
-      ${att.payment_photo_url ? `<a href="${att.payment_photo_url}" target="_blank" class="modal-photo-link"><svg width="14" height="14"><use href="#i-camera"/></svg> Ver foto del pago</a>` : ''}
-    </div>` : ''}
-
     <div class="modal-actions">
       ${!att.entered && !att.exit_time ? `<button class="btn btn-success" onclick="doCheckIn('${att.id}')"><svg width="15" height="15"><use href="#i-check"/></svg> Registrar ingreso</button>` : ''}
-      ${att.entered && !att.exit_time && (!hasBalance || !canCharge) ? `<button class="btn btn-warning" onclick="doExit('${att.id}')"><svg width="15" height="15"><use href="#i-door-out"/></svg> Registrar salida</button>` : ''}
-      ${canCharge && hasBalance && att.entered ? `<button class="btn btn-primary" onclick="doCloseBarAccount('${barAcc.id}', ${barAcc.slot})"><svg width="15" height="15"><use href="#i-card"/></svg> Cobrar cuenta</button>` : ''}
+      ${att.entered && !att.exit_time ? `<button class="btn btn-warning" onclick="doExit('${att.id}')"><svg width="15" height="15"><use href="#i-door-out"/></svg> Registrar salida</button>` : ''}
     </div>
-    ${canCharge && hasBalance && att.entered && !att.exit_time ? `<p class="modal-warning"><svg width="12" height="12" style="vertical-align:-1px;margin-right:3px"><use href="#i-warn"/></svg> Tiene consumo sin pagar. No puede salir.</p>` : ''}
   `;
 }
 

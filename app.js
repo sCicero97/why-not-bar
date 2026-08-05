@@ -115,9 +115,11 @@ function renderSummary() {
   const openAcc  = accounts.filter(a => !a.is_closed);
   const openTot  = openAcc.reduce((s, a) => s + Number(a.total || 0), 0);
   const paidTot  = closures.reduce((s, c) => s + Number(c.total || 0), 0);
-  const q160     = accounts.reduce((s,a)=>s+a.qty160,0) + closures.reduce((s,c)=>s+c.qty160,0);
-  const q260     = accounts.reduce((s,a)=>s+a.qty260,0) + closures.reduce((s,c)=>s+c.qty260,0);
-  const q360     = accounts.reduce((s,a)=>s+a.qty360,0) + closures.reduce((s,c)=>s+c.qty360,0);
+  // Solo cuentas ABIERTAS + los cierres. Las cerradas ya volcaron sus qty a los
+  // cierres; sumarlas también sería doble conteo (los tragos aparecían al doble).
+  const q160     = openAcc.reduce((s,a)=>s+a.qty160,0) + closures.reduce((s,c)=>s+c.qty160,0);
+  const q260     = openAcc.reduce((s,a)=>s+a.qty260,0) + closures.reduce((s,c)=>s+c.qty260,0);
+  const q360     = openAcc.reduce((s,a)=>s+a.qty360,0) + closures.reduce((s,c)=>s+c.qty360,0);
   document.getElementById('openTotal').textContent  = formatMoney(openTot);
   document.getElementById('paidTotal').textContent  = formatMoney(paidTot);
   document.getElementById('all160').textContent     = q160;
