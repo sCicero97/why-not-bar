@@ -2197,11 +2197,11 @@ function openEditAttendee(id) {
 async function deleteAttendee(id) {
   const att = attendees.find(a => a.id === id);
   const nm = att?.name || 'este asistente';
-  if (!confirm(`¿Eliminar a "${nm}"?\n\nEsta acción no se puede deshacer.`)) return;
+  if (!confirm(`¿Eliminar a "${nm}"?\n\nSe borra TAMBIÉN lo que consumió en la barra y su entrada (sale de los totales de la noche).\n\nEsta acción no se puede deshacer.`)) return;
   const db  = getDb();
 
   // 1. Desvincular Y resetear la cuenta de barra: queda libre y en cero para
-  //    quien reuse ese slot. El historial de cobros ya está en bar_closures.
+  //    quien reuse ese slot.
   if (att?.bar_account_slot) {
     const { error: accErr } = await db.from('bar_accounts')
       .update({ attendee_id: null, is_closed: false, total: 0, qty160: 0, qty260: 0, qty360: 0 })
@@ -2210,25 +2210,25 @@ async function deleteAttendee(id) {
     if (accErr) { toast('Error al desvincular cuenta: ' + accErr.message, 'error'); return; }
   }
 
-  // 2. Desvincular cierres históricos (bar_closures.attendee_id → null).
-  //    Sin esto el DELETE falla por la FK bar_closures_attendee_id_fkey.
-  const { error: closErr } = await db.from('bar_closures')
-    .update({ attendee_id: null })
-    .eq('attendee_id', id);
-  if (closErr) { toast('Error al desvincular cierres: ' + closErr.message, 'error'); return; }
+  // 2. Borrar el log de tragos de esta persona (best-effort; si la tabla no existe, ignora).
+  await db.from('bar_drinks').delete().eq('attendee_id', id);
 
-  // 3. Eliminar el asistente
+  // 3. Borrar los cierres de esta persona → su consumo sale de los totales.
+  const { error: closErr } = await db.from('bar_closures').delete().eq('attendee_id', id);
+  if (closErr) { toast('Error al borrar cierres: ' + closErr.message, 'error'); return; }
+
+  // 4. Eliminar el asistente (su entrada/amount_paid se va con la fila).
   const { error } = await db.from('attendees').delete().eq('id', id);
   if (error) {
-    // Si alguna otra FK falla (p. ej. tablas futuras que referencien attendees)
     toast('No se puede eliminar: ' + error.message, 'error');
     return;
   }
 
   attendees = attendees.filter(a => a.id !== id);
-  // Actualizar estado local de closures (atribuciones que quedaron huérfanas)
-  barClosures = barClosures.map(c => c.attendee_id === id ? { ...c, attendee_id: null, attendees: null } : c);
-  allClosuresXE = allClosuresXE.map(c => c.attendee_id === id ? { ...c, attendee_id: null } : c);
+  // Estado local: sacar los cierres borrados de los arrays (para que los totales
+  // se actualicen al instante sin esperar el reload).
+  barClosures   = barClosures.filter(c => c.attendee_id !== id);
+  allClosuresXE = allClosuresXE.filter(c => c.attendee_id !== id);
   toast('Asistente eliminado', 'success');
   renderAll();
 }
