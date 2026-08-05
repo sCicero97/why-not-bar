@@ -371,7 +371,7 @@ function showLoginModal(allowedRoles) {
     const btn    = document.getElementById('loginBtn');
     const errEl  = document.getElementById('loginError');
     btn.disabled = true;
-    btn.textContent = 'Iniciando sesión…';
+    btn.textContent = 'Ingresando…';
     errEl.textContent = '';
 
     try {
@@ -380,7 +380,7 @@ function showLoginModal(allowedRoles) {
 
       // Si no parece un email, buscar el email por nombre de usuario
       if (!identifier.includes('@')) {
-        btn.textContent = 'Iniciando sesión…';
+        btn.textContent = 'Ingresando…';
         const resp = await fetch(`/api/lookup-email?name=${encodeURIComponent(identifier)}`);
         const data = await resp.json();
         if (!resp.ok || !data.email) {
