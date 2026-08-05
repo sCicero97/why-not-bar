@@ -670,22 +670,6 @@ async function subscribeToPush() {
   }
 }
 
-// ─── WhatsApp vía CallMeBot ───────────────────────────────────────────────────
-async function sendWhatsApp(message) {
-  try {
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), 8000);
-    await fetch('/api/send-whatsapp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
-      signal: controller.signal,
-    });
-  } catch (e) {
-    console.warn('[WhatsApp] error:', e.message);
-  }
-}
-
 // Envía push vía Vercel /api/send-push
 // targetRole: si se pasa ('admin'), solo se envía a usuarios con ese rol.
 async function sendPushToAll(title, body, tag = 'whynot-alert', targetRole = null) {

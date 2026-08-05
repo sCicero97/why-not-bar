@@ -3795,14 +3795,6 @@ function showReminder(task) {
     }
   }
 
-  // Telegram: "✅ Chequear <task>"
-  try {
-    fetch('/api/send-whatsapp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: `✅ Chequear ${task.name}` }),
-    }).catch(() => {});
-  } catch (_) { /* silencioso */ }
 }
 
 async function checkTask(taskId) {
@@ -3812,25 +3804,6 @@ async function checkTask(taskId) {
   const { error } = await db.from('task_checks').insert({ task_id: taskId, checked_by: user.id });
   if (error) { toast('Error: ' + error.message, 'error'); return; }
   toast('Tarea chequeada', 'success');
-
-  // Telegram: avisar que fue chequeada + próximo recordatorio
-  try {
-    const who = (await getProfileName(user.id)) || user.email || 'Admin';
-    const now = new Date();
-    const hhmm = now.toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' });
-    let nextStr = 'sin recordatorio configurado';
-    if (task && task.remind && task.remind_freq_minutes) {
-      const next = new Date(now.getTime() + task.remind_freq_minutes * 60 * 1000);
-      // Formato 12h con a.m./p.m. (coincide con el ejemplo del usuario)
-      nextStr = next.toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit', hour12: true });
-    }
-    const msg = `✅ ${task?.name || 'Tarea'} chequeado por ${who}. Próximo aviso: ${nextStr}`;
-    await fetch('/api/send-whatsapp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg }),
-    }).catch(()=>{}); // best-effort
-  } catch (_) { /* silencioso */ }
 
   await loadAll();
 }
