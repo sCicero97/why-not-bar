@@ -1292,13 +1292,13 @@ function renderAttendeesTable() {
 
   tbody.innerHTML = list.map(att => {
     const barAcc = att.bar_account_slot ? barAccounts.find(b => b.slot === att.bar_account_slot) : null;
-    // Consumo = suma de los cierres de este slot + (si la cuenta está ABIERTA) su
-    // total actual. Si está cerrada, ese total ya pasó a los cierres: sumarlo sería
-    // doble conteo (era el bug que mostraba 320 por un solo trago de 160).
-    const consumption = barAcc
-      ? barClosures.filter(c => c.slot === att.bar_account_slot).reduce((s,c)=>s+Number(c.total),0)
-        + (!barAcc.is_closed ? Number(barAcc.total || 0) : 0)
-      : 0;
+    // Consumo del asistente = suma de SUS cierres (por attendee_id, NO por slot:
+    // los slots se reusan y si filtráramos por slot un asistente nuevo heredaría
+    // el consumo del anterior — era el "consumo fantasma") + (si su cuenta está
+    // ABIERTA) el total actual. Si está cerrada, ese total ya está en los cierres,
+    // sumarlo sería doble conteo (el bug que mostraba 320 por un trago de 160).
+    const consumption = barClosures.filter(c => c.attendee_id === att.id).reduce((s,c)=>s+Number(c.total),0)
+      + (barAcc && !barAcc.is_closed ? Number(barAcc.total || 0) : 0);
 
     return `<tr data-id="${att.id}" class="row-${att.status}">
       <td><div class="att-name-cell" title="Doble click para editar">${att.name}</div></td>
