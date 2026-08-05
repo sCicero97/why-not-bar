@@ -367,15 +367,22 @@ function _isModalOpen() {
   return ov && !ov.classList.contains('hidden');
 }
 
+function _activeTabName() {
+  return document.querySelector('.tab-panel.active')?.id.replace('tab-', '') || '';
+}
+
 function renderAll() {
   const modalOpen = _isModalOpen();
+  const tab = _activeTabName();
   renderDashboard();
   // Skip renders pesados si hay modal abierto — evita freezes por churn del DOM
   // mientras el usuario está escribiendo en un input del modal.
   if (!modalOpen) {
     renderAttendeesTable();
     renderBarTable();
-    renderPersonas();
+    // Personas es una tabla cross-event pesada: solo se dibuja en su pestaña
+    // (activateTab la dibuja al cambiar a ella).
+    if (tab === 'personas') renderPersonas();
   }
   renderAdminBarCounters();
   renderExpenses();
@@ -383,8 +390,11 @@ function renderAll() {
   renderTasks();
   renderBlockedCards();
   renderEventPicker();
-  renderBlacklist();
-  renderEventsStats();
+  // Blacklist y Estadísticas (gráficos SVG cross-event) son pesadas y rara vez
+  // visibles: solo se dibujan cuando su pestaña está activa. Antes se redibujaban
+  // en CADA actualización, congelando la pantalla (jank de scroll, freeze al reset).
+  if (tab === 'blacklist')     renderBlacklist();
+  if (tab === 'eventos-stats') renderEventsStats();
   syncDrinkPriceHeaders();
   // Al cerrar el modal se vuelve a llamar renderAll para poner al día lo que
   // salteamos. Esto se activa en closeModal más abajo.
@@ -3545,6 +3555,11 @@ function activateTab(tab, opts = {}) {
       loadCrossEventStats().catch(() => {});
     }
   }
+  // Dibujar bajo demanda el contenido pesado de la pestaña recién activada
+  // (renderAll solo dibuja estas tablas cuando su pestaña está activa).
+  if (tab === 'personas')          renderPersonas();
+  else if (tab === 'blacklist')    renderBlacklist();
+  else if (tab === 'eventos-stats') renderEventsStats();
   // Scroll top
   const scroll = document.querySelector('.main-scroll');
   if (scroll) scroll.scrollTop = 0;
