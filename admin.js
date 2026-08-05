@@ -1438,6 +1438,7 @@ function renderBarTable() {
         change_given: c.change_given,
         closed_at: c.closed_at,
         closed_by: c.closed_by,
+        closed_by_name: c.closed_by_name,
       }))).replace(/"/g, '&quot;');
       paymentCellHtml = `
         <div class="pay-carousel desktop-only" data-total="${slotClosures.length}">
@@ -1465,7 +1466,7 @@ function renderBarTable() {
           ? '<span class="status-pill" style="background:#3a2e0022;color:#fbbf24">Con saldo</span>'
           : '<span class="status-pill" style="background:#1c1c1c;color:#6b7280">Vacía</span>'
       }</td>
-      <td style="font-size:13px">${closure?.closed_by || '—'}</td>
+      <td style="font-size:13px">${closure?.closed_by_name || closure?.closed_by || '—'}</td>
       <td style="font-size:12px;color:var(--muted)">${closure?.closed_at ? new Date(closure.closed_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td style="font-size:13px">${paymentCellHtml}</td>
       <td>${!acc.is_closed && (acc.total > 0 || (acc.attendees?.status === 'pay_later' && Number(acc.attendees?.entry_amount||0) > Number(acc.attendees?.amount_paid||0)))
@@ -1502,7 +1503,7 @@ function openPaymentsList(closures) {
         <span style="margin-left:auto;color:var(--muted);font-size:12px">${hhmm}</span>
       </div>
       <div class="pay-list-method">${method}</div>
-      ${c.closed_by ? `<div class="pay-list-by">Cerrada por ${c.closed_by}</div>` : ''}
+      ${(c.closed_by_name || c.closed_by) ? `<div class="pay-list-by">Cerrada por ${c.closed_by_name || c.closed_by}</div>` : ''}
     </div>`;
   }).join('');
   showModal(`
@@ -2483,7 +2484,7 @@ async function adminCloseBarAccount(barAccountId, slot) {
       event_id: currentEvent().id, slot: slot,
       attendee_id: acc.attendee_id || null,
       total: 0, qty160: 0, qty260: 0, qty360: 0,
-      closed_by: 'admin', payment_photo_url: photoUrl,
+      closed_by: 'admin', closed_by_name: getCurrentUser()?.displayName || null, payment_photo_url: photoUrl,
       payment_method: methodResult.method,
       cash_received: cashReceived, change_given: changeGiven,
     });
@@ -2993,7 +2994,7 @@ function exportToExcel(exportEventOverride) {
         Number(c.qty260 || 0),
         Number(c.qty360 || 0),
         c.paid_by_slot ? `Pagada por #${padId(c.paid_by_slot)}` : (c.payment_method || ''),
-        c.closed_by || '',
+        c.closed_by_name || c.closed_by || '',
         c.closed_at ? new Date(c.closed_at) : '',
       ]),
       columnFormats: [null, null, 'money', null, null, null, null, null, 'date'],

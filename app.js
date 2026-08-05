@@ -273,7 +273,7 @@ function renderPaidTable() {
       <td>${c.attendees?.name || '—'}</td>
       <td>${totalCell}</td>
       <td>${c.qty160}</td><td>${c.qty260}</td><td>${c.qty360}</td>
-      <td>${c.closed_by || '—'}</td>
+      <td>${c.closed_by_name || c.closed_by || '—'}</td>
       <td>${c.closed_at ? new Date(c.closed_at).toLocaleString('es-UY') : '—'}</td>
       <td>${c.payment_photo_url
         ? `<button class="btn-photo" data-photo="${c.payment_photo_url}" style="font-size:12px !important;padding:7px 11px !important">
@@ -521,6 +521,7 @@ async function doCloseAccount(accountId, slot) {
       total: 0,
       qty160: 0, qty260: 0, qty360: 0,
       closed_by: 'bar',
+      closed_by_name: getCurrentUser()?.displayName || null,
       payment_photo_url: photoUrl,
       payment_method: methodResult.method,
       cash_received: cashReceived,
@@ -585,7 +586,7 @@ function exportToExcel() {
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
     ['ID','Nombre','Total','#160','#260','#360','Cerrada por','Hora'],
-    ...closures.map(c=>[padId(c.slot),c.attendees?.name||'',c.total,c.qty160,c.qty260,c.qty360,c.closed_by,c.closed_at]),
+    ...closures.map(c=>[padId(c.slot),c.attendees?.name||'',c.total,c.qty160,c.qty260,c.qty360,c.closed_by_name||c.closed_by,c.closed_at]),
   ]), 'Cuentas cobradas');
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
