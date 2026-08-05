@@ -186,7 +186,7 @@ async function loadAll(opts = {}) {
   if (eventId) {
     coreQueries.push(
       db.from('attendees').select('*').eq('event_id', eventId).order('name'),
-      db.from('bar_accounts').select('*, attendees(name)').eq('event_id', eventId).order('slot'),
+      db.from('bar_accounts').select('*, attendees(name,status,entry_amount,amount_paid)').eq('event_id', eventId).order('slot'),
       db.from('bar_closures').select('*, attendees(name)').eq('event_id', eventId).order('closed_at', { ascending: false }),
       db.from('expenses').select('*').eq('event_id', eventId).order('created_at', { ascending: false }),
       db.from('tasks').select('*, task_checks(id,checked_by,checked_at)').eq('event_id', eventId).order('created_at'),
@@ -2413,7 +2413,13 @@ window.openEditEvent = openEditEvent;
 // Replica el flujo de la barra (app.js): método + opcional "pagar por otros".
 async function adminCloseBarAccount(barAccountId, slot) {
   const acc = barAccounts.find(a => a.id === barAccountId);
-  const ownTotal = Number(acc?.total || 0);
+  const drinksTotal = Number(acc?.total || 0);
+  // Si el asistente vinculado es pay_later, agregamos la entrada al total a cobrar.
+  const attStatus  = acc?.attendees?.status || '';
+  const entryDue   = attStatus === 'pay_later' ? Number(acc?.attendees?.entry_amount || 0) : 0;
+  const ownTotal   = drinksTotal + entryDue;
+
+  if (ownTotal <= 0) { toast('No hay saldo para cobrar', 'error'); return; }
 
   // 1. Método + checkbox "pagar por otros"
   const methodResult = await showPaymentMethodSelector(ownTotal, true);
@@ -2449,26 +2455,62 @@ async function adminCloseBarAccount(barAccountId, slot) {
   }
 
   // 5. Cerrar cuenta principal
+  //    - Con tragos: RPC (crea bar_closures + marca is_closed).
+  //    - Sólo entrada (pay_later sin tragos): cerramos a mano + closure total 0
+  //      (el RPC rechaza total=0). La entrada cobrada queda en attendees.amount_paid.
   const db = getDb();
-  const { data, error } = await db.rpc('close_bar_account', {
-    p_account_id: barAccountId, p_closed_by: 'admin', p_photo_url: photoUrl,
-  });
-  if (error || !data?.ok) { toast(data?.error || error?.message || 'Error', 'error'); return; }
+  if (drinksTotal > 0) {
+    const { data, error } = await db.rpc('close_bar_account', {
+      p_account_id: barAccountId, p_closed_by: 'admin', p_photo_url: photoUrl,
+      p_payment_method: methodResult.method,
+      p_cash_received: cashReceived,
+      p_change_given: changeGiven,
+    });
+    if (error || !data?.ok) { toast(data?.error || error?.message || 'Error', 'error'); return; }
+  } else {
+    const { error: closeErr } = await db.from('bar_accounts')
+      .update({ is_closed: true }).eq('id', barAccountId);
+    if (closeErr) { toast('Error al cerrar cuenta: ' + closeErr.message, 'error'); return; }
 
-  await db.from('bar_closures')
-    .update({ payment_method: methodResult.method, cash_received: cashReceived, change_given: changeGiven })
-    .eq('event_id', currentEvent().id).eq('slot', slot);
+    const { error: closureErr } = await db.from('bar_closures').insert({
+      event_id: currentEvent().id, slot: slot,
+      attendee_id: acc.attendee_id || null,
+      total: 0, qty160: 0, qty260: 0, qty360: 0,
+      closed_by: 'admin', payment_photo_url: photoUrl,
+      payment_method: methodResult.method,
+      cash_received: cashReceived, change_given: changeGiven,
+    });
+    if (closureErr) console.warn('No se pudo crear el registro de cierre:', closureErr.message);
+  }
+
+  // 5b. Entrada pendiente (pay_later) → marcar al asistente como paid.
+  if (entryDue > 0 && acc?.attendee_id) {
+    const { data: payData, error: payErr } = await db.rpc('pay_attendee_entry', {
+      p_attendee_id: acc.attendee_id,
+      p_amount: entryDue,
+      p_photo_url: photoUrl,
+    });
+    if (payErr || !payData?.ok) {
+      const prevPaid = Number(acc.attendees?.amount_paid || 0);
+      const updates = { status: 'paid', amount_paid: prevPaid + entryDue };
+      if (photoUrl) updates.payment_photo_url = photoUrl;
+      const { error: attErr } = await db.from('attendees').update(updates).eq('id', acc.attendee_id);
+      if (attErr) toast('Cuenta cobrada pero no pude marcar la entrada como paga: ' + attErr.message, 'error');
+    }
+  }
 
   // 6. Cerrar cuentas de otros
   for (const other of coveredAccounts) {
-    await db.rpc('close_bar_account', { p_account_id: other.id, p_closed_by: 'admin', p_photo_url: photoUrl });
-    await db.from('bar_closures')
-      .update({ payment_method: methodResult.method, paid_by_slot: slot })
-      .eq('event_id', currentEvent().id).eq('slot', other.slot);
+    await db.rpc('close_bar_account', {
+      p_account_id: other.id, p_closed_by: 'admin', p_photo_url: photoUrl,
+      p_payment_method: methodResult.method,
+      p_paid_by_slot: slot,
+    });
   }
 
   const extra = coveredAccounts.length ? ` + ${coveredAccounts.length} cuenta${coveredAccounts.length > 1 ? 's' : ''} ajena${coveredAccounts.length > 1 ? 's' : ''}` : '';
-  toast(`Cuenta ${padId(slot)} cobrada — ${formatMoney(combinedTotal)}${extra}`, 'success');
+  const entryNote = entryDue > 0 ? ` (incluye entrada ${formatMoney(entryDue)})` : '';
+  toast(`Cuenta ${padId(slot)} cobrada — ${formatMoney(combinedTotal)}${entryNote}${extra}`, 'success');
   await loadAll();
 }
 
