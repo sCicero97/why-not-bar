@@ -1415,9 +1415,12 @@ function renderBarTable() {
   const tbody = document.getElementById('barAccountsBody');
   if (!tbody) return;
   tbody.innerHTML = list.map(acc => {
-    // Historial de cierres para esta cuenta (ordenado más reciente primero)
+    // Cierres de ESTA cuenta (más reciente primero). Se filtra por attendee_id
+    // cuando la cuenta está vinculada, así una cuenta reusada NO hereda los pagos
+    // del asistente anterior (era el "dos pagos" en un slot reciclado). Si la
+    // cuenta no tiene asistente, se cae a filtrar por slot.
     const slotClosures = barClosures
-      .filter(c => c.slot === acc.slot)
+      .filter(c => acc.attendee_id ? c.attendee_id === acc.attendee_id : c.slot === acc.slot)
       .sort((a, b) => new Date(b.closed_at) - new Date(a.closed_at));
     const closure  = acc.is_closed ? slotClosures[0] : null;
     const photoUrl = closure?.payment_photo_url || null;
@@ -1480,7 +1483,7 @@ function renderBarTable() {
       <td style="font-size:12px;color:var(--muted)">${closure?.closed_at ? new Date(closure.closed_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '—'}</td>
       <td style="font-size:13px">${paymentCellHtml}</td>
       <td>${!acc.is_closed && (acc.total > 0 || (acc.attendees?.status === 'pay_later' && Number(acc.attendees?.entry_amount||0) > Number(acc.attendees?.amount_paid||0)))
-        ? `<button class="btn btn-sm btn-primary icon-label-btn" onclick="adminCloseBarAccount('${acc.id}',${acc.slot})">${icon('card',14)}Cobrar</button>`
+        ? `<button class="btn btn-sm btn-primary icon-label-btn" onclick="adminCloseBarAccount('${acc.id}',${acc.slot})">${icon('card',14)}${acc.total > 0 ? 'Cobrar' : 'Cobrar entrada'}</button>`
         : acc.is_closed
           ? `<button class="btn btn-sm" onclick="reopenBarAccount('${acc.id}')">Reabrir</button>`
           : '—'
