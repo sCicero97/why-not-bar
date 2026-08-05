@@ -1722,24 +1722,6 @@ function renderEvents() {
   }).join('') || '<tr><td colspan="4" class="empty-state">Sin eventos. Creá uno.</td></tr>';
 }
 
-// Cambia door_can_charge para un evento específico desde la pestaña Eventos.
-async function toggleEventDoorCanCharge(eventId, value) {
-  const db = getDb();
-  const { error } = await db.from('event_settings').upsert({
-    event_id: eventId,
-    door_can_charge: !!value,
-  });
-  if (error) { toast('Error: ' + error.message, 'error'); renderEvents(); return; }
-  // Actualizar estado local
-  const i = (allEventSettings || []).findIndex(s => s.event_id === eventId);
-  if (i >= 0) allEventSettings[i].door_can_charge = !!value;
-  else allEventSettings.push({ event_id: eventId, door_can_charge: !!value });
-  // Si es el evento activo o el visualizado, sincronizar el flag
-  if (currentEvent()?.id === eventId) eventSettings.door_can_charge = !!value;
-  toast(value ? 'Portero puede cobrar' : 'Portero NO puede cobrar', 'success');
-}
-window.toggleEventDoorCanCharge = toggleEventDoorCanCharge;
-
 // ─── Inline cell editing ──────────────────────────────────────────────────────
 // Soporta entidades: attendee (default), expense, user.
 // Atajo: click simple entra a edición. Enter guarda, Esc cancela, blur guarda.
@@ -2392,8 +2374,6 @@ window.downloadEventExcel = downloadEventExcel;
 function openEditEvent(eventId) {
   const ev = events.find(e => e.id === eventId);
   if (!ev) { toast('Evento no encontrado', 'error'); return; }
-  const settings = (allEventSettings || []).find(s => s.event_id === eventId) || {};
-  const canCharge = !!settings.door_can_charge;
   showModal(`
     <h3 style="margin:0 0 18px">Editar evento</h3>
     <form id="editEventForm" autocomplete="off">
@@ -2424,10 +2404,6 @@ function openEditEvent(eventId) {
             <input name="drink_price_3" type="number" min="0" value="${Number(ev.drink_price_3 ?? 360)}"/>
           </div>
         </div>
-        <label class="form-check-row">
-          <input type="checkbox" name="door_can_charge" ${canCharge ? 'checked' : ''}/>
-          <span>Portero puede cobrar cuentas de barra</span>
-        </label>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
@@ -2446,12 +2422,9 @@ function openEditEvent(eventId) {
       drink_price_2: Number(fd.get('drink_price_2')) || 260,
       drink_price_3: Number(fd.get('drink_price_3')) || 360,
     };
-    const newCanCharge = !!fd.get('door_can_charge');
     const db = getDb();
     const { error } = await db.from('events').update(payload).eq('id', eventId);
     if (error) { toast('Error: ' + error.message, 'error'); return; }
-    // Sincronizar door_can_charge en event_settings
-    await db.from('event_settings').upsert({ event_id: eventId, door_can_charge: newCanCharge });
     toast('Evento actualizado', 'success');
     closeModal();
     await loadAll();
@@ -2682,10 +2655,6 @@ function openNewEvent() {
             <input name="drink_price_3" type="number" min="0" value="360"/>
           </div>
         </div>
-        <label class="form-check-row">
-          <input type="checkbox" name="door_can_charge"/>
-          <span>Portero puede cobrar cuentas de barra</span>
-        </label>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
@@ -2707,7 +2676,6 @@ function openNewEvent() {
     const drinkPrice1  = Number(fd.get('drink_price_1')) || 160;
     const drinkPrice2  = Number(fd.get('drink_price_2')) || 260;
     const drinkPrice3  = Number(fd.get('drink_price_3')) || 360;
-    const doorCanCharge = !!fd.get('door_can_charge');
     const { data: newEvent, error } = await db.from('events')
       .insert({
         name: fd.get('name'),
@@ -2755,9 +2723,6 @@ function openNewEvent() {
       is_active: true, remind: true, remind_freq_minutes: 60,
       remind_from: '22:00', remind_until: '04:00',
     });
-
-    // Event settings default (door_can_charge sólo — blocked_cards es global)
-    await db.from('event_settings').insert({ event_id: newEvent.id, door_can_charge: doorCanCharge });
 
     toast(`Evento "${newEvent.name}" creado`, 'success');
     closeModal();
@@ -3772,35 +3737,12 @@ function renderTasks() {
   const container = document.getElementById('tasksList');
   if (!container) return;
 
-  // Tarea especial: "El portero puede cobrar cuentas de barra" — checkbox como primera tarjeta.
-  const canCharge = !!(eventSettings?.door_can_charge);
-  const doorChargeCard = `
-    <div class="task-card task-special ${canCharge ? 'task-active' : 'task-inactive'}">
-      <div class="task-header">
-        <div class="task-title">
-          <strong>El portero puede cobrar</strong>
-        </div>
-      </div>
-      <div class="task-meta">
-        <span style="font-size:13px;color:var(--muted)">
-          ${canCharge ? 'Activado: el portero puede cerrar cuentas de barra al salir.' : 'Desactivado: sólo la barra puede cobrar cuentas.'}
-        </span>
-      </div>
-      <div class="task-footer" style="justify-content:flex-end">
-        <label class="task-checkbox" title="Activar/desactivar">
-          <input type="checkbox" id="doorCanChargeToggle" ${canCharge ? 'checked' : ''}/>
-          <span class="checkmark"></span>
-        </label>
-      </div>
-    </div>`;
-
   if (!tasks.length) {
-    container.innerHTML = doorChargeCard + '<div class="empty-state">Sin tareas. Creá una con el botón +</div>';
-    wireDoorChargeToggle();
+    container.innerHTML = '<div class="empty-state">Sin tareas. Creá una con el botón +</div>';
     return;
   }
 
-  container.innerHTML = doorChargeCard + tasks.map(task => {
+  container.innerHTML = tasks.map(task => {
     const checks = task.task_checks || [];
     const lastCheck = checks[0];
     const lastCheckTime = lastCheck ? new Date(lastCheck.checked_at).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : null;
@@ -3834,20 +3776,8 @@ function renderTasks() {
     </div>`;
   }).join('');
 
-  // Wire del checkbox especial
-  wireDoorChargeToggle();
-
   // Iniciar/actualizar recordatorios
   setupReminders();
-}
-
-function wireDoorChargeToggle() {
-  const el = document.getElementById('doorCanChargeToggle');
-  if (!el || el._wired) return;
-  el._wired = true;
-  el.addEventListener('change', (e) => {
-    saveDoorSettings(e.target.checked);
-  });
 }
 
 function setupReminders() {
@@ -4079,16 +4009,6 @@ function openEditTask(taskId) {
   });
 }
 window.openEditTask = openEditTask;
-
-// ─── Configuración del portero ─────────────────────────────────────────────────
-async function saveDoorSettings(canCharge) {
-  if (!activeEvent) return;
-  const db = getDb();
-  const payload = { event_id: currentEvent().id, door_can_charge: canCharge };
-  const { error } = await db.from('event_settings').upsert(payload);
-  if (error) { toast('Error: ' + error.message, 'error'); return; }
-  eventSettings.door_can_charge = canCharge;
-}
 
 // ─── Tarjetas bloqueadas (GLOBALES, cross-event) ─────────────────────────────
 let _blockedCardsTableSupported = true;
