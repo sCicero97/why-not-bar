@@ -491,11 +491,15 @@ async function openCamera(required = false) {
     document.body.appendChild(overlay);
 
     let stream = null;
+    let closed = false;   // ya se cerró la cámara (capturó/canceló/error)
     const video  = overlay.querySelector('video');
     const canvas = overlay.querySelector('canvas');
 
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
       .then(s => {
+        // Si ya cerramos antes de que llegara el stream (le dieron capturar/cancelar
+        // demasiado rápido), apagarlo enseguida para no dejar la cámara prendida.
+        if (closed) { s.getTracks().forEach(t => t.stop()); return; }
         stream = s;
         video.srcObject = s;
       })
@@ -505,6 +509,8 @@ async function openCamera(required = false) {
       });
 
     overlay.querySelector('.camera-capture').onclick = () => {
+      // La cámara todavía no arrancó: ignorar el click (evita foto negra + fuga).
+      if (!stream) return;
       canvas.width  = video.videoWidth  || 1280;
       canvas.height = video.videoHeight || 720;
       canvas.getContext('2d').drawImage(video, 0, 0);
@@ -518,7 +524,8 @@ async function openCamera(required = false) {
     }
 
     function cleanup() {
-      if (stream) stream.getTracks().forEach(t => t.stop());
+      closed = true;
+      if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
       overlay.remove();
     }
   });
