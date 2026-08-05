@@ -73,6 +73,7 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
   const db = getDb();
   let _timer = null;
   let _channel = null;
+  let _retryTimer = null; // timeout de reconexión pendiente (para poder cancelarlo)
   let _retryDelay = 800; // backoff exponencial al fallar (arranca rápido)
   let _lastReloadAt = 0;
 
@@ -90,28 +91,41 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
   }
 
   function rebuildChannel() {
+    // Cancelar cualquier reconexión pendiente para no crear canales de más.
+    if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
     try { if (_channel) db.removeChannel(_channel); } catch (_) {}
-    _channel = buildChannel();
+    _channel = null;
+    buildChannel();
   }
 
   function buildChannel() {
     const eid = getEventId && getEventId();
     const ch = db.channel(channelName + '-' + (eid || 'global') + '-' + Date.now());
+    // Marcar este canal como el actual ANTES de suscribir, así el guard de
+    // "canal viejo" del callback funciona desde el primer evento.
+    _channel = ch;
     for (const t of tables) {
       const cfg = { event: '*', schema: 'public', table: t.name };
       if (t.scoped !== false && eid) cfg.filter = `event_id=eq.${eid}`;
       ch.on('postgres_changes', cfg, scheduleReload);
     }
     ch.subscribe((status) => {
+      // Si este canal ya fue reemplazado, ignorar sus avisos. Esto corta la
+      // cascada de canales fantasma: al hacer removeChannel() el canal viejo
+      // emite CLOSED, pero como ya no es el actual, acá no dispara nada.
+      if (ch !== _channel) return;
       if (status === 'SUBSCRIBED') {
         _setLiveStatus('live');
         _retryDelay = 800;
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        // Ojo: NO reconectamos ante CLOSED — un CLOSED casi siempre es nuestro
+        // propio removeChannel(); el watchdog (cada 30s) cubre el caso raro de
+        // un canal que muere sin error.
         _setLiveStatus('offline');  // con tolerancia (no inmediato)
-        try { db.removeChannel(ch); } catch (_) {}
         const delay = Math.min(_retryDelay, 10000);
         _retryDelay = Math.min(_retryDelay * 1.5, 10000);
-        setTimeout(() => { _channel = buildChannel(); }, delay);
+        if (_retryTimer) clearTimeout(_retryTimer);
+        _retryTimer = setTimeout(() => { _retryTimer = null; rebuildChannel(); }, delay);
         // Recargar datos por las dudas (puede haber cambios perdidos)
         scheduleReload();
       }
@@ -120,7 +134,7 @@ function setupRealtimeAutoReload(channelName, tables, getEventId, reload) {
   }
 
   _setLiveStatus('connecting');
-  _channel = buildChannel();
+  buildChannel();
 
   // Polling fallback: cada 60s mientras la tab está visible. Antes era 15s
   // pero eso saturaba la DB innecesariamente — el realtime websocket ya cubre
