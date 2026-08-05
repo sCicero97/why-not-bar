@@ -247,23 +247,15 @@ async function doCloseBarAccount(barAccountId, slot) {
     p_account_id: barAccountId,
     p_closed_by:  'door',
     p_photo_url:  photoUrl,
+    p_payment_method: payment.method,
+    p_cash_received:  payment.cashReceived,
+    p_change_given:   payment.changeGiven,
   });
 
   if (error || !data?.ok) {
     toast(data?.error || error?.message || 'Error al cobrar', 'error');
     return;
   }
-
-  // Guardar método de pago (columnas opcionales, falla silenciosamente si no existen)
-  db.from('bar_closures').select('id').eq('event_id', activeEvent.id).eq('slot', slot)
-    .order('closed_at', { ascending: false }).limit(1).single()
-    .then(({ data: c }) => {
-      if (c) db.from('bar_closures').update({
-        payment_method: payment.method,
-        cash_received:  payment.cashReceived,
-        change_given:   payment.changeGiven,
-      }).eq('id', c.id).then(() => {}).catch(() => {});
-    });
 
   toast(`Cuenta ${padId(slot)} cobrada — ${formatMoney(data.total)}`, 'success');
 

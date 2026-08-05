@@ -499,12 +499,11 @@ async function doCloseAccount(accountId, slot) {
   if (drinksTotal > 0) {
     const { data, error } = await db.rpc('close_bar_account', {
       p_account_id: accountId, p_closed_by: 'bar', p_photo_url: photoUrl,
+      p_payment_method: methodResult.method,
+      p_cash_received: cashReceived,
+      p_change_given: changeGiven,
     });
     if (error || !data?.ok) { toast(data?.error || error?.message || 'Error al cerrar', 'error'); return; }
-
-    await db.from('bar_closures')
-      .update({ payment_method: methodResult.method, cash_received: cashReceived, change_given: changeGiven })
-      .eq('event_id', activeEvent.id).eq('slot', slot);
   } else {
     // Sólo cobramos entrada (pay_later sin tragos): cerramos la cuenta Y creamos
     // un registro en bar_closures para que aparezca en "cuentas cerradas". El
@@ -555,10 +554,11 @@ async function doCloseAccount(accountId, slot) {
 
   // 6. Cerrar cuentas de otros
   for (const other of coveredAccounts) {
-    await db.rpc('close_bar_account', { p_account_id: other.id, p_closed_by: 'bar', p_photo_url: photoUrl });
-    await db.from('bar_closures')
-      .update({ payment_method: methodResult.method, paid_by_slot: slot })
-      .eq('event_id', activeEvent.id).eq('slot', other.slot);
+    await db.rpc('close_bar_account', {
+      p_account_id: other.id, p_closed_by: 'bar', p_photo_url: photoUrl,
+      p_payment_method: methodResult.method,
+      p_paid_by_slot: slot,
+    });
   }
 
   // 7. UI — ambos casos (con o sin tragos) ya cerraron la cuenta principal
