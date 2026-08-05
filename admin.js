@@ -422,7 +422,9 @@ function computeEventStats(ev) {
   const clos = allClosuresXE.filter(c => c.event_id === eid);
   const exps = allExpensesXE.filter(e => e.event_id === eid);
   const accesses = atts.filter(a => a.entered).length;
-  const entryIncome = atts.reduce((s, a) => s + Number(a.entry_amount || 0), 0);
+  // Ingreso por entradas = lo REALMENTE cobrado (amount_paid). Un pay_later sin
+  // pagar suma 0; alguien que pagó y no vino igual cuenta.
+  const entryIncome = atts.reduce((s, a) => s + Number(a.amount_paid || 0), 0);
   const barIncome = clos.reduce((s, c) => s + Number(c.total || 0), 0);
   const expensesTotal = exps.reduce((s, e) => s + Number(e.amount || 0), 0);
   const q160 = clos.reduce((s, c) => s + Number(c.qty160 || 0), 0);
@@ -1170,7 +1172,8 @@ function renderDashboard() {
   const openAccounts = barAccounts.filter(a => !a.is_closed);
   const barTotal     = barClosures.reduce((s, c) => s + Number(c.total), 0)
                      + openAccounts.reduce((s, a) => s + Number(a.total), 0);
-  const entryTotal   = attendees.reduce((s, a) => s + Number(a.entry_amount || 0), 0);
+  // Ingreso por entradas = lo realmente cobrado (amount_paid), no lo asignado.
+  const entryTotal   = attendees.reduce((s, a) => s + Number(a.amount_paid || 0), 0);
   const expTotal     = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const netTotal     = barTotal + entryTotal - expTotal;
   // Solo cuentas ABIERTAS + los cierres (las cerradas ya están en los cierres;
@@ -1428,6 +1431,21 @@ function renderBarTable() {
     const photoUrl = closure?.payment_photo_url || null;
     const holdable = !acc.is_closed && acc.total > 0;
 
+    // Total y conteo a mostrar:
+    //   · Cuenta ABIERTA  → el saldo actual sin pagar (acc.total / acc.qty).
+    //   · Cuenta CERRADA  → la SUMA de todos sus cierres (si se cerró varias veces
+    //     por reaperturas, se ve el acumulado, no solo el último cierre).
+    const sumC = slotClosures.reduce((s, c) => ({
+      total: s.total + Number(c.total || 0),
+      q160:  s.q160  + Number(c.qty160 || 0),
+      q260:  s.q260  + Number(c.qty260 || 0),
+      q360:  s.q360  + Number(c.qty360 || 0),
+    }), { total: 0, q160: 0, q260: 0, q360: 0 });
+    const dispTotal = acc.is_closed ? sumC.total : Number(acc.total || 0);
+    const dispQ160  = acc.is_closed ? sumC.q160  : acc.qty160;
+    const dispQ260  = acc.is_closed ? sumC.q260  : acc.qty260;
+    const dispQ360  = acc.is_closed ? sumC.q360  : acc.qty360;
+
     // Render de un solo cierre (método + detalle)
     const renderOneMethod = (c) => {
       if (!c) return '—';
@@ -1473,8 +1491,8 @@ function renderBarTable() {
     <tr class="${acc.is_closed ? 'row-closed' : acc.total > 0 ? 'row-active' : ''}${holdable ? ' bar-row-hold' : ''}" ${holdable ? `data-account-id="${acc.id}" data-slot="${acc.slot}"` : ''}>
       <td><strong>${padId(acc.slot)}</strong></td>
       <td>${acc.attendees?.name || '<span style="color:var(--muted)">—</span>'}</td>
-      <td><strong>${formatMoney(acc.total)}</strong></td>
-      <td>${acc.qty160}</td><td>${acc.qty260}</td><td>${acc.qty360}</td>
+      <td><strong>${formatMoney(dispTotal)}</strong></td>
+      <td>${dispQ160}</td><td>${dispQ260}</td><td>${dispQ360}</td>
       <td>${acc.is_closed
         ? '<span class="status-pill" style="background:#1a3a1a;color:#1ed760">Cerrada</span>'
         : acc.total > 0
@@ -2947,7 +2965,7 @@ function exportToExcel(exportEventOverride) {
   const accRows   = isCurrent ? barAccounts : [];
   const barOpen   = accRows.filter(a => !a.is_closed);
   const barT      = closedAll.reduce((s,c)=>s+Number(c.total),0) + barOpen.reduce((s,a)=>s+Number(a.total),0);
-  const entryT    = attRows.reduce((s,a)=>s+Number(a.entry_amount||0),0);
+  const entryT    = attRows.reduce((s,a)=>s+Number(a.amount_paid||0),0);
   const expT      = expRows.reduce((s,e)=>s+Number(e.amount),0);
   const neto      = barT + entryT - expT;
   // Re-asigno para que el resto del código siga usando los nombres familiares

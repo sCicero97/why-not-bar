@@ -511,11 +511,18 @@ async function openCamera(required = false) {
     overlay.querySelector('.camera-capture').onclick = () => {
       // La cámara todavía no arrancó: ignorar el click (evita foto negra + fuga).
       if (!stream) return;
-      canvas.width  = video.videoWidth  || 1280;
-      canvas.height = video.videoHeight || 720;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      cleanup();
-      showPhotoPreview(canvas.toDataURL('image/jpeg', 0.85), canvas, resolve);
+      let dataUrl = null;
+      try {
+        canvas.width  = video.videoWidth  || 1280;
+        canvas.height = video.videoHeight || 720;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      } finally {
+        // Apagar la cámara SIEMPRE, aunque falle la captura.
+        cleanup();
+      }
+      if (dataUrl) showPhotoPreview(dataUrl, canvas, resolve);
+      else resolve(null);
     };
 
     const skipBtn = overlay.querySelector('.camera-skip');
@@ -525,7 +532,17 @@ async function openCamera(required = false) {
 
     function cleanup() {
       closed = true;
-      if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+      try {
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        // En Safari/macOS parar los tracks NO alcanza: hay que desconectar el
+        // video y pausarlo, si no la cámara (luz verde) queda encendida.
+        if (video) {
+          if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+          try { video.pause(); } catch (_) {}
+          video.srcObject = null;
+        }
+      } catch (_) {}
+      stream = null;
       overlay.remove();
     }
   });
