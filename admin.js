@@ -2539,6 +2539,14 @@ async function adminCloseBarAccount(barAccountId, slot) {
       p_payment_method: methodResult.method,
       p_paid_by_slot: slot,
     });
+    // Si el otro es pay_later, cobrarle también su entrada.
+    if (Number(other.entryDue) > 0 && other.attendee_id) {
+      await db.rpc('pay_attendee_entry', {
+        p_attendee_id: other.attendee_id,
+        p_amount: Number(other.entryDue),
+        p_photo_url: photoUrl,
+      });
+    }
   }
 
   const extra = coveredAccounts.length ? ` + ${coveredAccounts.length} cuenta${coveredAccounts.length > 1 ? 's' : ''} ajena${coveredAccounts.length > 1 ? 's' : ''}` : '';
