@@ -2103,6 +2103,10 @@ async function _openAddAttendeeInner() {
         toast('Error: ' + error.message, 'error');
       } else {
         inserted = true;
+        // Reflejar de inmediato en los datos cross-event (fuente del autocompletado),
+        // sin esperar a que venza el caché: así los datos que sumaste se autocargan
+        // ya la próxima vez que agregues a esta persona.
+        if (Array.isArray(allAttendeesXE)) allAttendeesXE.push(newAtt);
         // Vincular (o auto-crear) la cuenta de barra (no bloquea el cierre del modal)
         if (newAtt.bar_account_slot) {
           ensureBarAccountSlot(newAtt.bar_account_slot, newAtt.id).catch(() => {});
