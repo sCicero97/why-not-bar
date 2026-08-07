@@ -1285,8 +1285,11 @@ body.modal-open { overflow: hidden; position: relative; }
   flex: 1 1 0;
   min-width: 0;
   display: grid;
-  align-items: center;
-  min-height: 34px;
+  /* Alto fijo (cubre el caso más alto: efectivo con vuelto = 3 líneas) y contenido
+     anclado arriba, para que la fila NO cambie de tamaño ni se mueva el "1/4"
+     al pasar entre transferencia (2 líneas) y efectivo (3 líneas). */
+  align-items: start;
+  height: 48px;
 }
 .pay-carousel .pay-frame {
   grid-area: 1 / 1;
