@@ -2458,39 +2458,46 @@ async function adminCloseBarAccount(barAccountId, slot) {
 
   if (ownTotal <= 0) { toast('No hay saldo para cobrar', 'error'); return; }
 
-  // 1. Método + checkbox "pagar por otros"
-  const methodResult = await showPaymentMethodSelector(ownTotal, true);
-  if (!methodResult) return;
+  // Pasos 1-4 en un ciclo: "Volver" (cámara, calculadora de efectivo o "pagar por
+  // otros") vuelve al selector de método. Solo "Cancelar" del selector sale del todo.
+  let methodResult, coveredAccounts, combinedTotal, cashReceived, changeGiven, photoUrl;
+  while (true) {
+    // 1. Método + checkbox "pagar por otros"
+    methodResult = await showPaymentMethodSelector(ownTotal, true);
+    if (!methodResult) return;
 
-  // 2. Si marcó "pagar por otros" → seleccionar cuentas
-  let coveredAccounts = [];
-  let combinedTotal   = ownTotal;
-  if (methodResult.payForOthers) {
-    // Incluye cuentas con tragos Y pay_later sin tragos que deban la entrada.
-    const openOthers = barAccounts.filter(a => !a.is_closed && a.attendee_id && a.id !== barAccountId &&
-      (a.total > 0 || (a.attendees?.status === 'pay_later' && Number(a.attendees?.entry_amount || 0) > Number(a.attendees?.amount_paid || 0))));
-    const othersResult = await showPayForOthersScreen(slot, ownTotal, openOthers);
-    if (othersResult === null) return;
-    coveredAccounts = othersResult.coveredAccounts;
-    combinedTotal   = othersResult.combinedTotal;
-  }
+    // 2. "Pagar por otros"
+    coveredAccounts = [];
+    combinedTotal   = ownTotal;
+    if (methodResult.payForOthers) {
+      // Incluye cuentas con tragos Y pay_later sin tragos que deban la entrada.
+      const openOthers = barAccounts.filter(a => !a.is_closed && a.attendee_id && a.id !== barAccountId &&
+        (a.total > 0 || (a.attendees?.status === 'pay_later' && Number(a.attendees?.entry_amount || 0) > Number(a.attendees?.amount_paid || 0))));
+      const othersResult = await showPayForOthersScreen(slot, ownTotal, openOthers);
+      if (othersResult === null) continue;   // Volver → al selector
+      coveredAccounts = othersResult.coveredAccounts;
+      combinedTotal   = othersResult.combinedTotal;
+    }
 
-  // 3. Si es efectivo → calculadora con total final
-  let cashReceived = methodResult.cashReceived;
-  let changeGiven  = methodResult.changeGiven;
-  if (methodResult.method === 'cash' && methodResult.payForOthers) {
-    const cashResult = await showCashCalculator(combinedTotal);
-    if (!cashResult) return;
-    cashReceived = cashResult.cashReceived;
-    changeGiven  = cashResult.changeGiven;
-  }
+    // 3. Efectivo → calculadora con el total combinado
+    cashReceived = methodResult.cashReceived;
+    changeGiven  = methodResult.changeGiven;
+    if (methodResult.method === 'cash' && methodResult.payForOthers) {
+      const cashResult = await showCashCalculator(combinedTotal);
+      if (!cashResult) continue;             // Volver → al selector
+      cashReceived = cashResult.cashReceived;
+      changeGiven  = cashResult.changeGiven;
+    }
 
-  // 4. Transferencia → foto
-  let photoUrl = null;
-  if (methodResult.method === 'transfer') {
-    const photoBlob = await openCamera(true);
-    if (!photoBlob) return;
-    photoUrl = await uploadPaymentPhoto(photoBlob, currentEvent().id, slot);
+    // 4. Transferencia → foto
+    photoUrl = null;
+    if (methodResult.method === 'transfer') {
+      const photoBlob = await openCamera(true);
+      if (!photoBlob) continue;              // Volver → al selector de método
+      photoUrl = await uploadPaymentPhoto(photoBlob, currentEvent().id, slot);
+    }
+
+    break;  // pago completo
   }
 
   // 5. Cerrar cuenta principal
