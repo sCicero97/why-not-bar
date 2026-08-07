@@ -823,7 +823,8 @@ function setupNotifChannel(appName, currentUserDisplay) {
 async function showPayForOthersScreen(currentSlot, currentTotal, openAccounts) {
   injectCameraStyles();
   return new Promise((resolve) => {
-    const others = openAccounts.filter(a => a.slot !== currentSlot && !a.is_closed && a.total > 0);
+    const others = openAccounts.filter(a => a.slot !== currentSlot && !a.is_closed &&
+      (a.total > 0 || (a.attendees?.status === 'pay_later' && Number(a.attendees?.entry_amount || 0) > Number(a.attendees?.amount_paid || 0))));
     const overlay = document.createElement('div');
     overlay.className = 'camera-overlay';
     overlay.style.overflowY = 'auto';
@@ -851,7 +852,7 @@ async function showPayForOthersScreen(currentSlot, currentTotal, openAccounts) {
                 style="width:20px;height:20px;cursor:pointer;accent-color:#1ed760"/>
               <div style="flex:1">
                 <div style="font-size:16px;font-weight:bold">ID ${String(a.slot).padStart(3,'0')} — ${a.attendees?.name || 'Sin nombre'}</div>
-                <div style="font-size:14px;color:#a0a0a0">Saldo: <strong style="color:#f3f3f3">${money(amount)}</strong>${entryDue > 0 ? ` <span style="color:#fbbf24">(incl. entrada ${money(entryDue)})</span>` : ''}</div>
+                <div style="font-size:14px;color:#a0a0a0">A pagar: <strong style="color:#f3f3f3">${money(amount)}</strong>${entryDue > 0 ? (Number(a.total) > 0 ? ` <span style="color:#fbbf24">(incl. entrada ${money(entryDue)})</span>` : ` <span style="color:#fbbf24">(solo entrada)</span>`) : ''}</div>
               </div>
             </label>`;
           }).join('')

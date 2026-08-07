@@ -2466,7 +2466,9 @@ async function adminCloseBarAccount(barAccountId, slot) {
   let coveredAccounts = [];
   let combinedTotal   = ownTotal;
   if (methodResult.payForOthers) {
-    const openOthers = barAccounts.filter(a => !a.is_closed && a.attendee_id && a.total > 0 && a.id !== barAccountId);
+    // Incluye cuentas con tragos Y pay_later sin tragos que deban la entrada.
+    const openOthers = barAccounts.filter(a => !a.is_closed && a.attendee_id && a.id !== barAccountId &&
+      (a.total > 0 || (a.attendees?.status === 'pay_later' && Number(a.attendees?.entry_amount || 0) > Number(a.attendees?.amount_paid || 0))));
     const othersResult = await showPayForOthersScreen(slot, ownTotal, openOthers);
     if (othersResult === null) return;
     coveredAccounts = othersResult.coveredAccounts;
