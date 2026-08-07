@@ -485,7 +485,7 @@ async function openCamera(required = false) {
       <video class="camera-video" autoplay playsinline muted></video>
       <canvas style="display:none"></canvas>
       <div class="camera-controls">
-        ${required ? '' : '<button class="camera-btn camera-skip">Cancelar</button>'}
+        <button class="camera-btn camera-skip">← Volver</button>
         <button class="camera-btn camera-capture">📸 Capturar</button>
       </div>`;
     document.body.appendChild(overlay);
