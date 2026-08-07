@@ -168,14 +168,12 @@ async function doCheckIn(attendeeId) {
   if (i >= 0) { attendees[i].entered = true; attendees[i].entry_time = now; }
   renderAll();
 
-  const { error } = await db.from('attendees')
-    .update({ entered: true, entry_time: now })
-    .eq('id', attendeeId);
-  if (error) {
+  const { data, error } = await db.rpc('mark_entry', { p_attendee_id: attendeeId });
+  if (error || !data?.ok) {
     // Revertir si falla
     if (i >= 0 && prev) attendees[i] = prev;
     renderAll();
-    toast('Error al registrar ingreso', 'error');
+    toast(data?.error || 'Error al registrar ingreso', 'error');
   } else {
     toast('✓ Ingreso registrado', 'success');
   }

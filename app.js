@@ -425,7 +425,7 @@ async function doAddDrink(accountId, range, price) {
   if (acc?.attendee_id) {
     const { data: att } = await db.from('attendees').select('entered').eq('id', acc.attendee_id).single();
     if (att && !att.entered) {
-      await db.from('attendees').update({ entered: true, entry_time: new Date().toISOString() }).eq('id', acc.attendee_id);
+      await db.rpc('mark_entry', { p_attendee_id: acc.attendee_id });
     }
   }
   await loadData();
@@ -507,29 +507,16 @@ async function doCloseAccount(accountId, slot) {
     });
     if (error || !data?.ok) { toast(data?.error || error?.message || 'Error al cerrar', 'error'); return; }
   } else {
-    // Sólo cobramos entrada (pay_later sin tragos): cerramos la cuenta Y creamos
-    // un registro en bar_closures para que aparezca en "cuentas cerradas". El
-    // total del cierre es 0 (no hubo consumo de tragos) — la plata cobrada por
-    // la entrada queda registrada en attendees.amount_paid.
-    const { error: closeErr } = await db.from('bar_accounts')
-      .update({ is_closed: true })
-      .eq('id', accountId);
-    if (closeErr) { toast('Error al cerrar cuenta: ' + closeErr.message, 'error'); return; }
-
-    const { error: closureErr } = await db.from('bar_closures').insert({
-      event_id: activeEvent.id,
-      slot: slot,
-      attendee_id: acc.attendee_id || null,
-      total: 0,
-      qty160: 0, qty260: 0, qty360: 0,
-      closed_by: 'bar',
-      closed_by_name: getCurrentUser()?.displayName || null,
-      payment_photo_url: photoUrl,
-      payment_method: methodResult.method,
-      cash_received: cashReceived,
-      change_given: changeGiven,
+    // Sólo entrada (pay_later sin tragos): cerramos vía RPC (ahora acepta total=0).
+    // El RPC crea el bar_closures (total 0) y marca is_closed. La entrada cobrada
+    // queda en attendees.amount_paid (paso 5b).
+    const { data, error } = await db.rpc('close_bar_account', {
+      p_account_id: accountId, p_closed_by: 'bar', p_photo_url: photoUrl,
+      p_payment_method: methodResult.method,
+      p_cash_received: cashReceived,
+      p_change_given: changeGiven,
     });
-    if (closureErr) console.warn('No se pudo crear el registro de cierre:', closureErr.message);
+    if (error || !data?.ok) { toast(data?.error || error?.message || 'Error al cerrar', 'error'); return; }
   }
 
   // 5b. Si tenía entrada pendiente (pay_later) → marcar al asistente como paid
@@ -544,14 +531,7 @@ async function doCloseAccount(accountId, slot) {
       p_photo_url: photoUrl,
     });
     if (payErr || !payData?.ok) {
-      // Fallback: intentar update directo (por si el RPC todavía no fue creado)
-      const prevPaid = Number(acc.attendees?.amount_paid || 0);
-      const updates = { status: 'paid', amount_paid: prevPaid + entryDue };
-      if (photoUrl) updates.payment_photo_url = photoUrl;
-      const { error: attErr } = await db.from('attendees').update(updates).eq('id', acc.attendee_id);
-      if (attErr) {
-        toast('Cuenta cobrada pero no pude marcar la entrada como paga: ' + (payData?.error || payErr?.message || attErr.message), 'error');
-      }
+      toast('Cuenta cobrada pero no pude marcar la entrada como paga: ' + (payData?.error || payErr?.message || 'error'), 'error');
     }
   }
 
