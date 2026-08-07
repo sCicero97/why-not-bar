@@ -544,9 +544,19 @@ async function doCloseAccount(accountId, slot) {
     });
   }
 
-  // 7. UI — ambos casos (con o sin tragos) ya cerraron la cuenta principal
+  // 7. UI optimista — pintar el cierre YA, sin esperar la recarga (que confirma
+  //    contra la DB en segundo plano). Así la deuda se limpia al instante.
   const closedSlots = [slot, ...coveredAccounts.map(a => a.slot)];
   closedSlots.forEach(s => { const i = accounts.findIndex(a => a.slot === s); if (i >= 0) accounts[i].is_closed = true; });
+  // Si se cobró la entrada de un pay_later, marcar al asistente como pago ya.
+  if (entryDue > 0) {
+    const mi = accounts.findIndex(a => a.slot === slot);
+    if (mi >= 0 && accounts[mi].attendees) {
+      accounts[mi].attendees.status = 'paid';
+      accounts[mi].attendees.amount_paid = Number(accounts[mi].attendees.amount_paid || 0) + entryDue;
+    }
+  }
+  renderAll();
   const extra = coveredAccounts.length ? ` + ${coveredAccounts.length} cuenta${coveredAccounts.length > 1 ? 's' : ''} ajena${coveredAccounts.length > 1 ? 's' : ''}` : '';
   const entryNote = entryDue > 0 ? ` (incluye entrada ${formatMoney(entryDue)})` : '';
   toast(`Cuenta ${padId(slot)} cerrada — ${formatMoney(combinedTotal)}${entryNote}${extra}`, 'success');

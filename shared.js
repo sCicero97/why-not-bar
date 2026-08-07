@@ -988,8 +988,8 @@ async function showCashCalculator(totalAmount) {
           ⚠ Le falta <strong id="shortAmt"></strong>
         </div>
         <div style="display:flex;gap:12px">
+          <button id="cashCancel" style="background:#1c1c1c;color:#f3f3f3;border:1px solid #333;border-radius:14px;padding:16px;font-size:17px;cursor:pointer">Volver</button>
           <button id="cashConfirm" style="flex:1;background:#1ed760;color:#06130a;border:none;border-radius:14px;padding:16px;font-size:17px;font-weight:bold;cursor:pointer;opacity:.4;pointer-events:none">Confirmar</button>
-          <button id="cashCancel" style="background:#1c1c1c;color:#f3f3f3;border:1px solid #333;border-radius:14px;padding:16px;font-size:17px;cursor:pointer">Cancelar</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
