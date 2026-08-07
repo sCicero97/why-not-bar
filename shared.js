@@ -860,7 +860,7 @@ async function showPayForOthersScreen(currentSlot, currentTotal, openAccounts) {
       </div>
       <div style="position:fixed;bottom:0;left:0;right:0;background:#111;border-top:1px solid #333;padding:16px 20px;display:flex;gap:12px;align-items:center">
         <button id="othersCancel" style="background:#1c1c1c;color:#f3f3f3;border:1px solid #333;border-radius:14px;padding:14px 20px;font-size:17px;cursor:pointer">← Volver</button>
-        <div style="flex:1;font-size:15px;color:#a0a0a0">Total: <strong id="othersTotal" style="color:#fff;font-size:18px">${typeof formatMoney === 'function' ? formatMoney(currentTotal) : '$'+currentTotal}</strong></div>
+        <div style="flex:1;text-align:right;font-size:15px;color:#a0a0a0">Total: <strong id="othersTotal" style="color:#fff;font-size:18px">${typeof formatMoney === 'function' ? formatMoney(currentTotal) : '$'+currentTotal}</strong></div>
         <button id="othersContinue" style="background:#1ed760;color:#06130a;border:none;border-radius:14px;padding:14px 28px;font-size:17px;font-weight:bold;cursor:pointer">Continuar →</button>
       </div>`;
     document.body.appendChild(overlay);
