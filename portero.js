@@ -149,7 +149,9 @@ function renderList() {
         </div>
         <div class="att-actions" onclick="event.stopPropagation()">
           ${!organizer && !att.entered && !alreadyOut ? `<button class="att-btn att-btn-enter" onclick="doCheckIn('${att.id}')"><svg width="14" height="14"><use href="#i-check"/></svg> Ingresar</button>` : ''}
-          ${!organizer && canExit ? `<button class="att-btn att-btn-exit" onclick="doExit('${att.id}')"><svg width="14" height="14"><use href="#i-door-out"/></svg> Salida</button>` : ''}
+          ${!organizer && canExit ? (hasUnpaidBar
+            ? `<button class="att-btn att-btn-exit att-btn-blocked" onclick="recheckExit('${att.id}')" title="Debe la barra — tocá para revisar de nuevo">🔒 Salida</button>`
+            : `<button class="att-btn att-btn-exit" onclick="doExit('${att.id}')"><svg width="14" height="14"><use href="#i-door-out"/></svg> Salida</button>`) : ''}
         </div>
       </div>
     `;
@@ -177,6 +179,18 @@ async function doCheckIn(attendeeId) {
   } else {
     toast('✓ Ingreso registrado', 'success');
   }
+}
+
+// Re-chequear si un asistente con cuenta de barra abierta ya la pagó. El botón
+// de salida queda "bloqueado" (gris) mientras deba; al tocarlo recargamos y
+// avisamos si ya puede salir. No cobra nada — el portero nunca cobra.
+async function recheckExit(id) {
+  await loadData();
+  const att = attendees.find(a => a.id === id);
+  const barAcc = att?.bar_account_slot ? barAccounts.find(b => b.slot === att.bar_account_slot) : null;
+  const stillOwes = barAcc && !barAcc.is_closed && barAcc.total > 0;
+  toast(stillOwes ? 'Todavía tiene cuenta de barra sin pagar' : 'Cuenta saldada — ya puede salir',
+        stillOwes ? 'warning' : 'success');
 }
 
 // ─── Exit ─────────────────────────────────────────────────────────────────────
@@ -220,6 +234,8 @@ function openPersonModal(id) {
 function renderModal(id) {
   const att    = attendees.find(a => a.id === id);
   if (!att) return;
+  const barAcc = att.bar_account_slot ? barAccounts.find(b => b.slot === att.bar_account_slot) : null;
+  const hasUnpaidBar = barAcc && !barAcc.is_closed && barAcc.total > 0;
   document.getElementById('modalContent').innerHTML = `
     <div class="modal-person-header">
       <div class="modal-person-name">${att.name}</div>
@@ -237,7 +253,9 @@ function renderModal(id) {
 
     <div class="modal-actions">
       ${!att.entered && !att.exit_time ? `<button class="btn btn-success" onclick="doCheckIn('${att.id}')"><svg width="15" height="15"><use href="#i-check"/></svg> Registrar ingreso</button>` : ''}
-      ${att.entered && !att.exit_time ? `<button class="btn btn-warning" onclick="doExit('${att.id}')"><svg width="15" height="15"><use href="#i-door-out"/></svg> Registrar salida</button>` : ''}
+      ${att.entered && !att.exit_time ? (hasUnpaidBar
+        ? `<button class="btn btn-warning att-btn-blocked" onclick="recheckExit('${att.id}')" title="Debe la barra — tocá para revisar de nuevo">🔒 Registrar salida</button>`
+        : `<button class="btn btn-warning" onclick="doExit('${att.id}')"><svg width="15" height="15"><use href="#i-door-out"/></svg> Registrar salida</button>`) : ''}
     </div>
   `;
 }

@@ -2272,14 +2272,23 @@ window.revertAttendeeEntry = revertAttendeeEntry;
 async function revertAttendeeExit(id) {
   const att = attendees.find(a => a.id === id);
   if (!att) return;
-  if (!confirm(`Marcar a "${att.name}" como que NO salió?\n\nVuelve a aparecer como adentro.`)) return;
+  if (!confirm(`Marcar a "${att.name}" como que NO salió?\n\nVuelve a aparecer como adentro. Si tenía la cuenta de barra cerrada, se reabre en cero para que pueda consumir de nuevo (lo cobrado sigue cobrado, queda en el historial).`)) return;
   const db = getDb();
   const { error } = await db.from('attendees').update({ exit_time: null }).eq('id', id);
   if (error) { toast('Error: ' + error.message, 'error'); return; }
+  // Reabrir la cuenta de barra si estaba cerrada (en cero). El guard is_closed=true
+  // evita pisar tragos nuevos si la cuenta ya estaba abierta.
+  if (att.bar_account_slot) {
+    await db.from('bar_accounts')
+      .update({ is_closed: false, total: 0, qty160: 0, qty260: 0, qty360: 0 })
+      .eq('event_id', currentEvent().id)
+      .eq('slot', att.bar_account_slot)
+      .eq('is_closed', true);
+  }
   const i = attendees.findIndex(a => a.id === id);
   if (i >= 0) attendees[i].exit_time = null;
   toast('Asistente marcado como adentro', 'success');
-  renderAttendeesTable();
+  await loadAll();
 }
 window.revertAttendeeExit = revertAttendeeExit;
 

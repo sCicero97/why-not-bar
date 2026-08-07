@@ -201,6 +201,12 @@ body { padding: 0; }
   border-color: rgba(255, 159, 10, .45);
 }
 .att-btn-exit:hover { background: rgba(255, 159, 10, .24); }
+/* Salida "bloqueada": debe la barra. Se ve gris/apagado pero sigue clickeable
+   para poder re-chequear (recargar) si ya pagó. El portero no cobra. */
+.att-btn-blocked {
+  opacity: .5;
+  filter: grayscale(.75);
+}
 .att-btn-close  {
   background: var(--accent);
   color: #fff;
