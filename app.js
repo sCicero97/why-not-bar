@@ -469,9 +469,10 @@ async function doCloseAccount(accountId, slot) {
       // Incluye cuentas con tragos Y pay_later sin tragos que deban la entrada.
       const openOthers = accounts.filter(a => !a.is_closed && a.attendee_id && a.id !== accountId &&
         (a.total > 0 || (a.attendees?.status === 'pay_later' && Number(a.attendees?.entry_amount || 0) > Number(a.attendees?.amount_paid || 0))));
-      // DEBUG TEMPORAL — sacar después. Diagnóstico del pay_later sin tragos.
+      // DEBUG TEMPORAL — sacar después. Valores del pay_later sin tragos.
       const _plDbg = accounts.filter(a => !a.is_closed && a.id !== accountId && a.attendees?.status === 'pay_later');
-      toast(`DBG · cuentas:${accounts.length} · payLaterAbiertos:${_plDbg.length} · linkeados:${_plDbg.filter(a=>a.attendee_id).length} · enLista:${openOthers.length}`, 'warning');
+      const _pl = _plDbg[0];
+      toast(`DBG · entry:${_pl?.attendees?.entry_amount} · paid:${_pl?.attendees?.amount_paid} · total:${_pl?.total} · enLista:${openOthers.length}`, 'warning');
       const othersResult = await showPayForOthersScreen(slot, ownTotal, openOthers);
       if (othersResult === null) continue;   // Volver → al selector
       coveredAccounts = othersResult.coveredAccounts;
