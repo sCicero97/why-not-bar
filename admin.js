@@ -2453,7 +2453,7 @@ async function adminCloseBarAccount(barAccountId, slot) {
   const drinksTotal = Number(acc?.total || 0);
   // Si el asistente vinculado es pay_later, agregamos la entrada al total a cobrar.
   const attStatus  = acc?.attendees?.status || '';
-  const entryDue   = attStatus === 'pay_later' ? Number(acc?.attendees?.entry_amount || 0) : 0;
+  const entryDue   = attStatus === 'pay_later' ? Math.max(0, Number(acc?.attendees?.entry_amount || 0) - Number(acc?.attendees?.amount_paid || 0)) : 0;
   const ownTotal   = drinksTotal + entryDue;
 
   if (ownTotal <= 0) { toast('No hay saldo para cobrar', 'error'); return; }

@@ -843,7 +843,7 @@ async function showPayForOthersScreen(currentSlot, currentTotal, openAccounts) {
         ${others.length === 0
           ? '<p style="color:#6b7280;text-align:center;margin-top:20px">No hay otras cuentas abiertas con saldo.</p>'
           : others.map(a => {
-            const entryDue = (a.attendees?.status === 'pay_later') ? Number(a.attendees?.entry_amount || 0) : 0;
+            const entryDue = (a.attendees?.status === 'pay_later') ? Math.max(0, Number(a.attendees?.entry_amount || 0) - Number(a.attendees?.amount_paid || 0)) : 0;
             const money = (v) => typeof formatMoney === 'function' ? formatMoney(v) : '$' + v;
             const amount = Number(a.total) + entryDue;
             return `

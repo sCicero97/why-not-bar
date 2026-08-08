@@ -172,7 +172,7 @@ function renderAccounts() {
     const name    = acc.attendees?.name || '';
     const status  = acc.attendees?.status || '';
     // Si el asistente es "pay_later", debe también la entrada. Sumamos al total.
-    const entryDue = status === 'pay_later' ? Number(acc.attendees?.entry_amount || 0) : 0;
+    const entryDue = status === 'pay_later' ? Math.max(0, Number(acc.attendees?.entry_amount || 0) - Number(acc.attendees?.amount_paid || 0)) : 0;
     const drinksTotal = Number(acc.total || 0);
     const combined = drinksTotal + entryDue;
     // Buscar el cierre correspondiente para mostrar foto de pago
@@ -448,7 +448,7 @@ async function doCloseAccount(accountId, slot) {
   const drinksTotal = Number(acc?.total || 0);
   // Si el asistente vinculado es pay_later, agregamos la entrada al total a cobrar.
   const attStatus  = acc?.attendees?.status || '';
-  const entryDue   = attStatus === 'pay_later' ? Number(acc?.attendees?.entry_amount || 0) : 0;
+  const entryDue   = attStatus === 'pay_later' ? Math.max(0, Number(acc?.attendees?.entry_amount || 0) - Number(acc?.attendees?.amount_paid || 0)) : 0;
   const ownTotal   = drinksTotal + entryDue;
 
   if (ownTotal <= 0) { toast('No hay saldo para cobrar', 'error'); return; }
@@ -469,10 +469,6 @@ async function doCloseAccount(accountId, slot) {
       // Incluye cuentas con tragos Y pay_later sin tragos que deban la entrada.
       const openOthers = accounts.filter(a => !a.is_closed && a.attendee_id && a.id !== accountId &&
         (a.total > 0 || (a.attendees?.status === 'pay_later' && Number(a.attendees?.entry_amount || 0) > Number(a.attendees?.amount_paid || 0))));
-      // DEBUG TEMPORAL — sacar después. Valores del pay_later sin tragos.
-      const _plDbg = accounts.filter(a => !a.is_closed && a.id !== accountId && a.attendees?.status === 'pay_later');
-      const _pl = _plDbg[0];
-      toast(`DBG · entry:${_pl?.attendees?.entry_amount} · paid:${_pl?.attendees?.amount_paid} · total:${_pl?.total} · enLista:${openOthers.length}`, 'warning');
       const othersResult = await showPayForOthersScreen(slot, ownTotal, openOthers);
       if (othersResult === null) continue;   // Volver → al selector
       coveredAccounts = othersResult.coveredAccounts;
