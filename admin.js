@@ -422,9 +422,9 @@ function computeEventStats(ev) {
   const clos = allClosuresXE.filter(c => c.event_id === eid);
   const exps = allExpensesXE.filter(e => e.event_id === eid);
   const accesses = atts.filter(a => a.entered).length;
-  // Ingreso por entradas = lo REALMENTE cobrado (amount_paid). Un pay_later sin
-  // pagar suma 0; alguien que pagó y no vino igual cuenta.
-  const entryIncome = atts.reduce((s, a) => s + Number(a.amount_paid || 0), 0);
+  // Ingreso por entradas = entradas de asistentes "paid" (monto pagado, o el
+  // asignado si no quedó registrado). Igual que la pestaña Gastos y el dashboard.
+  const entryIncome = atts.filter(a => a.status === 'paid').reduce((s, a) => s + Number(a.amount_paid || a.entry_amount || 0), 0);
   const barIncome = clos.reduce((s, c) => s + Number(c.total || 0), 0);
   const expensesTotal = exps.reduce((s, e) => s + Number(e.amount || 0), 0);
   const q160 = clos.reduce((s, c) => s + Number(c.qty160 || 0), 0);
@@ -1170,10 +1170,14 @@ function toggleEventPicker(menuId, force) {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 function renderDashboard() {
   const openAccounts = barAccounts.filter(a => !a.is_closed);
-  const barTotal     = barClosures.reduce((s, c) => s + Number(c.total), 0)
-                     + openAccounts.reduce((s, a) => s + Number(a.total), 0);
-  // Ingreso por entradas = lo realmente cobrado (amount_paid), no lo asignado.
-  const entryTotal   = attendees.reduce((s, a) => s + Number(a.amount_paid || 0), 0);
+  // Ingresos calculados IGUAL que la pestaña Gastos, para que coincidan:
+  //   barra = solo cierres cobrados; entradas = asistentes "paid" (monto pagado,
+  //   o el asignado si no quedó registrado). Las cuentas ABIERTAS no cuentan como
+  //   ingreso (todavía no se cobraron).
+  const barTotal     = barClosures.reduce((s, c) => s + Number(c.total || 0), 0);
+  const entryTotal   = attendees
+    .filter(a => a.status === 'paid')
+    .reduce((s, a) => s + Number(a.amount_paid || a.entry_amount || 0), 0);
   const expTotal     = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const netTotal     = barTotal + entryTotal - expTotal;
   // Solo cuentas ABIERTAS + los cierres (las cerradas ya están en los cierres;
@@ -2959,8 +2963,8 @@ function exportToExcel(exportEventOverride) {
   // bar_accounts no tenemos cross-event, así que para eventos no-actuales esa hoja queda vacía
   const accRows   = isCurrent ? barAccounts : [];
   const barOpen   = accRows.filter(a => !a.is_closed);
-  const barT      = closedAll.reduce((s,c)=>s+Number(c.total),0) + barOpen.reduce((s,a)=>s+Number(a.total),0);
-  const entryT    = attRows.reduce((s,a)=>s+Number(a.amount_paid||0),0);
+  const barT      = closedAll.reduce((s,c)=>s+Number(c.total),0);
+  const entryT    = attRows.filter(a=>a.status==='paid').reduce((s,a)=>s+Number(a.amount_paid||a.entry_amount||0),0);
   const expT      = expRows.reduce((s,e)=>s+Number(e.amount),0);
   const neto      = barT + entryT - expT;
   // Re-asigno para que el resto del código siga usando los nombres familiares
